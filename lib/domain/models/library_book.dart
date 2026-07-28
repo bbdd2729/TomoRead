@@ -12,6 +12,7 @@ class LibraryBook {
     required this.format,
     required this.chapterCount,
     required this.direction,
+    this.chapterIndex = 0,
     this.coverPath,
     this.description,
   });
@@ -27,6 +28,7 @@ class LibraryBook {
   final DateTime importedAt;
   final String format;
   final int chapterCount;
+  final int chapterIndex;
   final ReadingDirection direction;
 }
 

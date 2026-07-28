@@ -129,5 +129,14 @@ void main() {
       (await books.loadManifest('hash-a'))?.spine.single.href,
       'OPS/chapter-1.xhtml',
     );
+
+    await books.updateReadingPosition(
+      bookId: 'hash-a',
+      chapterIndex: 0,
+      progress: 0.75,
+    );
+    final updated = await books.findById('hash-a');
+    expect(updated?.chapterIndex, 0);
+    expect(updated?.progress, 0.75);
   });
 }

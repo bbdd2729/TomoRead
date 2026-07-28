@@ -28,6 +28,35 @@ class BookRepository {
     return rows.isEmpty ? null : _bookFromRow(rows.single);
   }
 
+  Future<LibraryBook?> findById(String bookId) async {
+    final database = await _database.database;
+    final rows = await database.query(
+      'books',
+      where: 'id = ?',
+      whereArgs: [bookId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _bookFromRow(rows.single);
+  }
+
+  Future<void> updateReadingPosition({
+    required String bookId,
+    required int chapterIndex,
+    required double progress,
+  }) async {
+    final database = await _database.database;
+    await database.update(
+      'books',
+      {
+        'chapter_index': chapterIndex,
+        'progress': progress.clamp(0, 1),
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [bookId],
+    );
+  }
+
   Future<void> saveImportedBook(ImportedBook importedBook) async {
     final database = await _database.database;
     final book = importedBook.book;
@@ -83,6 +112,7 @@ class BookRepository {
     importedAt: DateTime.fromMillisecondsSinceEpoch(row['created_at']! as int),
     format: row['format'] as String? ?? 'epub',
     chapterCount: row['chapter_count'] as int? ?? 0,
+    chapterIndex: row['chapter_index'] as int? ?? 0,
     direction: ReadingDirection.values.byName(
       row['read_direction'] as String? ?? ReadingDirection.ltr.name,
     ),

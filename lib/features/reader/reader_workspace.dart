@@ -4,7 +4,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../domain/models/bookmark.dart';
+import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/font_choice.dart';
+import '../../domain/models/reader_chapter.dart';
 import '../../domain/models/reading_settings.dart';
 
 class ReaderWorkspace extends HookConsumerWidget {
@@ -19,36 +21,68 @@ class ReaderWorkspace extends HookConsumerWidget {
   final String title;
   final ReadingSettings readingSettings;
 
-  static const _currentLocator = 'chapter-2:start';
-  static const _chapterTitle = '第二章 阅读的层次';
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final readingOverride = ref.watch(bookReadingOverrideProvider(bookId));
     final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
+    final readerBook = ref.watch(readerBookProvider(bookId));
+    final manifest = ref.watch(readerManifestProvider(bookId));
     final tocVisible = useState(true);
     final sidePanelVisible = useState(true);
     final showBookmarks = useState(false);
+    final chapterIndex = useState(0);
     final override = readingOverride.value;
     final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
     final settings = override?.settings ?? readingSettings;
-    final isLoading = readingOverride.isLoading || bookmarks.isLoading;
-    final isBookmarked = bookmarkItems.any(
-      (bookmark) => bookmark.locator == _currentLocator,
+    final totalChapters = manifest.value?.spine.length ?? 0;
+    final activeChapterIndex = totalChapters == 0
+        ? chapterIndex.value
+        : chapterIndex.value.clamp(0, totalChapters - 1).toInt();
+    final chapter = ref.watch(
+      readerChapterProvider((bookId: bookId, chapterIndex: activeChapterIndex)),
     );
+    final currentLocator = 'chapter-$activeChapterIndex:start';
+    final chapterTitle =
+        chapter.value?.title ?? '第 ${activeChapterIndex + 1} 章';
+    final isLoading =
+        readingOverride.isLoading || bookmarks.isLoading || chapter.isLoading;
+    final isBookmarked = bookmarkItems.any(
+      (bookmark) => bookmark.locator == currentLocator,
+    );
+
+    useEffect(() {
+      final savedIndex = readerBook.value?.chapterIndex;
+      if (savedIndex != null && savedIndex != chapterIndex.value) {
+        chapterIndex.value = savedIndex;
+      }
+      return null;
+    }, [bookId, readerBook.value?.chapterIndex]);
+
+    Future<void> selectChapter(int index) async {
+      if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
+      chapterIndex.value = index;
+      await ref
+          .read(bookRepositoryProvider)
+          .updateReadingPosition(
+            bookId: bookId,
+            chapterIndex: index,
+            progress: (index + 1) / totalChapters,
+          );
+      ref.invalidate(libraryBooksProvider);
+    }
 
     Future<void> toggleBookmark() async {
       final repository = ref.read(bookmarkRepositoryProvider);
       final existing = bookmarkItems
-          .where((bookmark) => bookmark.locator == _currentLocator)
+          .where((bookmark) => bookmark.locator == currentLocator)
           .firstOrNull;
       if (existing != null) {
         await repository.remove(existing.id);
       } else {
         await repository.add(
           bookId: bookId,
-          locator: _currentLocator,
-          chapterTitle: _chapterTitle,
+          locator: currentLocator,
+          chapterTitle: chapterTitle,
         );
       }
       ref.invalidate(bookmarksForBookProvider(bookId));
@@ -98,12 +132,22 @@ class ReaderWorkspace extends HookConsumerWidget {
                       child: Row(
                         children: [
                           if (showToc)
-                            const SizedBox(
+                            SizedBox(
                               width: 260,
-                              child: _ReaderTocPanel(),
+                              child: _ReaderTocPanel(
+                                toc: manifest.value?.toc ?? const [],
+                                activeChapterIndex: activeChapterIndex,
+                                onSelected: selectChapter,
+                              ),
                             ),
                           if (showToc) const VerticalDivider(width: 1),
-                          Expanded(child: _ReaderArticle(settings: settings)),
+                          Expanded(
+                            child: _ReaderArticle(
+                              settings: settings,
+                              chapter: chapter.value,
+                              error: chapter.error,
+                            ),
+                          ),
                           if (showSidePanel) const VerticalDivider(width: 1),
                           if (showSidePanel)
                             SizedBox(
@@ -119,7 +163,17 @@ class ReaderWorkspace extends HookConsumerWidget {
                       ),
                     ),
             ),
-            const _ReaderFooter(),
+            _ReaderFooter(
+              chapterIndex: activeChapterIndex,
+              chapterCount: totalChapters,
+              onPrevious: activeChapterIndex > 0
+                  ? () => selectChapter(activeChapterIndex - 1)
+                  : null,
+              onNext:
+                  totalChapters > 0 && activeChapterIndex < totalChapters - 1
+                  ? () => selectChapter(activeChapterIndex + 1)
+                  : null,
+            ),
           ],
         );
       },
@@ -198,7 +252,15 @@ class _ReaderToolbar extends StatelessWidget {
 }
 
 class _ReaderTocPanel extends StatelessWidget {
-  const _ReaderTocPanel();
+  const _ReaderTocPanel({
+    required this.toc,
+    required this.activeChapterIndex,
+    required this.onSelected,
+  });
+
+  final List<EpubTocItem> toc;
+  final int activeChapterIndex;
+  final ValueChanged<int> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -207,31 +269,53 @@ class _ReaderTocPanel extends StatelessWidget {
       children: [
         Text('目录', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
-        ...const [
-          '序言',
-          '第一章 阅读的活力与艺术',
-          '第二章 阅读的层次',
-          '第三章 基础阅读',
-          '第四章 检视阅读',
-        ].map(
-          (chapter) => ListTile(
-            contentPadding: EdgeInsets.zero,
-            selected: chapter.startsWith('第二章'),
-            title: Text(chapter),
-          ),
-        ),
+        if (toc.isEmpty) const Text('该书没有可用目录。') else ..._buildTocItems(toc),
       ],
     );
+  }
+
+  List<Widget> _buildTocItems(List<EpubTocItem> items, [int depth = 0]) {
+    return [
+      for (final item in items) ...[
+        ListTile(
+          contentPadding: EdgeInsets.only(left: depth * 16.0),
+          enabled: item.spineIndex >= 0,
+          selected: item.spineIndex == activeChapterIndex,
+          title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+          onTap: item.spineIndex < 0 ? null : () => onSelected(item.spineIndex),
+        ),
+        ..._buildTocItems(item.children, depth + 1),
+      ],
+    ];
   }
 }
 
 class _ReaderArticle extends StatelessWidget {
-  const _ReaderArticle({required this.settings});
+  const _ReaderArticle({
+    required this.settings,
+    required this.chapter,
+    required this.error,
+  });
 
   final ReadingSettings settings;
+  final ReaderChapter? chapter;
+  final Object? error;
 
   @override
   Widget build(BuildContext context) {
+    if (chapter == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(error == null ? '正在加载章节…' : '无法加载章节：$error'),
+        ),
+      );
+    }
+    final blocks = chapter!.blocks;
+    final titleBlock = blocks.where((block) => block.isHeading).firstOrNull;
+    final bodyBlocks = titleBlock == null
+        ? blocks
+        : blocks.where((block) => !identical(block, titleBlock)).toList();
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 980),
@@ -243,10 +327,13 @@ class _ReaderArticle extends StatelessWidget {
             48,
           ),
           children: [
-            Text('第二章', style: Theme.of(context).textTheme.labelLarge),
+            Text(
+              '第 ${chapter!.index + 1} 章',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
             const SizedBox(height: 8),
             Text(
-              '阅读的层次',
+              chapter!.title,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontFamily: settings.font.fontFamily,
               ),
@@ -257,25 +344,22 @@ class _ReaderArticle extends StatelessWidget {
                 final canUseDoubleColumn =
                     settings.doubleColumn && constraints.maxWidth >= 760;
                 if (!canUseDoubleColumn) {
-                  return _ArticleColumn(
-                    paragraphs: _articleText,
-                    settings: settings,
-                  );
+                  return _ArticleColumn(blocks: bodyBlocks, settings: settings);
                 }
-                final splitAt = (_articleText.length / 2).ceil();
+                final splitAt = (bodyBlocks.length / 2).ceil();
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: _ArticleColumn(
-                        paragraphs: _articleText.take(splitAt).toList(),
+                        blocks: bodyBlocks.take(splitAt).toList(),
                         settings: settings,
                       ),
                     ),
                     const SizedBox(width: 48),
                     Expanded(
                       child: _ArticleColumn(
-                        paragraphs: _articleText.skip(splitAt).toList(),
+                        blocks: bodyBlocks.skip(splitAt).toList(),
                         settings: settings,
                       ),
                     ),
@@ -291,24 +375,25 @@ class _ReaderArticle extends StatelessWidget {
 }
 
 class _ArticleColumn extends StatelessWidget {
-  const _ArticleColumn({required this.paragraphs, required this.settings});
+  const _ArticleColumn({required this.blocks, required this.settings});
 
-  final List<String> paragraphs;
+  final List<ReaderChapterBlock> blocks;
   final ReadingSettings settings;
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
-    children: paragraphs
+    children: blocks
         .map(
-          (paragraph) => Padding(
+          (block) => Padding(
             padding: const EdgeInsets.only(bottom: 20),
             child: Text(
-              paragraph,
+              block.text,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 fontFamily: settings.font.fontFamily,
                 fontSize: settings.fontSize,
                 height: settings.lineHeight,
+                fontWeight: block.isHeading ? FontWeight.w600 : null,
               ),
             ),
           ),
@@ -396,10 +481,23 @@ class _ReaderSidePanel extends StatelessWidget {
 }
 
 class _ReaderFooter extends StatelessWidget {
-  const _ReaderFooter();
+  const _ReaderFooter({
+    required this.chapterIndex,
+    required this.chapterCount,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int chapterIndex;
+  final int chapterCount;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
 
   @override
   Widget build(BuildContext context) {
+    final progress = chapterCount == 0
+        ? 0.0
+        : (chapterIndex + 1) / chapterCount;
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: Padding(
@@ -407,18 +505,22 @@ class _ReaderFooter extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
-              tooltip: '上一页',
-              onPressed: () {},
+              tooltip: '上一章',
+              onPressed: onPrevious,
               icon: const Icon(Icons.chevron_left),
             ),
             const SizedBox(width: 8),
-            const Expanded(child: LinearProgressIndicator(value: .38)),
+            Expanded(child: LinearProgressIndicator(value: progress)),
             const SizedBox(width: 12),
-            const Text('38% · 16 / 264'),
+            Text(
+              chapterCount == 0
+                  ? '正在读取目录'
+                  : '${(progress * 100).round()}% · ${chapterIndex + 1} / $chapterCount',
+            ),
             const SizedBox(width: 8),
             IconButton(
-              tooltip: '下一页',
-              onPressed: () {},
+              tooltip: '下一章',
+              onPressed: onNext,
               icon: const Icon(Icons.chevron_right),
             ),
           ],
@@ -541,10 +643,3 @@ class _BookReadingSettingsDialog extends HookWidget {
     );
   }
 }
-
-const _articleText = [
-  '有些人把阅读视为消遣，有些人把它当作获取资讯的手段。但真正的阅读，始终是一种主动的工作。读者并不是被动地接收文字，而是在作者的引导下不断提问、判断与回应。',
-  '我们可以把阅读分成不同层次。每一个层次都建立在前一个层次之上，并带来更完整的理解。读得更多并不必然意味着读得更好，关键在于你是否能用恰当的方法，面对眼前这本书。',
-  '最基础的阅读，帮助我们辨认文字与理解句子；检视阅读则让我们在有限时间内掌握一本书的轮廓。更进一步的分析阅读，要求读者和作者进行一场耐心而严肃的对话。',
-  '当你发现某个观点值得停留，不妨划下一段文字，写下当时的疑问。一本读过、思考过、留下痕迹的书，会逐渐成为你自己的书。',
-];

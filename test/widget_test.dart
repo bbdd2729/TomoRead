@@ -70,6 +70,7 @@ void main() {
           bookmarkRepositoryProvider.overrideWithValue(
             _FakeBookmarkRepository(),
           ),
+          bookRepositoryProvider.overrideWithValue(_FakeBookRepository()),
         ],
         child: MaterialApp(
           home: ReaderWorkspace(
@@ -83,7 +84,8 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.byKey(const Key('reader-bookmark')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
     expect(find.byIcon(Icons.bookmark), findsWidgets);
 
     await tester.tap(find.byKey(const Key('reader-toc')));

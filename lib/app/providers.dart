@@ -7,8 +7,11 @@ import '../data/repositories/bookmark_repository.dart';
 import '../data/repositories/book_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/services/book_import_service.dart';
+import '../data/services/epub_content_service.dart';
 import '../domain/models/bookmark.dart';
+import '../domain/models/epub_manifest.dart';
 import '../domain/models/library_book.dart';
+import '../domain/models/reader_chapter.dart';
 import '../domain/models/reading_settings.dart';
 import 'appearance.dart';
 
@@ -32,6 +35,10 @@ final bookRepositoryProvider = Provider<BookRepository>(
 
 final bookImportServiceProvider = Provider<BookImportService>(
   (ref) => BookImportService(repository: ref.watch(bookRepositoryProvider)),
+);
+
+final epubContentServiceProvider = Provider<EpubContentService>(
+  (ref) => const EpubContentService(),
 );
 
 final appSettingsProvider =
@@ -111,3 +118,34 @@ final bookmarksForBookProvider = FutureProvider.autoDispose
       (ref, bookId) =>
           ref.watch(bookmarkRepositoryProvider).listForBook(bookId),
     );
+
+final readerBookProvider = FutureProvider.autoDispose
+    .family<LibraryBook?, String>(
+      (ref, bookId) => ref.watch(bookRepositoryProvider).findById(bookId),
+    );
+
+final readerManifestProvider = FutureProvider.autoDispose
+    .family<EpubManifest?, String>(
+      (ref, bookId) => ref.watch(bookRepositoryProvider).loadManifest(bookId),
+    );
+
+final readerChapterProvider = FutureProvider.autoDispose
+    .family<ReaderChapter, ({String bookId, int chapterIndex})>((
+      ref,
+      request,
+    ) async {
+      final book = await ref.watch(readerBookProvider(request.bookId).future);
+      final manifest = await ref.watch(
+        readerManifestProvider(request.bookId).future,
+      );
+      if (book == null || manifest == null) {
+        throw const EpubContentException('书籍或阅读清单不存在');
+      }
+      return ref
+          .read(epubContentServiceProvider)
+          .loadChapter(
+            book: book,
+            manifest: manifest,
+            chapterIndex: request.chapterIndex,
+          );
+    });
