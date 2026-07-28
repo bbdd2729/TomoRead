@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../../app/appearance.dart';
+import '../../domain/models/font_choice.dart';
+import '../../domain/models/reading_settings.dart';
 import '../../shared/widgets/page_header.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     super.key,
     required this.appearance,
+    required this.readingSettings,
     required this.onAppearanceChanged,
+    required this.onReadingSettingsChanged,
   });
 
   final AppAppearance appearance;
+  final ReadingSettings readingSettings;
   final ValueChanged<AppAppearance> onAppearanceChanged;
+  final ValueChanged<ReadingSettings> onReadingSettingsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +25,66 @@ class SettingsPage extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       children: [
         const PageHeader(title: '设置', subtitle: '调整应用的外观和阅读偏好。'),
+        const SizedBox(height: 28),
+        Text('软件字体', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<FontChoice>(
+          initialValue: appearance.uiFont,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+          items: FontChoice.values
+              .map(
+                (font) =>
+                    DropdownMenuItem(value: font, child: Text(font.label)),
+              )
+              .toList(),
+          onChanged: (font) {
+            if (font != null) {
+              onAppearanceChanged(appearance.copyWith(uiFont: font));
+            }
+          },
+        ),
+        const SizedBox(height: 28),
+        Text('默认书本字体', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<FontChoice>(
+          initialValue: readingSettings.font,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+          items: FontChoice.values
+              .map(
+                (font) =>
+                    DropdownMenuItem(value: font, child: Text(font.label)),
+              )
+              .toList(),
+          onChanged: (font) {
+            if (font != null) {
+              onReadingSettingsChanged(readingSettings.copyWith(font: font));
+            }
+          },
+        ),
+        const SizedBox(height: 28),
+        Text('默认书本字号', style: Theme.of(context).textTheme.titleLarge),
+        Slider(
+          value: readingSettings.fontSize,
+          min: 14,
+          max: 28,
+          divisions: 14,
+          label: readingSettings.fontSize.round().toString(),
+          onChanged: (value) => onReadingSettingsChanged(
+            readingSettings.copyWith(fontSize: value),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text('默认书本行高', style: Theme.of(context).textTheme.titleLarge),
+        Slider(
+          value: readingSettings.lineHeight,
+          min: 1.4,
+          max: 2.2,
+          divisions: 8,
+          label: readingSettings.lineHeight.toStringAsFixed(1),
+          onChanged: (value) => onReadingSettingsChanged(
+            readingSettings.copyWith(lineHeight: value),
+          ),
+        ),
         const SizedBox(height: 28),
         Text('外观', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
@@ -96,9 +162,11 @@ class SettingsPage extends StatelessWidget {
         const SizedBox(height: 28),
         Text('阅读偏好', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
-        const SwitchListTile(
-          value: true,
-          onChanged: null,
+        SwitchListTile(
+          value: readingSettings.doubleColumn,
+          onChanged: (value) => onReadingSettingsChanged(
+            readingSettings.copyWith(doubleColumn: value),
+          ),
           title: Text('双栏阅读'),
           subtitle: Text('宽屏时显示双栏排版。'),
         ),

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../app/appearance.dart';
+import '../../data/repositories/bookmark_repository.dart';
+import '../../data/repositories/settings_repository.dart';
+import '../../domain/models/library_book.dart';
+import '../../domain/models/reading_settings.dart';
 import '../chat/chat_page.dart';
 import '../library/library_home_page.dart';
+import '../library/library_controller.dart';
 import '../notes/notes_page.dart';
 import '../reader/reader_workspace.dart';
 import '../settings/settings_page.dart';
@@ -24,12 +29,14 @@ class WorkspaceTab {
     required this.id,
     required this.title,
     required this.destination,
+    this.bookId,
     this.closable = false,
   });
 
   final String id;
   final String title;
   final AppDestination destination;
+  final String? bookId;
   final bool closable;
 }
 
@@ -37,11 +44,21 @@ class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.appearance,
+    required this.readingSettings,
+    required this.settingsRepository,
+    required this.bookmarkRepository,
+    required this.libraryController,
     required this.onAppearanceChanged,
+    required this.onReadingSettingsChanged,
   });
 
   final AppAppearance appearance;
+  final ReadingSettings readingSettings;
+  final SettingsRepository settingsRepository;
+  final BookmarkRepository bookmarkRepository;
+  final LibraryController libraryController;
   final ValueChanged<AppAppearance> onAppearanceChanged;
+  final ValueChanged<ReadingSettings> onReadingSettingsChanged;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -84,7 +101,7 @@ class _AppShellState extends State<AppShell> {
     Navigator.maybePop(context);
   }
 
-  void _openReader(BookSummary book) {
+  void _openReader(LibraryBook book) {
     final tabId = 'reader-${book.title}';
     final existingTab = _tabs.where((tab) => tab.id == tabId).firstOrNull;
     setState(() {
@@ -94,6 +111,7 @@ class _AppShellState extends State<AppShell> {
             id: tabId,
             title: book.title,
             destination: AppDestination.reader,
+            bookId: book.id,
             closable: true,
           ),
         );
@@ -128,7 +146,14 @@ class _AppShellState extends State<AppShell> {
         final content = _WorkspaceContent(
           destination: activeDestination,
           appearance: widget.appearance,
+          readingSettings: widget.readingSettings,
+          settingsRepository: widget.settingsRepository,
+          bookmarkRepository: widget.bookmarkRepository,
+          libraryController: widget.libraryController,
+          readerBookId: _activeTab.bookId,
+          readerTitle: _activeTab.title,
           onAppearanceChanged: widget.onAppearanceChanged,
+          onReadingSettingsChanged: widget.onReadingSettingsChanged,
           onOpenReader: _openReader,
           onAction: _showPlaceholderMessage,
         );
@@ -141,11 +166,6 @@ class _AppShellState extends State<AppShell> {
                 tooltip: '搜索',
                 onPressed: () => _showPlaceholderMessage('书库搜索将在下一阶段接入。'),
                 icon: const Icon(Icons.search),
-              ),
-              IconButton(
-                tooltip: '设置',
-                onPressed: () => _openDestination(AppDestination.settings),
-                icon: const Icon(Icons.settings_outlined),
               ),
               const SizedBox(width: 8),
             ],
@@ -171,8 +191,7 @@ class _AppShellState extends State<AppShell> {
                     _AppNavigationRail(
                       selected: activeDestination,
                       onSelected: _openDestination,
-                      onAddBook: () =>
-                          _showPlaceholderMessage('导入书籍功能将在下一阶段接入。'),
+                      onAddBook: widget.libraryController.importFromPicker,
                     ),
                     const VerticalDivider(width: 1),
                     Expanded(child: content),
@@ -189,32 +208,54 @@ class _WorkspaceContent extends StatelessWidget {
   const _WorkspaceContent({
     required this.destination,
     required this.appearance,
+    required this.readingSettings,
+    required this.settingsRepository,
+    required this.bookmarkRepository,
+    required this.libraryController,
+    required this.readerBookId,
+    required this.readerTitle,
     required this.onAppearanceChanged,
+    required this.onReadingSettingsChanged,
     required this.onOpenReader,
     required this.onAction,
   });
 
   final AppDestination destination;
   final AppAppearance appearance;
+  final ReadingSettings readingSettings;
+  final SettingsRepository settingsRepository;
+  final BookmarkRepository bookmarkRepository;
+  final LibraryController libraryController;
+  final String? readerBookId;
+  final String readerTitle;
   final ValueChanged<AppAppearance> onAppearanceChanged;
-  final ValueChanged<BookSummary> onOpenReader;
+  final ValueChanged<ReadingSettings> onReadingSettingsChanged;
+  final ValueChanged<LibraryBook> onOpenReader;
   final ValueChanged<String> onAction;
 
   @override
   Widget build(BuildContext context) {
     return switch (destination) {
       AppDestination.library => LibraryHomePage(
+        controller: libraryController,
         onOpenReader: onOpenReader,
-        onAction: onAction,
       ),
-      AppDestination.reader => const ReaderWorkspace(),
+      AppDestination.reader => ReaderWorkspace(
+        bookId: readerBookId ?? 'demo-reading-art',
+        title: readerTitle,
+        readingSettings: readingSettings,
+        settingsRepository: settingsRepository,
+        bookmarkRepository: bookmarkRepository,
+      ),
       AppDestination.chat => const ChatPage(),
       AppDestination.notes => const NotesPage(),
       AppDestination.skills => const SkillsPage(),
       AppDestination.statistics => const StatisticsPage(),
       AppDestination.settings => SettingsPage(
         appearance: appearance,
+        readingSettings: readingSettings,
         onAppearanceChanged: onAppearanceChanged,
+        onReadingSettingsChanged: onReadingSettingsChanged,
       ),
     };
   }
@@ -317,6 +358,7 @@ class _AppNavigationRail extends StatelessWidget {
         child: Align(
           alignment: Alignment.bottomCenter,
           child: TextButton.icon(
+            key: const Key('settings-navigation'),
             onPressed: () => onSelected(AppDestination.settings),
             icon: const Icon(Icons.settings_outlined),
             label: const Text('设置'),

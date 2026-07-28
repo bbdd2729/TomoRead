@@ -1,0 +1,205 @@
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+
+import '../../domain/models/library_book.dart';
+import '../repositories/book_repository.dart';
+import 'epub_parser.dart';
+
+enum BookImportStatus { imported, duplicate, failed }
+
+class BookImportResult {
+  const BookImportResult._({
+    required this.sourcePath,
+    required this.status,
+    this.book,
+    this.error,
+  });
+
+  factory BookImportResult.imported(String sourcePath, LibraryBook book) =>
+      BookImportResult._(
+        sourcePath: sourcePath,
+        status: BookImportStatus.imported,
+        book: book,
+      );
+
+  factory BookImportResult.duplicate(String sourcePath, LibraryBook book) =>
+      BookImportResult._(
+        sourcePath: sourcePath,
+        status: BookImportStatus.duplicate,
+        book: book,
+      );
+
+  factory BookImportResult.failed(String sourcePath, String error) =>
+      BookImportResult._(
+        sourcePath: sourcePath,
+        status: BookImportStatus.failed,
+        error: error,
+      );
+
+  final String sourcePath;
+  final BookImportStatus status;
+  final LibraryBook? book;
+  final String? error;
+}
+
+class BookImportService {
+  BookImportService({
+    required this.repository,
+    EpubParser? epubParser,
+    this.libraryRootProvider,
+  }) : parser = epubParser ?? const EpubParser();
+
+  final BookRepository repository;
+  final EpubParser parser;
+  final Future<Directory> Function()? libraryRootProvider;
+
+  Future<List<BookImportResult>> pickAndImportEpubs() async {
+    final selection = await FilePicker.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: const ['epub'],
+    );
+    if (selection == null) return const [];
+    return Future.wait(
+      selection.files
+          .map((file) => file.path)
+          .whereType<String>()
+          .map(importEpubFile),
+    );
+  }
+
+  Future<BookImportResult> importEpubFile(String sourcePath) async {
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      return BookImportResult.failed(sourcePath, '找不到选择的文件');
+    }
+    if (path.extension(sourcePath).toLowerCase() != '.epub') {
+      return BookImportResult.failed(sourcePath, '仅支持导入 EPUB 文件');
+    }
+
+    final directories = await _libraryDirectories();
+    final temporaryPath = path.join(
+      directories.imports.path,
+      '${DateTime.now().microsecondsSinceEpoch}.epub',
+    );
+    final temporaryFile = File(temporaryPath);
+    try {
+      final hash = await _copyAndHash(source, temporaryFile);
+      final duplicate = await repository.findByHash(hash);
+      if (duplicate != null) {
+        await temporaryFile.delete();
+        return BookImportResult.duplicate(sourcePath, duplicate);
+      }
+
+      final targetFile = File(path.join(directories.books.path, '$hash.epub'));
+      if (await targetFile.exists()) {
+        await temporaryFile.delete();
+      } else {
+        await temporaryFile.rename(targetFile.path);
+      }
+
+      final parsed = await parser.parseFile(targetFile.path);
+      String? coverPath;
+      if (parsed.coverBytes != null && parsed.coverBytes!.isNotEmpty) {
+        final extension = _safeCoverExtension(parsed.coverExtension);
+        final coverFile = File(
+          path.join(directories.covers.path, '$hash$extension'),
+        );
+        await coverFile.writeAsBytes(parsed.coverBytes!, flush: true);
+        coverPath = coverFile.path;
+      }
+      final book = LibraryBook(
+        id: hash,
+        fileHash: hash,
+        title: parsed.title,
+        author: parsed.author,
+        filePath: targetFile.path,
+        coverPath: coverPath,
+        description: parsed.description,
+        progress: 0,
+        importedAt: DateTime.now(),
+        format: 'epub',
+        chapterCount: parsed.manifest.chapterCount,
+        direction: parsed.manifest.direction,
+      );
+      await repository.saveImportedBook(
+        ImportedBook(book: book, manifest: parsed.manifest),
+      );
+      return BookImportResult.imported(sourcePath, book);
+    } on EpubParseException catch (error) {
+      if (await temporaryFile.exists()) await temporaryFile.delete();
+      return BookImportResult.failed(sourcePath, error.message);
+    } catch (error) {
+      if (await temporaryFile.exists()) await temporaryFile.delete();
+      return BookImportResult.failed(sourcePath, '导入失败：$error');
+    }
+  }
+
+  Future<String> _copyAndHash(File source, File destination) async {
+    final output = destination.openWrite();
+    final digestSink = _DigestSink();
+    final hashSink = sha256.startChunkedConversion(digestSink);
+    try {
+      await for (final chunk in source.openRead()) {
+        hashSink.add(chunk);
+        output.add(chunk);
+      }
+      hashSink.close();
+      await output.close();
+      return digestSink.digest.toString();
+    } catch (_) {
+      await output.close();
+      rethrow;
+    }
+  }
+
+  Future<_LibraryDirectories> _libraryDirectories() async {
+    final root = libraryRootProvider == null
+        ? await getApplicationSupportDirectory()
+        : await libraryRootProvider!();
+    final library = Directory(path.join(root.path, 'library'));
+    final books = Directory(path.join(library.path, 'books'));
+    final covers = Directory(path.join(library.path, 'covers'));
+    final imports = Directory(path.join(library.path, 'imports'));
+    for (final directory in [books, covers, imports]) {
+      if (!await directory.exists()) await directory.create(recursive: true);
+    }
+    return _LibraryDirectories(books: books, covers: covers, imports: imports);
+  }
+
+  String _safeCoverExtension(String? source) {
+    const supported = {'.jpg', '.jpeg', '.png', '.webp'};
+    final extension = source?.toLowerCase();
+    return extension != null && supported.contains(extension)
+        ? extension
+        : '.jpg';
+  }
+}
+
+class _LibraryDirectories {
+  const _LibraryDirectories({
+    required this.books,
+    required this.covers,
+    required this.imports,
+  });
+
+  final Directory books;
+  final Directory covers;
+  final Directory imports;
+}
+
+class _DigestSink implements Sink<Digest> {
+  Digest? _digest;
+
+  Digest get digest => _digest!;
+
+  @override
+  void add(Digest data) => _digest = data;
+
+  @override
+  void close() {}
+}

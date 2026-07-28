@@ -1,0 +1,133 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:tomoread/app/appearance.dart';
+import 'package:tomoread/data/database/app_database.dart';
+import 'package:tomoread/data/repositories/bookmark_repository.dart';
+import 'package:tomoread/data/repositories/book_repository.dart';
+import 'package:tomoread/data/repositories/settings_repository.dart';
+import 'package:tomoread/domain/models/epub_manifest.dart';
+import 'package:tomoread/domain/models/font_choice.dart';
+import 'package:tomoread/domain/models/library_book.dart';
+import 'package:tomoread/domain/models/reading_settings.dart';
+
+void main() {
+  late AppDatabase database;
+  late SettingsRepository settings;
+  late BookmarkRepository bookmarks;
+  late BookRepository books;
+
+  setUp(() {
+    database = AppDatabase.inMemory();
+    settings = SettingsRepository(database);
+    bookmarks = BookmarkRepository(database);
+    books = BookRepository(database);
+  });
+
+  tearDown(() => database.close());
+
+  test('persists app, global reading, and per-book settings', () async {
+    await settings.saveAppearance(
+      const AppAppearance(
+        mode: ThemeMode.dark,
+        seed: ThemeSeed.green,
+        textScale: 1.25,
+        uiFont: FontChoice.monospace,
+      ),
+    );
+    await settings.saveReadingSettings(
+      const ReadingSettings(
+        font: FontChoice.serif,
+        fontSize: 22,
+        lineHeight: 2.1,
+        pageMargin: 40,
+        doubleColumn: false,
+      ),
+    );
+    await settings.saveBookOverride(
+      const BookReadingOverride(
+        bookId: 'book-a',
+        settings: ReadingSettings(font: FontChoice.monospace, fontSize: 18),
+      ),
+    );
+
+    final stored = await settings.load();
+    final override = await settings.loadBookOverride('book-a');
+
+    expect(stored.appearance.mode, ThemeMode.dark);
+    expect(stored.appearance.seed, ThemeSeed.green);
+    expect(stored.appearance.uiFont, FontChoice.monospace);
+    expect(stored.readingSettings.font, FontChoice.serif);
+    expect(stored.readingSettings.doubleColumn, isFalse);
+    expect(override?.settings.font, FontChoice.monospace);
+    expect(override?.settings.fontSize, 18);
+
+    await settings.clearBookOverride('book-a');
+    expect(await settings.loadBookOverride('book-a'), isNull);
+  });
+
+  test('stores and removes bookmarks per book', () async {
+    final first = await bookmarks.add(
+      bookId: 'book-a',
+      locator: 'chapter-2:start',
+      chapterTitle: 'Chapter 2',
+    );
+    await bookmarks.add(
+      bookId: 'book-b',
+      locator: 'chapter-1:start',
+      chapterTitle: 'Chapter 1',
+    );
+
+    final bookABookmarks = await bookmarks.listForBook('book-a');
+    expect(bookABookmarks, hasLength(1));
+    expect(bookABookmarks.single.id, first.id);
+
+    await bookmarks.remove(first.id);
+    expect(await bookmarks.listForBook('book-a'), isEmpty);
+    expect(await bookmarks.listForBook('book-b'), hasLength(1));
+  });
+
+  test('stores imported books with their EPUB manifest', () async {
+    const manifest = EpubManifest(
+      opfPath: 'OPS/content.opf',
+      version: '3.0',
+      direction: ReadingDirection.ltr,
+      spine: [
+        EpubSpineItem(
+          id: 'chapter-1',
+          href: 'OPS/chapter-1.xhtml',
+          linear: true,
+        ),
+      ],
+      toc: [
+        EpubTocItem(
+          title: 'Chapter 1',
+          href: 'OPS/chapter-1.xhtml',
+          spineIndex: 0,
+        ),
+      ],
+    );
+    final book = LibraryBook(
+      id: 'hash-a',
+      fileHash: 'hash-a',
+      title: 'Imported book',
+      author: 'Author',
+      filePath: 'C:/books/hash-a.epub',
+      progress: 0,
+      importedAt: DateTime(2026),
+      format: 'epub',
+      chapterCount: 1,
+      direction: ReadingDirection.ltr,
+    );
+
+    await books.saveImportedBook(ImportedBook(book: book, manifest: manifest));
+
+    final stored = await books.listBooks();
+    expect(stored, hasLength(1));
+    expect(stored.single.title, 'Imported book');
+    expect(stored.single.fileHash, 'hash-a');
+    expect(
+      (await books.loadManifest('hash-a'))?.spine.single.href,
+      'OPS/chapter-1.xhtml',
+    );
+  });
+}

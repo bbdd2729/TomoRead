@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../domain/models/font_choice.dart';
+
 enum ThemeSeed { blue, teal, green, orange, purple }
 
 extension ThemeSeedX on ThemeSeed {
@@ -25,21 +27,25 @@ class AppAppearance {
     this.mode = ThemeMode.system,
     this.seed = ThemeSeed.blue,
     this.textScale = 1,
+    this.uiFont = FontChoice.system,
   });
 
   final ThemeMode mode;
   final ThemeSeed seed;
   final double textScale;
+  final FontChoice uiFont;
 
   AppAppearance copyWith({
     ThemeMode? mode,
     ThemeSeed? seed,
     double? textScale,
+    FontChoice? uiFont,
   }) {
     return AppAppearance(
       mode: mode ?? this.mode,
       seed: seed ?? this.seed,
       textScale: textScale ?? this.textScale,
+      uiFont: uiFont ?? this.uiFont,
     );
   }
 }
