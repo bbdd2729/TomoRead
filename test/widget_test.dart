@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tomoread/app/appearance.dart';
+import 'package:tomoread/app/providers.dart';
 import 'package:tomoread/data/database/app_database.dart';
 import 'package:tomoread/data/repositories/bookmark_repository.dart';
 import 'package:tomoread/data/repositories/book_repository.dart';
 import 'package:tomoread/data/repositories/settings_repository.dart';
-import 'package:tomoread/data/services/book_import_service.dart';
 import 'package:tomoread/domain/models/bookmark.dart';
 import 'package:tomoread/domain/models/library_book.dart';
 import 'package:tomoread/domain/models/reading_settings.dart';
-import 'package:tomoread/features/library/library_controller.dart';
 import 'package:tomoread/features/reader/reader_workspace.dart';
 import 'package:tomoread/features/workspace/app_shell.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 void main() {
   void configureDesktop(WidgetTester tester) {
@@ -26,15 +26,24 @@ void main() {
     ValueChanged<AppAppearance>? onAppearanceChanged,
   }) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: AppShell(
-          appearance: const AppAppearance(),
-          readingSettings: const ReadingSettings(),
-          settingsRepository: _FakeSettingsRepository(),
-          bookmarkRepository: _FakeBookmarkRepository(),
-          libraryController: _FakeLibraryController(),
-          onAppearanceChanged: onAppearanceChanged ?? (_) {},
-          onReadingSettingsChanged: (_) {},
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(
+            _FakeSettingsRepository(),
+          ),
+          bookmarkRepositoryProvider.overrideWithValue(
+            _FakeBookmarkRepository(),
+          ),
+          bookRepositoryProvider.overrideWithValue(_FakeBookRepository()),
+        ],
+        child: MaterialApp(
+          home: AppShell(
+            appearance: const AppAppearance(),
+            readingSettings: const ReadingSettings(),
+            onImportBooks: () async {},
+            onAppearanceChanged: onAppearanceChanged ?? (_) {},
+            onReadingSettingsChanged: (_) {},
+          ),
         ),
       ),
     );
@@ -53,20 +62,28 @@ void main() {
   testWidgets('adds a bookmark and collapses the reader toc', (tester) async {
     configureDesktop(tester);
     await tester.pumpWidget(
-      MaterialApp(
-        home: ReaderWorkspace(
-          bookId: 'book-a',
-          title: 'Test book',
-          readingSettings: const ReadingSettings(),
-          settingsRepository: _FakeSettingsRepository(),
-          bookmarkRepository: _FakeBookmarkRepository(),
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(
+            _FakeSettingsRepository(),
+          ),
+          bookmarkRepositoryProvider.overrideWithValue(
+            _FakeBookmarkRepository(),
+          ),
+        ],
+        child: MaterialApp(
+          home: ReaderWorkspace(
+            bookId: 'book-a',
+            title: 'Test book',
+            readingSettings: const ReadingSettings(),
+          ),
         ),
       ),
     );
     await tester.pump();
 
     await tester.tap(find.byKey(const Key('reader-bookmark')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.byIcon(Icons.bookmark), findsWidgets);
 
     await tester.tap(find.byKey(const Key('reader-toc')));
@@ -138,14 +155,6 @@ class _FakeBookmarkRepository extends BookmarkRepository {
   Future<void> remove(String bookmarkId) async {
     _bookmarks.removeWhere((bookmark) => bookmark.id == bookmarkId);
   }
-}
-
-class _FakeLibraryController extends LibraryController {
-  _FakeLibraryController()
-    : super(
-        repository: _FakeBookRepository(),
-        importService: BookImportService(repository: _FakeBookRepository()),
-      );
 }
 
 class _FakeBookRepository extends BookRepository {

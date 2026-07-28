@@ -1,82 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../data/database/app_database.dart';
-import '../data/repositories/bookmark_repository.dart';
-import '../data/repositories/book_repository.dart';
-import '../data/repositories/settings_repository.dart';
-import '../data/services/book_import_service.dart';
 import '../domain/models/font_choice.dart';
-import '../domain/models/reading_settings.dart';
-import '../features/library/library_controller.dart';
 import '../features/workspace/app_shell.dart';
 import 'appearance.dart';
+import 'providers.dart';
 
-class TomoReadApp extends StatefulWidget {
+class TomoReadApp extends StatelessWidget {
   const TomoReadApp({super.key, this.database});
 
   final AppDatabase? database;
 
   @override
-  State<TomoReadApp> createState() => _TomoReadAppState();
+  Widget build(BuildContext context) {
+    return ProviderScope(
+      overrides: [
+        if (database != null) appDatabaseProvider.overrideWithValue(database!),
+      ],
+      child: const _TomoReadRoot(),
+    );
+  }
 }
 
-class _TomoReadAppState extends State<TomoReadApp> {
-  AppAppearance _appearance = const AppAppearance();
-  ReadingSettings _readingSettings = const ReadingSettings();
-  late final AppDatabase _database;
-  late final SettingsRepository _settingsRepository;
-  late final BookmarkRepository _bookmarkRepository;
-  late final LibraryController _libraryController;
-  var _isReady = false;
+class _TomoReadRoot extends ConsumerWidget {
+  const _TomoReadRoot();
 
   @override
-  void initState() {
-    super.initState();
-    _database = widget.database ?? AppDatabase();
-    _settingsRepository = SettingsRepository(_database);
-    _bookmarkRepository = BookmarkRepository(_database);
-    final bookRepository = BookRepository(_database);
-    _libraryController = LibraryController(
-      repository: bookRepository,
-      importService: BookImportService(repository: bookRepository),
-    );
-    _loadSettings();
-  }
-
-  Future<void> _loadSettings() async {
-    final settings = await _settingsRepository.load();
-    if (!mounted) return;
-    setState(() {
-      _appearance = settings.appearance;
-      _readingSettings = settings.readingSettings;
-      _isReady = true;
-    });
-  }
-
-  void _updateAppearance(AppAppearance appearance) {
-    setState(() => _appearance = appearance);
-    _settingsRepository.saveAppearance(appearance);
-  }
-
-  void _updateReadingSettings(ReadingSettings settings) {
-    setState(() => _readingSettings = settings);
-    _settingsRepository.saveReadingSettings(settings);
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    final appearance = settings.value?.appearance ?? const AppAppearance();
     final theme = ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: _appearance.seed.color),
+      colorScheme: ColorScheme.fromSeed(seedColor: appearance.seed.color),
       useMaterial3: true,
-      fontFamily: _appearance.uiFont.fontFamily,
+      fontFamily: appearance.uiFont.fontFamily,
     );
     final darkTheme = ThemeData(
       colorScheme: ColorScheme.fromSeed(
-        seedColor: _appearance.seed.color,
+        seedColor: appearance.seed.color,
         brightness: Brightness.dark,
       ),
       useMaterial3: true,
-      fontFamily: _appearance.uiFont.fontFamily,
+      fontFamily: appearance.uiFont.fontFamily,
     );
 
     return MaterialApp(
@@ -84,24 +49,39 @@ class _TomoReadAppState extends State<TomoReadApp> {
       debugShowCheckedModeBanner: false,
       theme: theme,
       darkTheme: darkTheme,
-      themeMode: _appearance.mode,
+      themeMode: appearance.mode,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(
           context,
-        ).copyWith(textScaler: TextScaler.linear(_appearance.textScale)),
+        ).copyWith(textScaler: TextScaler.linear(appearance.textScale)),
         child: child ?? const SizedBox.shrink(),
       ),
-      home: _isReady
-          ? AppShell(
-              appearance: _appearance,
-              readingSettings: _readingSettings,
-              settingsRepository: _settingsRepository,
-              bookmarkRepository: _bookmarkRepository,
-              libraryController: _libraryController,
-              onAppearanceChanged: _updateAppearance,
-              onReadingSettingsChanged: _updateReadingSettings,
-            )
-          : const Scaffold(body: Center(child: CircularProgressIndicator())),
+      home: settings.when(
+        loading: () =>
+            const Scaffold(body: Center(child: CircularProgressIndicator())),
+        error: (_, _) => Scaffold(
+          body: Center(
+            child: FilledButton.icon(
+              onPressed: () => ref.invalidate(appSettingsProvider),
+              icon: const Icon(Icons.refresh),
+              label: const Text('重新加载设置'),
+            ),
+          ),
+        ),
+        data: (stored) => AppShell(
+          appearance: stored.appearance,
+          readingSettings: stored.readingSettings,
+          onImportBooks: () async {
+            await ref.read(libraryBooksProvider.notifier).importFromPicker();
+          },
+          onAppearanceChanged: (value) {
+            ref.read(appSettingsProvider.notifier).updateAppearance(value);
+          },
+          onReadingSettingsChanged: (value) {
+            ref.read(appSettingsProvider.notifier).updateReadingSettings(value);
+          },
+        ),
+      ),
     );
   }
 }

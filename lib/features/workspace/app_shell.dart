@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/appearance.dart';
-import '../../data/repositories/bookmark_repository.dart';
-import '../../data/repositories/settings_repository.dart';
 import '../../domain/models/library_book.dart';
 import '../../domain/models/reading_settings.dart';
 import '../chat/chat_page.dart';
 import '../library/library_home_page.dart';
-import '../library/library_controller.dart';
 import '../notes/notes_page.dart';
 import '../reader/reader_workspace.dart';
 import '../settings/settings_page.dart';
@@ -40,53 +39,44 @@ class WorkspaceTab {
   final bool closable;
 }
 
-class AppShell extends StatefulWidget {
+class AppShell extends HookConsumerWidget {
   const AppShell({
     super.key,
     required this.appearance,
     required this.readingSettings,
-    required this.settingsRepository,
-    required this.bookmarkRepository,
-    required this.libraryController,
+    required this.onImportBooks,
     required this.onAppearanceChanged,
     required this.onReadingSettingsChanged,
   });
 
   final AppAppearance appearance;
   final ReadingSettings readingSettings;
-  final SettingsRepository settingsRepository;
-  final BookmarkRepository bookmarkRepository;
-  final LibraryController libraryController;
+  final Future<void> Function() onImportBooks;
   final ValueChanged<AppAppearance> onAppearanceChanged;
   final ValueChanged<ReadingSettings> onReadingSettingsChanged;
 
-  @override
-  State<AppShell> createState() => _AppShellState();
-}
-
-class _AppShellState extends State<AppShell> {
   static const _desktopBreakpoint = 840.0;
-  final _tabs = <WorkspaceTab>[
-    const WorkspaceTab(
-      id: 'library',
-      title: '书库',
-      destination: AppDestination.library,
-    ),
-  ];
-  String _activeTabId = 'library';
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tabs = useState(<WorkspaceTab>[
+      const WorkspaceTab(
+        id: 'library',
+        title: '书库',
+        destination: AppDestination.library,
+      ),
+    ]);
+    final activeTabId = useState('library');
+    final activeTab = tabs.value.firstWhere(
+      (tab) => tab.id == activeTabId.value,
+      orElse: () => tabs.value.first,
+    );
 
-  WorkspaceTab get _activeTab => _tabs.firstWhere(
-    (tab) => tab.id == _activeTabId,
-    orElse: () => _tabs.first,
-  );
-
-  void _openDestination(AppDestination destination) {
-    final existingTab = _tabs
-        .where((tab) => tab.destination == destination)
-        .firstOrNull;
-    setState(() {
+    void openDestination(AppDestination destination) {
+      final existingTab = tabs.value
+          .where((tab) => tab.destination == destination)
+          .firstOrNull;
       if (existingTab != null) {
-        _activeTabId = existingTab.id;
+        activeTabId.value = existingTab.id;
       } else {
         final tab = WorkspaceTab(
           id: destination.name,
@@ -94,19 +84,20 @@ class _AppShellState extends State<AppShell> {
           destination: destination,
           closable: destination != AppDestination.library,
         );
-        _tabs.add(tab);
-        _activeTabId = tab.id;
+        tabs.value = [...tabs.value, tab];
+        activeTabId.value = tab.id;
       }
-    });
-    Navigator.maybePop(context);
-  }
+      Navigator.maybePop(context);
+    }
 
-  void _openReader(LibraryBook book) {
-    final tabId = 'reader-${book.title}';
-    final existingTab = _tabs.where((tab) => tab.id == tabId).firstOrNull;
-    setState(() {
+    void openReader(LibraryBook book) {
+      final tabId = 'reader-${book.id}';
+      final existingTab = tabs.value
+          .where((tab) => tab.id == tabId)
+          .firstOrNull;
       if (existingTab == null) {
-        _tabs.add(
+        tabs.value = [
+          ...tabs.value,
           WorkspaceTab(
             id: tabId,
             title: book.title,
@@ -114,48 +105,42 @@ class _AppShellState extends State<AppShell> {
             bookId: book.id,
             closable: true,
           ),
-        );
+        ];
       }
-      _activeTabId = tabId;
-    });
-  }
+      activeTabId.value = tabId;
+    }
 
-  void _closeTab(WorkspaceTab tab) {
-    if (!tab.closable) return;
-    setState(() {
-      final index = _tabs.indexOf(tab);
-      _tabs.remove(tab);
-      if (_activeTabId == tab.id) {
-        _activeTabId = _tabs[(index - 1).clamp(0, _tabs.length - 1)].id;
+    void closeTab(WorkspaceTab tab) {
+      if (!tab.closable) return;
+      final index = tabs.value.indexOf(tab);
+      final remainingTabs = tabs.value.where((item) => item != tab).toList();
+      tabs.value = remainingTabs;
+      if (activeTabId.value == tab.id) {
+        activeTabId.value =
+            remainingTabs[(index - 1).clamp(0, remainingTabs.length - 1)].id;
       }
-    });
-  }
+    }
 
-  void _showPlaceholderMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
+    void showPlaceholderMessage(String message) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
 
-  @override
-  Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth >= _desktopBreakpoint;
-        final activeDestination = _activeTab.destination;
+        final activeDestination = activeTab.destination;
         final content = _WorkspaceContent(
           destination: activeDestination,
-          appearance: widget.appearance,
-          readingSettings: widget.readingSettings,
-          settingsRepository: widget.settingsRepository,
-          bookmarkRepository: widget.bookmarkRepository,
-          libraryController: widget.libraryController,
-          readerBookId: _activeTab.bookId,
-          readerTitle: _activeTab.title,
-          onAppearanceChanged: widget.onAppearanceChanged,
-          onReadingSettingsChanged: widget.onReadingSettingsChanged,
-          onOpenReader: _openReader,
-          onAction: _showPlaceholderMessage,
+          appearance: appearance,
+          readingSettings: readingSettings,
+          readerBookId: activeTab.bookId,
+          readerTitle: activeTab.title,
+          onAppearanceChanged: onAppearanceChanged,
+          onReadingSettingsChanged: onReadingSettingsChanged,
+          onOpenReader: openReader,
+          onAction: showPlaceholderMessage,
         );
 
         return Scaffold(
@@ -164,7 +149,7 @@ class _AppShellState extends State<AppShell> {
             actions: [
               IconButton(
                 tooltip: '搜索',
-                onPressed: () => _showPlaceholderMessage('书库搜索将在下一阶段接入。'),
+                onPressed: () => showPlaceholderMessage('书库搜索将在下一阶段接入。'),
                 icon: const Icon(Icons.search),
               ),
               const SizedBox(width: 8),
@@ -172,10 +157,10 @@ class _AppShellState extends State<AppShell> {
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(48),
               child: _WorkspaceTabBar(
-                tabs: _tabs,
-                activeTabId: _activeTabId,
-                onSelected: (tab) => setState(() => _activeTabId = tab.id),
-                onClosed: _closeTab,
+                tabs: tabs.value,
+                activeTabId: activeTabId.value,
+                onSelected: (tab) => activeTabId.value = tab.id,
+                onClosed: closeTab,
               ),
             ),
           ),
@@ -183,15 +168,15 @@ class _AppShellState extends State<AppShell> {
               ? null
               : _AppNavigationDrawer(
                   selected: activeDestination,
-                  onSelected: _openDestination,
+                  onSelected: openDestination,
                 ),
           body: isDesktop
               ? Row(
                   children: [
                     _AppNavigationRail(
                       selected: activeDestination,
-                      onSelected: _openDestination,
-                      onAddBook: widget.libraryController.importFromPicker,
+                      onSelected: openDestination,
+                      onAddBook: onImportBooks,
                     ),
                     const VerticalDivider(width: 1),
                     Expanded(child: content),
@@ -209,9 +194,6 @@ class _WorkspaceContent extends StatelessWidget {
     required this.destination,
     required this.appearance,
     required this.readingSettings,
-    required this.settingsRepository,
-    required this.bookmarkRepository,
-    required this.libraryController,
     required this.readerBookId,
     required this.readerTitle,
     required this.onAppearanceChanged,
@@ -223,9 +205,6 @@ class _WorkspaceContent extends StatelessWidget {
   final AppDestination destination;
   final AppAppearance appearance;
   final ReadingSettings readingSettings;
-  final SettingsRepository settingsRepository;
-  final BookmarkRepository bookmarkRepository;
-  final LibraryController libraryController;
   final String? readerBookId;
   final String readerTitle;
   final ValueChanged<AppAppearance> onAppearanceChanged;
@@ -236,16 +215,11 @@ class _WorkspaceContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (destination) {
-      AppDestination.library => LibraryHomePage(
-        controller: libraryController,
-        onOpenReader: onOpenReader,
-      ),
+      AppDestination.library => LibraryHomePage(onOpenReader: onOpenReader),
       AppDestination.reader => ReaderWorkspace(
         bookId: readerBookId ?? 'demo-reading-art',
         title: readerTitle,
         readingSettings: readingSettings,
-        settingsRepository: settingsRepository,
-        bookmarkRepository: bookmarkRepository,
       ),
       AppDestination.chat => const ChatPage(),
       AppDestination.notes => const NotesPage(),

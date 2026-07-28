@@ -1,133 +1,98 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../data/repositories/bookmark_repository.dart';
-import '../../data/repositories/settings_repository.dart';
+import '../../app/providers.dart';
 import '../../domain/models/bookmark.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reading_settings.dart';
 
-class ReaderWorkspace extends StatefulWidget {
+class ReaderWorkspace extends HookConsumerWidget {
   const ReaderWorkspace({
     super.key,
     required this.bookId,
     required this.title,
     required this.readingSettings,
-    required this.settingsRepository,
-    required this.bookmarkRepository,
   });
 
   final String bookId;
   final String title;
   final ReadingSettings readingSettings;
-  final SettingsRepository settingsRepository;
-  final BookmarkRepository bookmarkRepository;
 
-  @override
-  State<ReaderWorkspace> createState() => _ReaderWorkspaceState();
-}
-
-class _ReaderWorkspaceState extends State<ReaderWorkspace> {
   static const _currentLocator = 'chapter-2:start';
   static const _chapterTitle = '第二章 阅读的层次';
-  BookReadingOverride? _override;
-  List<Bookmark> _bookmarks = const [];
-  var _tocVisible = true;
-  var _sidePanelVisible = true;
-  var _showBookmarks = false;
-  var _loading = true;
-
-  ReadingSettings get _effectiveSettings =>
-      _override?.settings ?? widget.readingSettings;
 
   @override
-  void initState() {
-    super.initState();
-    _loadReaderData();
-  }
-
-  @override
-  void didUpdateWidget(covariant ReaderWorkspace oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.bookId != widget.bookId) {
-      _loadReaderData();
-    }
-  }
-
-  Future<void> _loadReaderData() async {
-    setState(() => _loading = true);
-    final values = await Future.wait([
-      widget.settingsRepository.loadBookOverride(widget.bookId),
-      widget.bookmarkRepository.listForBook(widget.bookId),
-    ]);
-    if (!mounted) return;
-    setState(() {
-      _override = values[0] as BookReadingOverride?;
-      _bookmarks = values[1] as List<Bookmark>;
-      _loading = false;
-    });
-  }
-
-  Future<void> _toggleBookmark() async {
-    final existing = _bookmarks
-        .where((bookmark) => bookmark.locator == _currentLocator)
-        .firstOrNull;
-    if (existing != null) {
-      await widget.bookmarkRepository.remove(existing.id);
-    } else {
-      await widget.bookmarkRepository.add(
-        bookId: widget.bookId,
-        locator: _currentLocator,
-        chapterTitle: _chapterTitle,
-      );
-    }
-    await _loadReaderData();
-  }
-
-  Future<void> _openBookSettings() async {
-    final result = await showDialog<_BookSettingsResult>(
-      context: context,
-      builder: (context) => _BookReadingSettingsDialog(
-        bookId: widget.bookId,
-        defaults: widget.readingSettings,
-        readingOverride: _override,
-      ),
-    );
-    if (result == null) return;
-    if (!mounted) return;
-    if (result.bookOverride == null) {
-      await widget.settingsRepository.clearBookOverride(widget.bookId);
-    } else {
-      await widget.settingsRepository.saveBookOverride(result.bookOverride!);
-    }
-    await _loadReaderData();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final settings = _effectiveSettings;
-    final isBookmarked = _bookmarks.any(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final readingOverride = ref.watch(bookReadingOverrideProvider(bookId));
+    final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
+    final tocVisible = useState(true);
+    final sidePanelVisible = useState(true);
+    final showBookmarks = useState(false);
+    final override = readingOverride.value;
+    final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
+    final settings = override?.settings ?? readingSettings;
+    final isLoading = readingOverride.isLoading || bookmarks.isLoading;
+    final isBookmarked = bookmarkItems.any(
       (bookmark) => bookmark.locator == _currentLocator,
     );
+
+    Future<void> toggleBookmark() async {
+      final repository = ref.read(bookmarkRepositoryProvider);
+      final existing = bookmarkItems
+          .where((bookmark) => bookmark.locator == _currentLocator)
+          .firstOrNull;
+      if (existing != null) {
+        await repository.remove(existing.id);
+      } else {
+        await repository.add(
+          bookId: bookId,
+          locator: _currentLocator,
+          chapterTitle: _chapterTitle,
+        );
+      }
+      ref.invalidate(bookmarksForBookProvider(bookId));
+    }
+
+    Future<void> openBookSettings() async {
+      final result = await showDialog<_BookSettingsResult>(
+        context: context,
+        builder: (context) => _BookReadingSettingsDialog(
+          bookId: bookId,
+          defaults: readingSettings,
+          readingOverride: override,
+        ),
+      );
+      if (result == null || !context.mounted) return;
+      final repository = ref.read(settingsRepositoryProvider);
+      if (result.bookOverride == null) {
+        await repository.clearBookOverride(bookId);
+      } else {
+        await repository.saveBookOverride(result.bookOverride!);
+      }
+      ref.invalidate(bookReadingOverrideProvider(bookId));
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final canShowPanels = constraints.maxWidth >= 980;
-        final showToc = canShowPanels && _tocVisible;
-        final showSidePanel = canShowPanels && _sidePanelVisible;
+        final showToc = canShowPanels && tocVisible.value;
+        final showSidePanel = canShowPanels && sidePanelVisible.value;
         return Column(
           children: [
             _ReaderToolbar(
-              title: widget.title,
-              tocVisible: _tocVisible,
-              sidePanelVisible: _sidePanelVisible,
+              title: title,
+              tocVisible: tocVisible.value,
+              sidePanelVisible: sidePanelVisible.value,
               bookmarked: isBookmarked,
-              onToggleToc: () => setState(() => _tocVisible = !_tocVisible),
+              onToggleToc: () => tocVisible.value = !tocVisible.value,
               onToggleSidePanel: () =>
-                  setState(() => _sidePanelVisible = !_sidePanelVisible),
-              onToggleBookmark: _toggleBookmark,
-              onOpenBookSettings: _openBookSettings,
+                  sidePanelVisible.value = !sidePanelVisible.value,
+              onToggleBookmark: toggleBookmark,
+              onOpenBookSettings: openBookSettings,
             ),
             Expanded(
-              child: _loading
+              child: isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : Material(
                       child: Row(
@@ -144,10 +109,10 @@ class _ReaderWorkspaceState extends State<ReaderWorkspace> {
                             SizedBox(
                               width: 280,
                               child: _ReaderSidePanel(
-                                showBookmarks: _showBookmarks,
-                                bookmarks: _bookmarks,
+                                showBookmarks: showBookmarks.value,
+                                bookmarks: bookmarkItems,
                                 onPanelChanged: (value) =>
-                                    setState(() => _showBookmarks = value),
+                                    showBookmarks.value = value,
                               ),
                             ),
                         ],
@@ -469,7 +434,7 @@ class _BookSettingsResult {
   final BookReadingOverride? bookOverride;
 }
 
-class _BookReadingSettingsDialog extends StatefulWidget {
+class _BookReadingSettingsDialog extends HookWidget {
   const _BookReadingSettingsDialog({
     required this.bookId,
     required this.defaults,
@@ -481,17 +446,9 @@ class _BookReadingSettingsDialog extends StatefulWidget {
   final BookReadingOverride? readingOverride;
 
   @override
-  State<_BookReadingSettingsDialog> createState() =>
-      _BookReadingSettingsDialogState();
-}
-
-class _BookReadingSettingsDialogState
-    extends State<_BookReadingSettingsDialog> {
-  late var _useOverride = widget.readingOverride != null;
-  late var _settings = widget.readingOverride?.settings ?? widget.defaults;
-
-  @override
   Widget build(BuildContext context) {
+    final useOverride = useState(readingOverride != null);
+    final settings = useState(readingOverride?.settings ?? defaults);
     return AlertDialog(
       title: const Text('本书阅读设置'),
       content: SizedBox(
@@ -501,14 +458,14 @@ class _BookReadingSettingsDialogState
           children: [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              value: _useOverride,
-              onChanged: (value) => setState(() => _useOverride = value),
+              value: useOverride.value,
+              onChanged: (value) => useOverride.value = value,
               title: const Text('使用本书独立设置'),
               subtitle: const Text('关闭后，本书将跟随全局阅读设置。'),
             ),
-            if (_useOverride) ...[
+            if (useOverride.value) ...[
               DropdownButtonFormField<FontChoice>(
-                initialValue: _settings.font,
+                initialValue: settings.value.font,
                 decoration: const InputDecoration(labelText: '书本字体'),
                 items: FontChoice.values
                     .map(
@@ -520,7 +477,7 @@ class _BookReadingSettingsDialogState
                     .toList(),
                 onChanged: (font) {
                   if (font != null) {
-                    setState(() => _settings = _settings.copyWith(font: font));
+                    settings.value = settings.value.copyWith(font: font);
                   }
                 },
               ),
@@ -530,14 +487,13 @@ class _BookReadingSettingsDialogState
                   const SizedBox(width: 64, child: Text('字号')),
                   Expanded(
                     child: Slider(
-                      value: _settings.fontSize,
+                      value: settings.value.fontSize,
                       min: 14,
                       max: 28,
                       divisions: 14,
-                      label: _settings.fontSize.round().toString(),
-                      onChanged: (value) => setState(
-                        () => _settings = _settings.copyWith(fontSize: value),
-                      ),
+                      label: settings.value.fontSize.round().toString(),
+                      onChanged: (value) => settings.value = settings.value
+                          .copyWith(fontSize: value),
                     ),
                   ),
                 ],
@@ -547,14 +503,13 @@ class _BookReadingSettingsDialogState
                   const SizedBox(width: 64, child: Text('行高')),
                   Expanded(
                     child: Slider(
-                      value: _settings.lineHeight,
+                      value: settings.value.lineHeight,
                       min: 1.4,
                       max: 2.2,
                       divisions: 8,
-                      label: _settings.lineHeight.toStringAsFixed(1),
-                      onChanged: (value) => setState(
-                        () => _settings = _settings.copyWith(lineHeight: value),
-                      ),
+                      label: settings.value.lineHeight.toStringAsFixed(1),
+                      onChanged: (value) => settings.value = settings.value
+                          .copyWith(lineHeight: value),
                     ),
                   ),
                 ],
@@ -572,10 +527,10 @@ class _BookReadingSettingsDialogState
           onPressed: () => Navigator.pop(
             context,
             _BookSettingsResult(
-              _useOverride
+              useOverride.value
                   ? BookReadingOverride(
-                      bookId: widget.bookId,
-                      settings: _settings,
+                      bookId: bookId,
+                      settings: settings.value,
                     )
                   : null,
             ),
