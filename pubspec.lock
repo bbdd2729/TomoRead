@@ -1005,6 +1005,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.2.1"
+  webview_flutter_windows:
+    dependency: "direct main"
+    description:
+      name: webview_flutter_windows
+      sha256: "889c9874aee8abf6a4c15c9885d38827e229d29c22a1bd7a645c10392f8a676f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.1"
   win32:
     dependency: transitive
     description:

@@ -8,6 +8,7 @@ import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_chapter.dart';
 import '../../domain/models/reading_settings.dart';
+import 'epub_webview.dart';
 
 class ReaderWorkspace extends HookConsumerWidget {
   const ReaderWorkspace({
@@ -146,6 +147,14 @@ class ReaderWorkspace extends HookConsumerWidget {
                               settings: settings,
                               chapter: chapter.value,
                               error: chapter.error,
+                              bookId: readerBook.value == null ? null : bookId,
+                              onNavigateToHref: (href) {
+                                final nextIndex = manifest.value?.spine
+                                    .indexWhere((item) => item.href == href);
+                                if (nextIndex != null && nextIndex >= 0) {
+                                  selectChapter(nextIndex);
+                                }
+                              },
                             ),
                           ),
                           if (showSidePanel) const VerticalDivider(width: 1),
@@ -295,11 +304,15 @@ class _ReaderArticle extends StatelessWidget {
     required this.settings,
     required this.chapter,
     required this.error,
+    required this.bookId,
+    required this.onNavigateToHref,
   });
 
   final ReadingSettings settings;
   final ReaderChapter? chapter;
   final Object? error;
+  final String? bookId;
+  final ValueChanged<String> onNavigateToHref;
 
   @override
   Widget build(BuildContext context) {
@@ -309,6 +322,14 @@ class _ReaderArticle extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           child: Text(error == null ? '正在加载章节…' : '无法加载章节：$error'),
         ),
+      );
+    }
+    if (bookId != null) {
+      return EpubWebView(
+        bookId: bookId!,
+        href: chapter!.href,
+        settings: settings,
+        onNavigateToHref: onNavigateToHref,
       );
     }
     final blocks = chapter!.blocks;

@@ -8,6 +8,7 @@ import '../data/repositories/book_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/services/book_import_service.dart';
 import '../data/services/epub_content_service.dart';
+import '../data/services/epub_extraction_service.dart';
 import '../domain/models/bookmark.dart';
 import '../domain/models/epub_manifest.dart';
 import '../domain/models/library_book.dart';
@@ -39,6 +40,10 @@ final bookImportServiceProvider = Provider<BookImportService>(
 
 final epubContentServiceProvider = Provider<EpubContentService>(
   (ref) => const EpubContentService(),
+);
+
+final epubExtractionServiceProvider = Provider<EpubExtractionService>(
+  (ref) => const EpubExtractionService(),
 );
 
 final appSettingsProvider =
@@ -148,4 +153,13 @@ final readerChapterProvider = FutureProvider.autoDispose
             manifest: manifest,
             chapterIndex: request.chapterIndex,
           );
+    });
+
+final epubExtractedDirectoryProvider = FutureProvider.autoDispose
+    .family<String, String>((ref, bookId) async {
+      final book = await ref.watch(readerBookProvider(bookId).future);
+      if (book == null) {
+        throw const EpubExtractionException('书籍不存在');
+      }
+      return ref.read(epubExtractionServiceProvider).ensureExtracted(book);
     });
