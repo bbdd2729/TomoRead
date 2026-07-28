@@ -43,6 +43,7 @@ class BookRepository {
     required String bookId,
     required int chapterIndex,
     required double progress,
+    String? locator,
   }) async {
     final database = await _database.database;
     await database.update(
@@ -50,6 +51,7 @@ class BookRepository {
       {
         'chapter_index': chapterIndex,
         'progress': progress.clamp(0, 1),
+        'locator': locator,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
       where: 'id = ?',
@@ -113,6 +115,7 @@ class BookRepository {
     format: row['format'] as String? ?? 'epub',
     chapterCount: row['chapter_count'] as int? ?? 0,
     chapterIndex: row['chapter_index'] as int? ?? 0,
+    locator: row['locator'] as String?,
     direction: ReadingDirection.values.byName(
       row['read_direction'] as String? ?? ReadingDirection.ltr.name,
     ),

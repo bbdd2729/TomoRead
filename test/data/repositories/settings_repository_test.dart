@@ -134,9 +134,11 @@ void main() {
       bookId: 'hash-a',
       chapterIndex: 0,
       progress: 0.75,
+      locator: '0:0.75000',
     );
     final updated = await books.findById('hash-a');
     expect(updated?.chapterIndex, 0);
     expect(updated?.progress, 0.75);
+    expect(updated?.locator, '0:0.75000');
   });
 }

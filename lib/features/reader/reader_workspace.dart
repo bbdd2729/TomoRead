@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -22,6 +24,27 @@ class ReaderWorkspace extends HookConsumerWidget {
   final String title;
   final ReadingSettings readingSettings;
 
+  static double _scrollRatioFromLocator(String? locator, int chapterIndex) {
+    final values = locator?.split(':');
+    if (values == null || values.length != 2) return 0;
+    if (int.tryParse(values.first) != chapterIndex) return 0;
+    return (double.tryParse(values.last) ?? 0).clamp(0, 1).toDouble();
+  }
+
+  static String _locatorFor(int chapterIndex, double scrollRatio) =>
+      '$chapterIndex:${scrollRatio.clamp(0, 1).toStringAsFixed(5)}';
+
+  static double _overallProgress(
+    int chapterIndex,
+    double chapterRatio,
+    int chapterCount,
+  ) {
+    if (chapterCount == 0) return 0;
+    return ((chapterIndex + chapterRatio.clamp(0, 1)) / chapterCount)
+        .clamp(0, 1)
+        .toDouble();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final readingOverride = ref.watch(bookReadingOverrideProvider(bookId));
@@ -32,6 +55,9 @@ class ReaderWorkspace extends HookConsumerWidget {
     final sidePanelVisible = useState(true);
     final showBookmarks = useState(false);
     final chapterIndex = useState(0);
+    final scrollRatio = useState(0.0);
+    final restoreRevision = useState(0);
+    final progressWriteTimer = useRef<Timer?>(null);
     final override = readingOverride.value;
     final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
     final settings = override?.settings ?? readingSettings;
@@ -53,21 +79,57 @@ class ReaderWorkspace extends HookConsumerWidget {
 
     useEffect(() {
       final savedIndex = readerBook.value?.chapterIndex;
-      if (savedIndex != null && savedIndex != chapterIndex.value) {
+      if (savedIndex != null) {
         chapterIndex.value = savedIndex;
+        scrollRatio.value = _scrollRatioFromLocator(
+          readerBook.value?.locator,
+          savedIndex,
+        );
+        restoreRevision.value++;
       }
       return null;
-    }, [bookId, readerBook.value?.chapterIndex]);
+    }, [bookId, readerBook.value?.chapterIndex, readerBook.value?.locator]);
+
+    useEffect(
+      () =>
+          () => progressWriteTimer.value?.cancel(),
+      [bookId],
+    );
+
+    void scheduleProgressWrite({
+      required int index,
+      required double chapterRatio,
+    }) {
+      progressWriteTimer.value?.cancel();
+      progressWriteTimer.value = Timer(
+        const Duration(milliseconds: 600),
+        () async {
+          await ref
+              .read(bookRepositoryProvider)
+              .updateReadingPosition(
+                bookId: bookId,
+                chapterIndex: index,
+                progress: _overallProgress(index, chapterRatio, totalChapters),
+                locator: _locatorFor(index, chapterRatio),
+              );
+          if (context.mounted) ref.invalidate(libraryBooksProvider);
+        },
+      );
+    }
 
     Future<void> selectChapter(int index) async {
       if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
+      progressWriteTimer.value?.cancel();
       chapterIndex.value = index;
+      scrollRatio.value = 0;
+      restoreRevision.value++;
       await ref
           .read(bookRepositoryProvider)
           .updateReadingPosition(
             bookId: bookId,
             chapterIndex: index,
-            progress: (index + 1) / totalChapters,
+            progress: _overallProgress(index, 0, totalChapters),
+            locator: _locatorFor(index, 0),
           );
       ref.invalidate(libraryBooksProvider);
     }
@@ -148,12 +210,25 @@ class ReaderWorkspace extends HookConsumerWidget {
                               chapter: chapter.value,
                               error: chapter.error,
                               bookId: readerBook.value == null ? null : bookId,
+                              initialScrollRatio: scrollRatio.value,
+                              restoreRevision: restoreRevision.value,
                               onNavigateToHref: (href) {
                                 final nextIndex = manifest.value?.spine
                                     .indexWhere((item) => item.href == href);
                                 if (nextIndex != null && nextIndex >= 0) {
                                   selectChapter(nextIndex);
                                 }
+                              },
+                              onScrollPositionChanged: (href, ratio) {
+                                if (href != chapter.value?.href) return;
+                                final clampedRatio = ratio
+                                    .clamp(0, 1)
+                                    .toDouble();
+                                scrollRatio.value = clampedRatio;
+                                scheduleProgressWrite(
+                                  index: activeChapterIndex,
+                                  chapterRatio: clampedRatio,
+                                );
                               },
                             ),
                           ),
@@ -305,14 +380,20 @@ class _ReaderArticle extends StatelessWidget {
     required this.chapter,
     required this.error,
     required this.bookId,
+    required this.initialScrollRatio,
+    required this.restoreRevision,
     required this.onNavigateToHref,
+    required this.onScrollPositionChanged,
   });
 
   final ReadingSettings settings;
   final ReaderChapter? chapter;
   final Object? error;
   final String? bookId;
+  final double initialScrollRatio;
+  final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
+  final void Function(String href, double ratio) onScrollPositionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -329,7 +410,10 @@ class _ReaderArticle extends StatelessWidget {
         bookId: bookId!,
         href: chapter!.href,
         settings: settings,
+        initialScrollRatio: initialScrollRatio,
+        restoreRevision: restoreRevision,
         onNavigateToHref: onNavigateToHref,
+        onScrollPositionChanged: onScrollPositionChanged,
       );
     }
     final blocks = chapter!.blocks;

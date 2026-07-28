@@ -16,7 +16,10 @@ class EpubWebView extends HookConsumerWidget {
     required this.bookId,
     required this.href,
     required this.settings,
+    required this.initialScrollRatio,
+    required this.restoreRevision,
     required this.onNavigateToHref,
+    required this.onScrollPositionChanged,
   });
 
   static const _hostName = 'reader.tomoread';
@@ -24,7 +27,10 @@ class EpubWebView extends HookConsumerWidget {
   final String bookId;
   final String href;
   final ReadingSettings settings;
+  final double initialScrollRatio;
+  final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
+  final void Function(String href, double ratio) onScrollPositionChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,6 +48,16 @@ class EpubWebView extends HookConsumerWidget {
         await controller.executeScript(styleScript);
       } catch (_) {
         // The document can change while the WebView is navigating.
+      }
+    }
+
+    Future<void> restoreScrollPosition() async {
+      try {
+        await controller.executeScript(
+          _restoreScrollScript(initialScrollRatio),
+        );
+      } catch (_) {
+        // Navigation can complete while the controller is being disposed.
       }
     }
 
@@ -72,7 +88,10 @@ class EpubWebView extends HookConsumerWidget {
     useEffect(() {
       if (!initialized.value) return null;
       final subscription = controller.loadingState.listen((state) {
-        if (state == LoadingState.navigationCompleted) unawaited(applyStyle());
+        if (state == LoadingState.navigationCompleted) {
+          unawaited(applyStyle());
+          unawaited(restoreScrollPosition());
+        }
       });
       unawaited(controller.loadUrl(_chapterUrl(href)));
       return subscription.cancel;
@@ -91,9 +110,26 @@ class EpubWebView extends HookConsumerWidget {
     }, [controller, href, onNavigateToHref]);
 
     useEffect(() {
+      final subscription = controller.webMessage.listen((message) {
+        if (message is! Map || message['type'] != 'scrollProgress') return;
+        final messageHref = message['href'];
+        final ratio = message['ratio'];
+        if (messageHref is String && ratio is num) {
+          onScrollPositionChanged(messageHref, ratio.toDouble());
+        }
+      });
+      return subscription.cancel;
+    }, [controller, onScrollPositionChanged]);
+
+    useEffect(() {
       if (initialized.value) unawaited(applyStyle());
       return null;
     }, [initialized.value, styleScript]);
+
+    useEffect(() {
+      if (initialized.value) unawaited(restoreScrollPosition());
+      return null;
+    }, [initialized.value, href, restoreRevision]);
 
     useEffect(
       () =>
@@ -141,8 +177,40 @@ a { color: ${_cssColor(colorScheme.primary)}; }
         document.head.appendChild(style);
       }
       style.textContent = ${jsonEncode(css)};
+      if (!window.__tomoReadScrollListener) {
+        let scheduled = false;
+        const reportProgress = () => {
+          if (scheduled) return;
+          scheduled = true;
+          window.setTimeout(() => {
+            scheduled = false;
+            const root = document.scrollingElement || document.documentElement;
+            const range = Math.max(0, root.scrollHeight - window.innerHeight);
+            const ratio = range === 0 ? 0 : root.scrollTop / range;
+            window.chrome?.webview?.postMessage({
+              type: 'scrollProgress',
+              href: window.location.pathname.replace(/^\\//, ''),
+              ratio,
+            });
+          }, 200);
+        };
+        window.addEventListener('scroll', reportProgress, { passive: true });
+        window.__tomoReadScrollListener = true;
+      }
     })();''';
   }
+
+  String _restoreScrollScript(double ratio) =>
+      '''(() => {
+    const root = document.scrollingElement || document.documentElement;
+    const clampedRatio = ${ratio.clamp(0, 1)};
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        const range = Math.max(0, root.scrollHeight - window.innerHeight);
+        root.scrollTop = range * clampedRatio;
+      }, 0);
+    });
+  })();''';
 
   String _cssColor(Color color) =>
       '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';

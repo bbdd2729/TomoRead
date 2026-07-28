@@ -13,6 +13,7 @@ class LibraryBook {
     required this.chapterCount,
     required this.direction,
     this.chapterIndex = 0,
+    this.locator,
     this.coverPath,
     this.description,
   });
@@ -29,6 +30,7 @@ class LibraryBook {
   final String format;
   final int chapterCount;
   final int chapterIndex;
+  final String? locator;
   final ReadingDirection direction;
 }
 
