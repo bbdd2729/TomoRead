@@ -45,6 +45,7 @@ class SettingsRepository {
         'textScale': appearance.textScale,
         'uiFont': appearance.uiFont.name,
         'desktopNavigationWidth': appearance.desktopNavigationWidth,
+        'desktopNavigationCollapsed': appearance.desktopNavigationCollapsed,
       }),
     );
   }
@@ -105,6 +106,7 @@ class SettingsRepository {
           ((value['desktopNavigationWidth'] as num?)?.toDouble() ?? 240)
               .clamp(220, 320)
               .toDouble(),
+      desktopNavigationCollapsed: value['desktopNavigationCollapsed'] == true,
     );
   }
 

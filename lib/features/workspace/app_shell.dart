@@ -76,10 +76,18 @@ class AppShell extends HookConsumerWidget {
     ]);
     final activeTabId = useState('library');
     final navigationWidth = useState(appearance.desktopNavigationWidth);
-    useEffect(() {
-      navigationWidth.value = appearance.desktopNavigationWidth;
-      return null;
-    }, [appearance.desktopNavigationWidth]);
+    final navigationCollapsed = useState(appearance.desktopNavigationCollapsed);
+    useEffect(
+      () {
+        navigationWidth.value = appearance.desktopNavigationWidth;
+        navigationCollapsed.value = appearance.desktopNavigationCollapsed;
+        return null;
+      },
+      [
+        appearance.desktopNavigationWidth,
+        appearance.desktopNavigationCollapsed,
+      ],
+    );
     final activeTab = tabs.value.firstWhere(
       (tab) => tab.id == activeTabId.value,
       orElse: () => tabs.value.first,
@@ -136,6 +144,14 @@ class AppShell extends HookConsumerWidget {
       }
     }
 
+    void toggleNavigation() {
+      final collapsed = !navigationCollapsed.value;
+      navigationCollapsed.value = collapsed;
+      onAppearanceChanged(
+        appearance.copyWith(desktopNavigationCollapsed: collapsed),
+      );
+    }
+
     Future<void> openLibrarySearch() async {
       try {
         final books = await ref.read(libraryBooksProvider.future);
@@ -173,6 +189,19 @@ class AppShell extends HookConsumerWidget {
           appBar: AppBar(
             title: const Text('TomoRead'),
             actions: [
+              if (isDesktop)
+                IconButton(
+                  key: const Key('desktop-navigation-toggle'),
+                  tooltip: navigationCollapsed.value
+                      ? 'Show navigation'
+                      : 'Hide navigation',
+                  onPressed: toggleNavigation,
+                  icon: Icon(
+                    navigationCollapsed.value
+                        ? Icons.keyboard_double_arrow_right
+                        : Icons.keyboard_double_arrow_left,
+                  ),
+                ),
               IconButton(
                 tooltip: '搜索',
                 key: const Key('global-search'),
@@ -200,21 +229,34 @@ class AppShell extends HookConsumerWidget {
           body: isDesktop
               ? Row(
                   children: [
-                    ResizablePane(
-                      width: navigationWidth.value,
-                      minWidth: _desktopNavigationMinWidth,
-                      maxWidth: _desktopNavigationMaxWidth,
-                      defaultWidth: 240,
-                      onWidthChanged: (value) => navigationWidth.value = value,
-                      onWidthChangeEnd: (value) => onAppearanceChanged(
-                        appearance.copyWith(desktopNavigationWidth: value),
+                    if (navigationCollapsed.value)
+                      SizedBox(
+                        width: 72,
+                        child: _AppNavigationRail(
+                          extended: false,
+                          selected: activeDestination,
+                          onSelected: openDestination,
+                          onAddBook: onImportBooks,
+                        ),
+                      )
+                    else
+                      ResizablePane(
+                        width: navigationWidth.value,
+                        minWidth: _desktopNavigationMinWidth,
+                        maxWidth: _desktopNavigationMaxWidth,
+                        defaultWidth: 240,
+                        onWidthChanged: (value) =>
+                            navigationWidth.value = value,
+                        onWidthChangeEnd: (value) => onAppearanceChanged(
+                          appearance.copyWith(desktopNavigationWidth: value),
+                        ),
+                        child: _AppNavigationRail(
+                          extended: true,
+                          selected: activeDestination,
+                          onSelected: openDestination,
+                          onAddBook: onImportBooks,
+                        ),
                       ),
-                      child: _AppNavigationRail(
-                        selected: activeDestination,
-                        onSelected: openDestination,
-                        onAddBook: onImportBooks,
-                      ),
-                    ),
                     Expanded(child: content),
                   ],
                 )
@@ -347,11 +389,13 @@ class _WorkspaceTabBar extends StatelessWidget {
 
 class _AppNavigationRail extends StatelessWidget {
   const _AppNavigationRail({
+    required this.extended,
     required this.selected,
     required this.onSelected,
     required this.onAddBook,
   });
 
+  final bool extended;
   final AppDestination selected;
   final ValueChanged<AppDestination> onSelected;
   final VoidCallback onAddBook;
@@ -360,7 +404,7 @@ class _AppNavigationRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final selectedIndex = selected.index < 5 ? selected.index : null;
     return NavigationRail(
-      extended: true,
+      extended: extended,
       minExtendedWidth: 220,
       selectedIndex: selectedIndex,
       leading: Padding(
@@ -371,17 +415,19 @@ class _AppNavigationRail extends StatelessWidget {
           child: const Icon(Icons.add),
         ),
       ),
-      trailing: Expanded(
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: TextButton.icon(
-            key: const Key('settings-navigation'),
-            onPressed: () => onSelected(AppDestination.settings),
-            icon: const Icon(Icons.settings_outlined),
-            label: const Text('设置'),
-          ),
-        ),
-      ),
+      trailing: extended
+          ? Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: TextButton.icon(
+                  key: const Key('settings-navigation'),
+                  onPressed: () => onSelected(AppDestination.settings),
+                  icon: const Icon(Icons.settings_outlined),
+                  label: const Text('设置'),
+                ),
+              ),
+            )
+          : null,
       onDestinationSelected: (index) =>
           onSelected(_navigationDestinations[index]),
       destinations: const [

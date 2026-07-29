@@ -66,6 +66,26 @@ void main() {
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
   });
 
+  testWidgets('collapses desktop navigation and stores the preference', (
+    tester,
+  ) async {
+    configureDesktop(tester);
+    AppAppearance? changedAppearance;
+    await pumpShell(
+      tester,
+      onAppearanceChanged: (appearance) => changedAppearance = appearance,
+    );
+
+    await tester.tap(find.byKey(const Key('desktop-navigation-toggle')));
+    await tester.pump();
+
+    expect(changedAppearance?.desktopNavigationCollapsed, isTrue);
+    expect(
+      tester.widget<NavigationRail>(find.byType(NavigationRail)).extended,
+      isFalse,
+    );
+  });
+
   testWidgets('adds a bookmark and collapses the reader toc', (tester) async {
     configureDesktop(tester);
     await tester.pumpWidget(
