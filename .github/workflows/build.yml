@@ -1,0 +1,151 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: 3.44.8
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter analyze lib test
+      - run: flutter test
+
+  linux:
+    name: Linux
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ninja-build libgtk-3-dev libsqlite3-dev
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build linux --release
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tomoread-linux
+          path: build/linux/x64/release/bundle/
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    name: Windows
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tomoread-windows
+          path: build/windows/x64/runner/Release/
+          if-no-files-found: error
+          retention-days: 14
+
+  android:
+    name: Android
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - name: Configure Android release signing
+        if: >-
+          env.ANDROID_KEYSTORE_BASE64 != '' &&
+          env.ANDROID_KEYSTORE_PASSWORD != '' &&
+          env.ANDROID_KEY_ALIAS != '' &&
+          env.ANDROID_KEY_PASSWORD != ''
+        shell: bash
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+      - name: Build Android release artifacts
+        if: >-
+          env.ANDROID_KEYSTORE_BASE64 != '' &&
+          env.ANDROID_KEYSTORE_PASSWORD != '' &&
+          env.ANDROID_KEY_ALIAS != '' &&
+          env.ANDROID_KEY_PASSWORD != ''
+        run: |
+          flutter build apk --release
+          flutter build appbundle --release
+      - name: Build Android debug APK
+        if: >-
+          env.ANDROID_KEYSTORE_BASE64 == '' ||
+          env.ANDROID_KEYSTORE_PASSWORD == '' ||
+          env.ANDROID_KEY_ALIAS == '' ||
+          env.ANDROID_KEY_PASSWORD == ''
+        run: flutter build apk --debug
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: tomoread-android-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Android app bundle
+        if: >-
+          env.ANDROID_KEYSTORE_BASE64 != '' &&
+          env.ANDROID_KEYSTORE_PASSWORD != '' &&
+          env.ANDROID_KEY_ALIAS != '' &&
+          env.ANDROID_KEY_PASSWORD != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tomoread-android-aab
+          path: build/app/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 14
