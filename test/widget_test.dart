@@ -145,6 +145,18 @@ void main() {
     expect(changedAppearance?.seed, ThemeSeed.green);
   });
 
+  testWidgets('switches between settings categories', (tester) async {
+    configureDesktop(tester);
+    await pumpShell(tester);
+
+    await tester.tap(find.byKey(const Key('settings-navigation')));
+    await tester.pump();
+    await tester.tap(find.text('默认阅读'));
+    await tester.pump();
+
+    expect(find.text('默认书本字体'), findsOneWidget);
+  });
+
   testWidgets('shows the full per-book reading settings', (tester) async {
     configureDesktop(tester);
     await tester.pumpWidget(
