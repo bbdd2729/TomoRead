@@ -30,6 +30,7 @@ class PdfReaderWorkspace extends HookConsumerWidget {
     final outline = useState(const <PdfOutlineNode>[]);
     final outlineLoading = useState(false);
     final outlineError = useState<Object?>(null);
+    final focusMode = useState(false);
 
     useEffect(() {
       return () => textSearcher.value?.dispose();
@@ -167,6 +168,7 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                       onPressed: bookmarks.isLoading ? null : openBookmarks,
                       icon: const Icon(Icons.format_list_bulleted),
                     ),
+                    const VerticalDivider(width: 20),
                     IconButton(
                       tooltip: '目录和页面导航',
                       onPressed: pdfDocument.value == null
@@ -179,7 +181,17 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                       onPressed: textSearcher.value == null ? null : openSearch,
                       icon: const Icon(Icons.search),
                     ),
-                    Text('$pageCount 页'),
+                    const VerticalDivider(width: 20),
+                    IconButton(
+                      key: const Key('pdf-reader-focus-mode'),
+                      tooltip: focusMode.value ? '退出专注模式' : '进入专注模式',
+                      onPressed: () => focusMode.value = !focusMode.value,
+                      icon: Icon(
+                        focusMode.value
+                            ? Icons.center_focus_strong_outlined
+                            : Icons.center_focus_weak_outlined,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -206,28 +218,30 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                 ),
               ),
             ),
-            Material(
-              color: Theme.of(context).colorScheme.surfaceContainerLow,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.description_outlined, size: 18),
-                    const SizedBox(width: 8),
-                    Text('第 $displayedPage / $pageCount 页'),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: LinearProgressIndicator(
-                        value: pageCount == 0 ? 0 : displayedPage / pageCount,
+            if (!focusMode.value)
+              Material(
+                key: const Key('pdf-reader-footer'),
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.description_outlined, size: 18),
+                      const SizedBox(width: 8),
+                      Text('第 $displayedPage / $pageCount 页'),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: LinearProgressIndicator(
+                          value: pageCount == 0 ? 0 : displayedPage / pageCount,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
           ],
         );
       },
