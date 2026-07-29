@@ -51,8 +51,9 @@ class ReaderWorkspace extends HookConsumerWidget {
     final appearance =
         ref.watch(appSettingsProvider).value?.appearance ??
         const AppAppearance();
-    final tocVisible = useState(true);
-    final sidePanelVisible = useState(true);
+    final tocVisible = useState(appearance.readerTocVisible);
+    final sidePanelVisible = useState(appearance.readerSidePanelVisible);
+    final focusMode = useState(false);
     final tocPanelWidth = useState(appearance.readerTocWidth);
     final sidePanelWidth = useState(appearance.readerSidePanelWidth);
     final showBookmarks = useState(false);
@@ -92,11 +93,21 @@ class ReaderWorkspace extends HookConsumerWidget {
       (bookmark) => bookmark.locator == currentLocator,
     );
 
-    useEffect(() {
-      tocPanelWidth.value = appearance.readerTocWidth;
-      sidePanelWidth.value = appearance.readerSidePanelWidth;
-      return null;
-    }, [appearance.readerTocWidth, appearance.readerSidePanelWidth]);
+    useEffect(
+      () {
+        tocPanelWidth.value = appearance.readerTocWidth;
+        sidePanelWidth.value = appearance.readerSidePanelWidth;
+        tocVisible.value = appearance.readerTocVisible;
+        sidePanelVisible.value = appearance.readerSidePanelVisible;
+        return null;
+      },
+      [
+        appearance.readerTocWidth,
+        appearance.readerSidePanelWidth,
+        appearance.readerTocVisible,
+        appearance.readerSidePanelVisible,
+      ],
+    );
 
     useEffect(() {
       final savedIndex = readerBook.value?.chapterIndex;
@@ -333,13 +344,37 @@ class ReaderWorkspace extends HookConsumerWidget {
       }
     }
 
+    void toggleToc() {
+      final visible = !tocVisible.value;
+      tocVisible.value = visible;
+      unawaited(
+        ref
+            .read(appSettingsProvider.notifier)
+            .updateAppearance(appearance.copyWith(readerTocVisible: visible)),
+      );
+    }
+
+    void toggleSidePanel() {
+      final visible = !sidePanelVisible.value;
+      sidePanelVisible.value = visible;
+      unawaited(
+        ref
+            .read(appSettingsProvider.notifier)
+            .updateAppearance(
+              appearance.copyWith(readerSidePanelVisible: visible),
+            ),
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         const contentMinWidth = 440.0;
         final showToc =
+            !focusMode.value &&
             tocVisible.value &&
             constraints.maxWidth >= contentMinWidth + tocPanelWidth.value + 8;
         final showSidePanel =
+            !focusMode.value &&
             sidePanelVisible.value &&
             constraints.maxWidth >=
                 contentMinWidth +
@@ -352,12 +387,13 @@ class ReaderWorkspace extends HookConsumerWidget {
               title: title,
               tocVisible: tocVisible.value,
               sidePanelVisible: sidePanelVisible.value,
+              focusMode: focusMode.value,
               bookmarked: isBookmarked,
               canCreateAnnotation:
                   selectedText.value?.href == chapter.value?.href,
-              onToggleToc: () => tocVisible.value = !tocVisible.value,
-              onToggleSidePanel: () =>
-                  sidePanelVisible.value = !sidePanelVisible.value,
+              onToggleToc: toggleToc,
+              onToggleSidePanel: toggleSidePanel,
+              onToggleFocusMode: () => focusMode.value = !focusMode.value,
               onToggleBookmark: toggleBookmark,
               onCreateAnnotation: createAnnotation,
               onOpenBookSettings: openBookSettings,
@@ -489,24 +525,26 @@ class ReaderWorkspace extends HookConsumerWidget {
                       ),
                     ),
             ),
-            _ReaderFooter(
-              chapterIndex: activeChapterIndex,
-              chapterCount: totalChapters,
-              layoutMode: settings.layoutMode,
-              pageIndex: pageIndex.value,
-              pageCount: pageCount.value,
-              onPrevious:
-                  activeChapterIndex > 0 || (isPaginated && pageIndex.value > 0)
-                  ? goToPrevious
-                  : null,
-              onNext:
-                  totalChapters > 0 &&
-                      (activeChapterIndex < totalChapters - 1 ||
-                          (isPaginated &&
-                              pageIndex.value < pageCount.value - 1))
-                  ? goToNext
-                  : null,
-            ),
+            if (!focusMode.value)
+              _ReaderFooter(
+                chapterIndex: activeChapterIndex,
+                chapterCount: totalChapters,
+                layoutMode: settings.layoutMode,
+                pageIndex: pageIndex.value,
+                pageCount: pageCount.value,
+                onPrevious:
+                    activeChapterIndex > 0 ||
+                        (isPaginated && pageIndex.value > 0)
+                    ? goToPrevious
+                    : null,
+                onNext:
+                    totalChapters > 0 &&
+                        (activeChapterIndex < totalChapters - 1 ||
+                            (isPaginated &&
+                                pageIndex.value < pageCount.value - 1))
+                    ? goToNext
+                    : null,
+              ),
           ],
         );
       },
@@ -519,10 +557,12 @@ class _ReaderToolbar extends StatelessWidget {
     required this.title,
     required this.tocVisible,
     required this.sidePanelVisible,
+    required this.focusMode,
     required this.bookmarked,
     required this.canCreateAnnotation,
     required this.onToggleToc,
     required this.onToggleSidePanel,
+    required this.onToggleFocusMode,
     required this.onToggleBookmark,
     required this.onCreateAnnotation,
     required this.onOpenBookSettings,
@@ -532,10 +572,12 @@ class _ReaderToolbar extends StatelessWidget {
   final String title;
   final bool tocVisible;
   final bool sidePanelVisible;
+  final bool focusMode;
   final bool bookmarked;
   final bool canCreateAnnotation;
   final VoidCallback onToggleToc;
   final VoidCallback onToggleSidePanel;
+  final VoidCallback onToggleFocusMode;
   final VoidCallback onToggleBookmark;
   final VoidCallback onCreateAnnotation;
   final VoidCallback onOpenBookSettings;
@@ -563,6 +605,7 @@ class _ReaderToolbar extends StatelessWidget {
               key: const Key('reader-side-panel'),
               icon: const Icon(Icons.sticky_note_2_outlined),
             ),
+            const VerticalDivider(width: 20),
             IconButton(
               tooltip: bookmarked ? '移除书签' : '添加书签',
               onPressed: onToggleBookmark,
@@ -574,9 +617,14 @@ class _ReaderToolbar extends StatelessWidget {
               onPressed: canCreateAnnotation ? onCreateAnnotation : null,
               icon: const Icon(Icons.highlight_alt_outlined),
             ),
-            const Spacer(),
-            Flexible(child: Text(title, overflow: TextOverflow.ellipsis)),
-            const Spacer(),
+            const SizedBox(width: 12),
+            Expanded(child: Text(title, overflow: TextOverflow.ellipsis)),
+            IconButton(
+              tooltip: '搜索书内内容',
+              onPressed: onOpenSearch,
+              icon: const Icon(Icons.search),
+            ),
+            const VerticalDivider(width: 20),
             IconButton(
               tooltip: '本书阅读设置',
               onPressed: onOpenBookSettings,
@@ -584,9 +632,14 @@ class _ReaderToolbar extends StatelessWidget {
               icon: const Icon(Icons.format_size),
             ),
             IconButton(
-              tooltip: '搜索书内内容',
-              onPressed: onOpenSearch,
-              icon: const Icon(Icons.search),
+              tooltip: focusMode ? '退出专注模式' : '进入专注模式',
+              key: const Key('reader-focus-mode'),
+              onPressed: onToggleFocusMode,
+              icon: Icon(
+                focusMode
+                    ? Icons.center_focus_strong_outlined
+                    : Icons.center_focus_weak_outlined,
+              ),
             ),
           ],
         ),
@@ -1107,6 +1160,7 @@ class _ReaderFooter extends StatelessWidget {
         ? 0.0
         : (chapterIndex + chapterProgress) / chapterCount;
     return Material(
+      key: const Key('reader-footer'),
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),

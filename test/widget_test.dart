@@ -121,6 +121,10 @@ void main() {
     await tester.tap(find.byKey(const Key('reader-toc')));
     await tester.pump();
     expect(find.byIcon(Icons.menu_open), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('reader-focus-mode')));
+    await tester.pump();
+    expect(find.byKey(const Key('reader-footer')), findsNothing);
   });
 
   testWidgets('opens settings from the single navigation entry', (

@@ -48,6 +48,8 @@ class SettingsRepository {
         'desktopNavigationCollapsed': appearance.desktopNavigationCollapsed,
         'readerTocWidth': appearance.readerTocWidth,
         'readerSidePanelWidth': appearance.readerSidePanelWidth,
+        'readerTocVisible': appearance.readerTocVisible,
+        'readerSidePanelVisible': appearance.readerSidePanelVisible,
       }),
     );
   }
@@ -116,6 +118,8 @@ class SettingsRepository {
           ((value['readerSidePanelWidth'] as num?)?.toDouble() ?? 320)
               .clamp(280, 520)
               .toDouble(),
+      readerTocVisible: value['readerTocVisible'] as bool? ?? true,
+      readerSidePanelVisible: value['readerSidePanelVisible'] as bool? ?? true,
     );
   }
 

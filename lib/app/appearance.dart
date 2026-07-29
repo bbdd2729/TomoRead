@@ -32,6 +32,8 @@ class AppAppearance {
     this.desktopNavigationCollapsed = false,
     this.readerTocWidth = 280,
     this.readerSidePanelWidth = 320,
+    this.readerTocVisible = true,
+    this.readerSidePanelVisible = true,
   });
 
   final ThemeMode mode;
@@ -42,6 +44,8 @@ class AppAppearance {
   final bool desktopNavigationCollapsed;
   final double readerTocWidth;
   final double readerSidePanelWidth;
+  final bool readerTocVisible;
+  final bool readerSidePanelVisible;
 
   AppAppearance copyWith({
     ThemeMode? mode,
@@ -52,6 +56,8 @@ class AppAppearance {
     bool? desktopNavigationCollapsed,
     double? readerTocWidth,
     double? readerSidePanelWidth,
+    bool? readerTocVisible,
+    bool? readerSidePanelVisible,
   }) {
     return AppAppearance(
       mode: mode ?? this.mode,
@@ -64,6 +70,9 @@ class AppAppearance {
           desktopNavigationCollapsed ?? this.desktopNavigationCollapsed,
       readerTocWidth: readerTocWidth ?? this.readerTocWidth,
       readerSidePanelWidth: readerSidePanelWidth ?? this.readerSidePanelWidth,
+      readerTocVisible: readerTocVisible ?? this.readerTocVisible,
+      readerSidePanelVisible:
+          readerSidePanelVisible ?? this.readerSidePanelVisible,
     );
   }
 }
