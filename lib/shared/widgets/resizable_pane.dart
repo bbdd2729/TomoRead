@@ -92,6 +92,8 @@ class _ResizablePaneState extends State<ResizablePane> {
       onIncrease: () => _changeWidthByKeyboard(8),
       onDecrease: () => _changeWidthByKeyboard(-8),
       value: _width,
+      minWidth: widget.minWidth,
+      maxWidth: widget.maxWidth,
     );
     final pane = SizedBox(width: _width, child: widget.child);
 
@@ -111,6 +113,8 @@ class _ResizeHandle extends StatelessWidget {
     required this.onIncrease,
     required this.onDecrease,
     required this.value,
+    required this.minWidth,
+    required this.maxWidth,
   });
 
   final VoidCallback onDragStart;
@@ -120,6 +124,8 @@ class _ResizeHandle extends StatelessWidget {
   final VoidCallback onIncrease;
   final VoidCallback onDecrease;
   final double value;
+  final double minWidth;
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -128,6 +134,8 @@ class _ResizeHandle extends StatelessWidget {
       label: 'Resize panel',
       slider: true,
       value: '${value.round()} pixels',
+      increasedValue: '${(value + 8).clamp(minWidth, maxWidth).round()} pixels',
+      decreasedValue: '${(value - 8).clamp(minWidth, maxWidth).round()} pixels',
       onIncrease: onIncrease,
       onDecrease: onDecrease,
       child: FocusableActionDetector(
