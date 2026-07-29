@@ -28,6 +28,8 @@ class EpubWebView extends HookConsumerWidget {
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
     required this.onPaginationChanged,
+    required this.onRequestPrevious,
+    required this.onRequestNext,
     required this.onTextSelectionChanged,
   });
 
@@ -46,6 +48,8 @@ class EpubWebView extends HookConsumerWidget {
   final void Function(String href, double ratio, String? anchor)
   onScrollPositionChanged;
   final void Function(int pageIndex, int pageCount) onPaginationChanged;
+  final VoidCallback onRequestPrevious;
+  final VoidCallback onRequestNext;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
 
   @override
@@ -155,6 +159,13 @@ class EpubWebView extends HookConsumerWidget {
           final pageCount = message['pageCount'];
           if (pageIndex is num && pageCount is num) {
             onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
+          }
+        } else if (message['type'] == 'readerNavigation') {
+          switch (message['direction']) {
+            case 'previous':
+              onRequestPrevious();
+            case 'next':
+              onRequestNext();
           }
         } else if (message['type'] == 'textSelection') {
           final text = message['text'];
@@ -295,6 +306,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
             const offset = paginated ? Math.abs(root.scrollLeft) : root.scrollTop;
             const range = Math.max(0, extent - viewportSize);
             const ratio = range === 0 ? 0 : offset / range;
+            window.__tomoReadLastRatio = ratio;
             const viewportOffset = offset + 16;
             let activeAnchor = '';
             for (const element of document.querySelectorAll('[id]')) {
@@ -337,6 +349,75 @@ a { color: ${_cssColor(colorScheme.primary)}; }
         root.scrollLeft = window.__tomoReadRtl ? -pageIndex * viewportSize : pageIndex * viewportSize;
         window.requestAnimationFrame(() => window.__tomoReadReportProgress?.());
       };
+      if (!window.__tomoReadNavigationListener) {
+        const requestNavigation = (direction) => {
+          if (window.__tomoReadPaginated !== true) return;
+          window.chrome?.webview?.postMessage({
+            type: 'readerNavigation',
+            direction,
+          });
+        };
+        const isEditableTarget = (target) => target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement || target?.isContentEditable;
+        window.addEventListener('keydown', (event) => {
+          if (window.__tomoReadPaginated !== true || isEditableTarget(event.target)) return;
+          const rtl = window.__tomoReadRtl === true;
+          let direction = '';
+          switch (event.key) {
+            case 'ArrowLeft':
+              direction = rtl ? 'next' : 'previous';
+              break;
+            case 'ArrowRight':
+              direction = rtl ? 'previous' : 'next';
+              break;
+            case 'PageUp':
+              direction = 'previous';
+              break;
+            case 'PageDown':
+              direction = 'next';
+              break;
+            case ' ':
+            case 'Spacebar':
+              direction = event.shiftKey ? 'previous' : 'next';
+              break;
+          }
+          if (!direction) return;
+          event.preventDefault();
+          requestNavigation(direction);
+        });
+        let wheelDelta = 0;
+        window.addEventListener('wheel', (event) => {
+          if (window.__tomoReadPaginated !== true || event.ctrlKey) return;
+          if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+          wheelDelta += event.deltaY;
+          if (Math.abs(wheelDelta) < 48) return;
+          event.preventDefault();
+          requestNavigation(wheelDelta > 0 ? 'next' : 'previous');
+          wheelDelta = 0;
+        }, { passive: false });
+        window.addEventListener('mousedown', (event) => {
+          if (window.__tomoReadPaginated !== true) return;
+          if (event.button === 3 || event.button === 4) {
+            event.preventDefault();
+            requestNavigation(event.button === 3 ? 'previous' : 'next');
+          }
+        });
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+          if (window.__tomoReadPaginated !== true) return;
+          window.clearTimeout(resizeTimer);
+          resizeTimer = window.setTimeout(() => {
+            const root = document.scrollingElement || document.documentElement;
+            const ratio = Number.isFinite(window.__tomoReadLastRatio)
+              ? window.__tomoReadLastRatio
+              : 0;
+            const range = Math.max(0, root.scrollWidth - window.innerWidth);
+            root.scrollLeft = window.__tomoReadRtl ? -range * ratio : range * ratio;
+            window.__tomoReadReportProgress?.();
+          }, 80);
+        });
+        window.__tomoReadNavigationListener = true;
+      }
       window.__tomoReadReportProgress?.();
       if (!window.__tomoReadSelectionListener) {
         const reportSelection = () => {

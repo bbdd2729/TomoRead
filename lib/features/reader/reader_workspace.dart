@@ -379,6 +379,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                                   requestedPage.value = null;
                                 }
                               },
+                              onRequestPrevious: goToPrevious,
+                              onRequestNext: goToNext,
                               onTextSelectionChanged: (selection) {
                                 if (selection.href == chapter.value?.href) {
                                   selectedText.value = selection;
@@ -572,6 +574,8 @@ class _ReaderArticle extends StatelessWidget {
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
     required this.onPaginationChanged,
+    required this.onRequestPrevious,
+    required this.onRequestNext,
     required this.onTextSelectionChanged,
   });
 
@@ -589,6 +593,8 @@ class _ReaderArticle extends StatelessWidget {
   final void Function(String href, double ratio, String? anchor)
   onScrollPositionChanged;
   final void Function(int pageIndex, int pageCount) onPaginationChanged;
+  final VoidCallback onRequestPrevious;
+  final VoidCallback onRequestNext;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
 
   @override
@@ -615,6 +621,8 @@ class _ReaderArticle extends StatelessWidget {
         onNavigateToHref: onNavigateToHref,
         onScrollPositionChanged: onScrollPositionChanged,
         onPaginationChanged: onPaginationChanged,
+        onRequestPrevious: onRequestPrevious,
+        onRequestNext: onRequestNext,
         onTextSelectionChanged: onTextSelectionChanged,
       );
     }
