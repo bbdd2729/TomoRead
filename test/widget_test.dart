@@ -118,6 +118,42 @@ void main() {
 
     expect(changedAppearance?.seed, ThemeSeed.green);
   });
+
+  testWidgets('shows the full per-book reading settings', (tester) async {
+    configureDesktop(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(
+            _FakeSettingsRepository(),
+          ),
+          bookmarkRepositoryProvider.overrideWithValue(
+            _FakeBookmarkRepository(),
+          ),
+          annotationRepositoryProvider.overrideWithValue(
+            _FakeAnnotationRepository(),
+          ),
+          bookRepositoryProvider.overrideWithValue(_FakeBookRepository()),
+        ],
+        child: const MaterialApp(
+          home: ReaderWorkspace(
+            bookId: 'book-a',
+            title: 'Test book',
+            readingSettings: ReadingSettings(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('reader-book-settings')));
+    await tester.pump();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+
+    expect(find.byKey(const Key('book-reading-margin')), findsOneWidget);
+    expect(find.byKey(const Key('book-reading-double-column')), findsOneWidget);
+  });
 }
 
 class _FakeSettingsRepository extends SettingsRepository {

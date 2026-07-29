@@ -54,6 +54,8 @@ void main() {
         settings: ReadingSettings(
           font: FontChoice.monospace,
           fontSize: 18,
+          pageMargin: 48,
+          doubleColumn: false,
           layoutMode: ReaderLayoutMode.paginated,
         ),
       ),
@@ -70,6 +72,8 @@ void main() {
     expect(stored.readingSettings.layoutMode, ReaderLayoutMode.paginated);
     expect(override?.settings.font, FontChoice.monospace);
     expect(override?.settings.fontSize, 18);
+    expect(override?.settings.pageMargin, 48);
+    expect(override?.settings.doubleColumn, isFalse);
     expect(override?.settings.layoutMode, ReaderLayoutMode.paginated);
 
     await settings.clearBookOverride('book-a');

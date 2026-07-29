@@ -1209,6 +1209,39 @@ class _BookReadingSettingsDialog extends HookWidget {
                   ),
                 ],
               ),
+              Row(
+                children: [
+                  const SizedBox(width: 64, child: Text('页边距')),
+                  Expanded(
+                    child: Slider(
+                      key: const Key('book-reading-margin'),
+                      value: settings.value.pageMargin,
+                      min: 16,
+                      max: 64,
+                      divisions: 12,
+                      label: settings.value.pageMargin.round().toString(),
+                      onChanged: (value) => settings.value = settings.value
+                          .copyWith(pageMargin: value),
+                    ),
+                  ),
+                ],
+              ),
+              SwitchListTile(
+                key: const Key('book-reading-double-column'),
+                contentPadding: EdgeInsets.zero,
+                value: settings.value.doubleColumn,
+                onChanged: settings.value.layoutMode == ReaderLayoutMode.scroll
+                    ? (value) => settings.value = settings.value.copyWith(
+                        doubleColumn: value,
+                      )
+                    : null,
+                title: const Text('双栏阅读'),
+                subtitle: Text(
+                  settings.value.layoutMode == ReaderLayoutMode.scroll
+                      ? '宽屏时显示双栏排版。'
+                      : '分页模式固定使用单栏排版。',
+                ),
+              ),
             ],
           ],
         ),
