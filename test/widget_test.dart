@@ -227,6 +227,28 @@ void main() {
     expect(find.byKey(const Key('book-pdf-book')), findsOneWidget);
   });
 
+  testWidgets('switches the library to list view', (tester) async {
+    configureDesktop(tester);
+    final book = LibraryBook(
+      id: 'list-view-book',
+      fileHash: 'list-view-book',
+      title: 'List view title',
+      author: 'Author',
+      filePath: 'C:/books/list.epub',
+      progress: 0.5,
+      importedAt: DateTime(2026),
+      format: 'epub',
+      chapterCount: 4,
+      direction: ReadingDirection.ltr,
+    );
+    await pumpShell(tester, books: [book]);
+
+    await tester.tap(find.byIcon(Icons.view_list_outlined));
+    await tester.pump();
+
+    expect(find.byKey(const Key('book-list-list-view-book')), findsOneWidget);
+  });
+
   testWidgets('searches the library from the app bar', (tester) async {
     configureDesktop(tester);
     final book = LibraryBook(

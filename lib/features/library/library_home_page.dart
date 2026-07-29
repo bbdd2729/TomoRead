@@ -21,6 +21,7 @@ class LibraryHomePage extends HookConsumerWidget {
     final searchQuery = useState('');
     final formatFilter = useState(_LibraryFormatFilter.all);
     final sort = useState(_LibrarySort.recent);
+    final viewMode = useState(_LibraryViewMode.grid);
     final removingBookId = useState<String?>(null);
 
     Future<void> importBooks() async {
@@ -125,9 +126,11 @@ class LibraryHomePage extends HookConsumerWidget {
               _LibraryControls(
                 formatFilter: formatFilter.value,
                 sort: sort.value,
+                viewMode: viewMode.value,
                 onQueryChanged: (value) => searchQuery.value = value,
                 onFormatChanged: (value) => formatFilter.value = value,
                 onSortChanged: (value) => sort.value = value,
+                onViewModeChanged: (value) => viewMode.value = value,
               ),
               const SizedBox(height: 24),
               if (visibleBooks.isEmpty)
@@ -152,23 +155,40 @@ class LibraryHomePage extends HookConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 190,
-                    mainAxisExtent: 270,
-                    mainAxisSpacing: 16,
-                    crossAxisSpacing: 16,
+                if (viewMode.value == _LibraryViewMode.grid)
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 190,
+                          mainAxisExtent: 270,
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 16,
+                        ),
+                    itemCount: visibleBooks.length,
+                    itemBuilder: (context, index) => _BookCard(
+                      book: visibleBooks[index],
+                      onTap: () => onOpenReader(visibleBooks[index]),
+                      isRemoving:
+                          removingBookId.value == visibleBooks[index].id,
+                      onDelete: () => removeBook(visibleBooks[index]),
+                    ),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: visibleBooks.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) => _BookListItem(
+                      book: visibleBooks[index],
+                      onTap: () => onOpenReader(visibleBooks[index]),
+                      isRemoving:
+                          removingBookId.value == visibleBooks[index].id,
+                      onDelete: () => removeBook(visibleBooks[index]),
+                    ),
                   ),
-                  itemCount: visibleBooks.length,
-                  itemBuilder: (context, index) => _BookCard(
-                    book: visibleBooks[index],
-                    onTap: () => onOpenReader(visibleBooks[index]),
-                    isRemoving: removingBookId.value == visibleBooks[index].id,
-                    onDelete: () => removeBook(visibleBooks[index]),
-                  ),
-                ),
               ],
             ],
           ],
@@ -189,6 +209,8 @@ extension on _LibraryFormatFilter {
 }
 
 enum _LibrarySort { recent, title, progress }
+
+enum _LibraryViewMode { grid, list }
 
 extension on _LibrarySort {
   String get label => switch (this) {
@@ -233,16 +255,20 @@ class _LibraryControls extends StatelessWidget {
   const _LibraryControls({
     required this.formatFilter,
     required this.sort,
+    required this.viewMode,
     required this.onQueryChanged,
     required this.onFormatChanged,
     required this.onSortChanged,
+    required this.onViewModeChanged,
   });
 
   final _LibraryFormatFilter formatFilter;
   final _LibrarySort sort;
+  final _LibraryViewMode viewMode;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<_LibraryFormatFilter> onFormatChanged;
   final ValueChanged<_LibrarySort> onSortChanged;
+  final ValueChanged<_LibraryViewMode> onViewModeChanged;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -290,6 +316,25 @@ class _LibraryControls extends StatelessWidget {
               onChanged: (value) {
                 if (value != null) onSortChanged(value);
               },
+            ),
+          ),
+          Tooltip(
+            message: '切换书库视图',
+            child: SegmentedButton<_LibraryViewMode>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: _LibraryViewMode.grid,
+                  icon: Icon(Icons.grid_view_outlined),
+                ),
+                ButtonSegment(
+                  value: _LibraryViewMode.list,
+                  icon: Icon(Icons.view_list_outlined),
+                ),
+              ],
+              selected: {viewMode},
+              onSelectionChanged: (selection) =>
+                  onViewModeChanged(selection.first),
             ),
           ),
         ],
@@ -495,6 +540,91 @@ class _BookCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             LinearProgressIndicator(value: book.progress),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _BookListItem extends StatelessWidget {
+  const _BookListItem({
+    required this.book,
+    required this.onTap,
+    required this.isRemoving,
+    required this.onDelete,
+  });
+
+  final LibraryBook book;
+  final VoidCallback onTap;
+  final bool isRemoving;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    key: Key('book-list-${book.id}'),
+    child: InkWell(
+      onTap: isRemoving ? null : onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            SizedBox(width: 52, height: 76, child: _BookCover(book: book)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    book.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    book.author.isEmpty ? '未知作者' : book.author,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Text(
+                        book.format.toUpperCase(),
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: LinearProgressIndicator(value: book.progress),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${(book.progress * 100).round()}%',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            PopupMenuButton<String>(
+              tooltip: '更多操作',
+              enabled: !isRemoving,
+              onSelected: (_) => onDelete(),
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'delete', child: Text('删除书籍')),
+              ],
+              icon: isRemoving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.more_vert),
+            ),
           ],
         ),
       ),
