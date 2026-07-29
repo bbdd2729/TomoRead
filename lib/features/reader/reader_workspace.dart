@@ -7,6 +7,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../app/providers.dart';
 import '../../domain/models/bookmark.dart';
 import '../../domain/models/epub_manifest.dart';
+import '../../domain/models/epub_location.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_chapter.dart';
 import '../../domain/models/reader_text_selection.dart';
@@ -26,16 +27,6 @@ class ReaderWorkspace extends HookConsumerWidget {
   final String bookId;
   final String title;
   final ReadingSettings readingSettings;
-
-  static double _scrollRatioFromLocator(String? locator, int chapterIndex) {
-    final values = locator?.split(':');
-    if (values == null || values.length != 2) return 0;
-    if (int.tryParse(values.first) != chapterIndex) return 0;
-    return (double.tryParse(values.last) ?? 0).clamp(0, 1).toDouble();
-  }
-
-  static String _locatorFor(int chapterIndex, double scrollRatio) =>
-      '$chapterIndex:${scrollRatio.clamp(0, 1).toStringAsFixed(5)}';
 
   static double _overallProgress(
     int chapterIndex,
@@ -60,13 +51,18 @@ class ReaderWorkspace extends HookConsumerWidget {
     final showBookmarks = useState(false);
     final chapterIndex = useState(0);
     final scrollRatio = useState(0.0);
+    final activeAnchor = useState<String?>(null);
     final restoreRevision = useState(0);
+    final pageIndex = useState(0);
+    final pageCount = useState(1);
+    final requestedPage = useState<int?>(null);
     final progressWriteTimer = useRef<Timer?>(null);
     final selectedText = useState<ReaderTextSelection?>(null);
     final override = readingOverride.value;
     final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
     final annotations = annotationsState.value ?? const <ReadingAnnotation>[];
     final settings = override?.settings ?? readingSettings;
+    final isPaginated = settings.layoutMode == ReaderLayoutMode.paginated;
     final totalChapters = manifest.value?.spine.length ?? 0;
     final activeChapterIndex = totalChapters == 0
         ? chapterIndex.value
@@ -74,7 +70,11 @@ class ReaderWorkspace extends HookConsumerWidget {
     final chapter = ref.watch(
       readerChapterProvider((bookId: bookId, chapterIndex: activeChapterIndex)),
     );
-    final currentLocator = 'chapter-$activeChapterIndex:start';
+    final currentLocator = EpubLocation(
+      chapterIndex: activeChapterIndex,
+      scrollRatio: scrollRatio.value,
+      anchor: activeAnchor.value,
+    ).toLocator();
     final chapterTitle =
         chapter.value?.title ?? '第 ${activeChapterIndex + 1} 章';
     final isLoading =
@@ -86,12 +86,14 @@ class ReaderWorkspace extends HookConsumerWidget {
     useEffect(() {
       final savedIndex = readerBook.value?.chapterIndex;
       if (savedIndex != null) {
-        chapterIndex.value = savedIndex;
-        scrollRatio.value = _scrollRatioFromLocator(
+        final location = EpubLocation.fromLocator(
           readerBook.value?.locator,
-          savedIndex,
+          fallbackChapterIndex: savedIndex,
         );
-        restoreRevision.value++;
+        chapterIndex.value = location.chapterIndex;
+        scrollRatio.value = location.scrollRatio;
+        activeAnchor.value = location.anchor;
+        restoreRevision.value += 1;
       }
       return null;
     }, [bookId, readerBook.value?.chapterIndex, readerBook.value?.locator]);
@@ -102,9 +104,17 @@ class ReaderWorkspace extends HookConsumerWidget {
       [bookId],
     );
 
+    useEffect(() {
+      pageIndex.value = 0;
+      pageCount.value = 1;
+      requestedPage.value = null;
+      return null;
+    }, [activeChapterIndex, isPaginated]);
+
     void scheduleProgressWrite({
       required int index,
       required double chapterRatio,
+      String? anchor,
     }) {
       progressWriteTimer.value?.cancel();
       progressWriteTimer.value = Timer(
@@ -116,26 +126,40 @@ class ReaderWorkspace extends HookConsumerWidget {
                 bookId: bookId,
                 chapterIndex: index,
                 progress: _overallProgress(index, chapterRatio, totalChapters),
-                locator: _locatorFor(index, chapterRatio),
+                locator: EpubLocation(
+                  chapterIndex: index,
+                  scrollRatio: chapterRatio,
+                  anchor: anchor,
+                ).toLocator(),
               );
           if (context.mounted) ref.invalidate(libraryBooksProvider);
         },
       );
     }
 
-    Future<void> selectChapter(int index, {double scrollPosition = 0}) async {
+    Future<void> selectChapter(
+      int index, {
+      double scrollPosition = 0,
+      String? anchor,
+    }) async {
       if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
       progressWriteTimer.value?.cancel();
       chapterIndex.value = index;
       scrollRatio.value = scrollPosition.clamp(0, 1).toDouble();
-      restoreRevision.value++;
+      activeAnchor.value = anchor;
+      restoreRevision.value += 1;
+      requestedPage.value = null;
       await ref
           .read(bookRepositoryProvider)
           .updateReadingPosition(
             bookId: bookId,
             chapterIndex: index,
             progress: _overallProgress(index, scrollRatio.value, totalChapters),
-            locator: _locatorFor(index, scrollRatio.value),
+            locator: EpubLocation(
+              chapterIndex: index,
+              scrollRatio: scrollRatio.value,
+              anchor: anchor,
+            ).toLocator(),
           );
       ref.invalidate(libraryBooksProvider);
     }
@@ -214,6 +238,64 @@ class ReaderWorkspace extends HookConsumerWidget {
       );
     }
 
+    Future<void> selectBookmark(Bookmark bookmark) {
+      final location = EpubLocation.fromLocator(
+        bookmark.locator,
+        fallbackChapterIndex: activeChapterIndex,
+      );
+      return selectChapter(
+        location.chapterIndex,
+        scrollPosition: location.scrollRatio,
+        anchor: location.anchor,
+      );
+    }
+
+    Future<void> removeBookmark(Bookmark bookmark) async {
+      await ref.read(bookmarkRepositoryProvider).remove(bookmark.id);
+      ref.invalidate(bookmarksForBookProvider(bookId));
+    }
+
+    void navigateToHref(String targetHref) {
+      final target = Uri.tryParse(targetHref);
+      final targetPath = target == null
+          ? targetHref.split('#').first
+          : target.path;
+      final targetAnchor = target?.fragment.isEmpty ?? true
+          ? null
+          : target!.fragment;
+      final nextIndex = manifest.value?.spine.indexWhere(
+        (item) => item.href == targetPath,
+      );
+      if (nextIndex != null && nextIndex >= 0) {
+        unawaited(selectChapter(nextIndex, anchor: targetAnchor));
+      }
+    }
+
+    void goToPrevious() {
+      if (isPaginated && pageIndex.value > 0) {
+        requestedPage.value = pageIndex.value - 1;
+        return;
+      }
+      if (activeChapterIndex > 0) {
+        unawaited(
+          selectChapter(
+            activeChapterIndex - 1,
+            scrollPosition: isPaginated ? 1 : 0,
+          ),
+        );
+      }
+    }
+
+    void goToNext() {
+      if (isPaginated && pageIndex.value < pageCount.value - 1) {
+        requestedPage.value = pageIndex.value + 1;
+        return;
+      }
+      if (totalChapters > 0 && activeChapterIndex < totalChapters - 1) {
+        unawaited(selectChapter(activeChapterIndex + 1));
+      }
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final canShowPanels = constraints.maxWidth >= 980;
@@ -248,7 +330,17 @@ class ReaderWorkspace extends HookConsumerWidget {
                               child: _ReaderTocPanel(
                                 toc: manifest.value?.toc ?? const [],
                                 activeChapterIndex: activeChapterIndex,
-                                onSelected: selectChapter,
+                                onSelected: (item) {
+                                  final target = Uri.tryParse(item.href);
+                                  unawaited(
+                                    selectChapter(
+                                      item.spineIndex,
+                                      anchor: target?.fragment.isEmpty ?? true
+                                          ? null
+                                          : target!.fragment,
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           if (showToc) const VerticalDivider(width: 1),
@@ -259,25 +351,33 @@ class ReaderWorkspace extends HookConsumerWidget {
                               error: chapter.error,
                               bookId: readerBook.value == null ? null : bookId,
                               initialScrollRatio: scrollRatio.value,
+                              initialAnchor: activeAnchor.value,
+                              direction:
+                                  manifest.value?.direction ??
+                                  ReadingDirection.ltr,
+                              requestedPage: requestedPage.value,
                               annotations: annotations,
                               restoreRevision: restoreRevision.value,
-                              onNavigateToHref: (href) {
-                                final nextIndex = manifest.value?.spine
-                                    .indexWhere((item) => item.href == href);
-                                if (nextIndex != null && nextIndex >= 0) {
-                                  selectChapter(nextIndex);
-                                }
-                              },
-                              onScrollPositionChanged: (href, ratio) {
+                              onNavigateToHref: navigateToHref,
+                              onScrollPositionChanged: (href, ratio, anchor) {
                                 if (href != chapter.value?.href) return;
                                 final clampedRatio = ratio
                                     .clamp(0, 1)
                                     .toDouble();
                                 scrollRatio.value = clampedRatio;
+                                activeAnchor.value = anchor;
                                 scheduleProgressWrite(
                                   index: activeChapterIndex,
                                   chapterRatio: clampedRatio,
+                                  anchor: anchor,
                                 );
+                              },
+                              onPaginationChanged: (index, count) {
+                                pageIndex.value = index;
+                                pageCount.value = count;
+                                if (requestedPage.value == index) {
+                                  requestedPage.value = null;
+                                }
                               },
                               onTextSelectionChanged: (selection) {
                                 if (selection.href == chapter.value?.href) {
@@ -296,6 +396,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                                 annotations: annotations,
                                 onPanelChanged: (value) =>
                                     showBookmarks.value = value,
+                                onSelectBookmark: selectBookmark,
+                                onRemoveBookmark: removeBookmark,
                                 onRemoveAnnotation: (annotation) async {
                                   await ref
                                       .read(annotationRepositoryProvider)
@@ -313,12 +415,19 @@ class ReaderWorkspace extends HookConsumerWidget {
             _ReaderFooter(
               chapterIndex: activeChapterIndex,
               chapterCount: totalChapters,
-              onPrevious: activeChapterIndex > 0
-                  ? () => selectChapter(activeChapterIndex - 1)
+              layoutMode: settings.layoutMode,
+              pageIndex: pageIndex.value,
+              pageCount: pageCount.value,
+              onPrevious:
+                  activeChapterIndex > 0 || (isPaginated && pageIndex.value > 0)
+                  ? goToPrevious
                   : null,
               onNext:
-                  totalChapters > 0 && activeChapterIndex < totalChapters - 1
-                  ? () => selectChapter(activeChapterIndex + 1)
+                  totalChapters > 0 &&
+                      (activeChapterIndex < totalChapters - 1 ||
+                          (isPaginated &&
+                              pageIndex.value < pageCount.value - 1))
+                  ? goToNext
                   : null,
             ),
           ],
@@ -418,7 +527,7 @@ class _ReaderTocPanel extends StatelessWidget {
 
   final List<EpubTocItem> toc;
   final int activeChapterIndex;
-  final ValueChanged<int> onSelected;
+  final ValueChanged<EpubTocItem> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -440,7 +549,7 @@ class _ReaderTocPanel extends StatelessWidget {
           enabled: item.spineIndex >= 0,
           selected: item.spineIndex == activeChapterIndex,
           title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-          onTap: item.spineIndex < 0 ? null : () => onSelected(item.spineIndex),
+          onTap: item.spineIndex < 0 ? null : () => onSelected(item),
         ),
         ..._buildTocItems(item.children, depth + 1),
       ],
@@ -455,10 +564,14 @@ class _ReaderArticle extends StatelessWidget {
     required this.error,
     required this.bookId,
     required this.initialScrollRatio,
+    required this.initialAnchor,
+    required this.direction,
+    required this.requestedPage,
     required this.restoreRevision,
     required this.annotations,
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
+    required this.onPaginationChanged,
     required this.onTextSelectionChanged,
   });
 
@@ -467,10 +580,15 @@ class _ReaderArticle extends StatelessWidget {
   final Object? error;
   final String? bookId;
   final double initialScrollRatio;
+  final String? initialAnchor;
+  final ReadingDirection direction;
+  final int? requestedPage;
   final int restoreRevision;
   final List<ReadingAnnotation> annotations;
   final ValueChanged<String> onNavigateToHref;
-  final void Function(String href, double ratio) onScrollPositionChanged;
+  final void Function(String href, double ratio, String? anchor)
+  onScrollPositionChanged;
+  final void Function(int pageIndex, int pageCount) onPaginationChanged;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
 
   @override
@@ -489,10 +607,14 @@ class _ReaderArticle extends StatelessWidget {
         href: chapter!.href,
         settings: settings,
         initialScrollRatio: initialScrollRatio,
+        initialAnchor: initialAnchor,
+        direction: direction,
+        requestedPage: requestedPage,
         restoreRevision: restoreRevision,
         annotations: annotations,
         onNavigateToHref: onNavigateToHref,
         onScrollPositionChanged: onScrollPositionChanged,
+        onPaginationChanged: onPaginationChanged,
         onTextSelectionChanged: onTextSelectionChanged,
       );
     }
@@ -593,6 +715,8 @@ class _ReaderSidePanel extends StatelessWidget {
     required this.bookmarks,
     required this.annotations,
     required this.onPanelChanged,
+    required this.onSelectBookmark,
+    required this.onRemoveBookmark,
     required this.onRemoveAnnotation,
   });
 
@@ -600,6 +724,8 @@ class _ReaderSidePanel extends StatelessWidget {
   final List<Bookmark> bookmarks;
   final List<ReadingAnnotation> annotations;
   final ValueChanged<bool> onPanelChanged;
+  final Future<void> Function(Bookmark bookmark) onSelectBookmark;
+  final Future<void> Function(Bookmark bookmark) onRemoveBookmark;
   final Future<void> Function(ReadingAnnotation annotation) onRemoveAnnotation;
 
   @override
@@ -643,6 +769,12 @@ class _ReaderSidePanel extends StatelessWidget {
                       title: Text(bookmark.label ?? bookmark.chapterTitle),
                       subtitle: Text(
                         '保存于 ${bookmark.createdAt.hour.toString().padLeft(2, '0')}:${bookmark.createdAt.minute.toString().padLeft(2, '0')}',
+                      ),
+                      onTap: () => onSelectBookmark(bookmark),
+                      trailing: IconButton(
+                        tooltip: '删除书签',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => onRemoveBookmark(bookmark),
                       ),
                     );
                   },
@@ -788,20 +920,29 @@ class _ReaderFooter extends StatelessWidget {
   const _ReaderFooter({
     required this.chapterIndex,
     required this.chapterCount,
+    required this.layoutMode,
+    required this.pageIndex,
+    required this.pageCount,
     required this.onPrevious,
     required this.onNext,
   });
 
   final int chapterIndex;
   final int chapterCount;
+  final ReaderLayoutMode layoutMode;
+  final int pageIndex;
+  final int pageCount;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
   @override
   Widget build(BuildContext context) {
+    final chapterProgress = layoutMode == ReaderLayoutMode.paginated
+        ? (pageIndex + 1) / pageCount
+        : 1.0;
     final progress = chapterCount == 0
         ? 0.0
-        : (chapterIndex + 1) / chapterCount;
+        : (chapterIndex + chapterProgress) / chapterCount;
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: Padding(
@@ -809,7 +950,9 @@ class _ReaderFooter extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
-              tooltip: '上一章',
+              tooltip: layoutMode == ReaderLayoutMode.paginated
+                  ? '上一页，或上一章'
+                  : '上一章',
               onPressed: onPrevious,
               icon: const Icon(Icons.chevron_left),
             ),
@@ -819,11 +962,15 @@ class _ReaderFooter extends StatelessWidget {
             Text(
               chapterCount == 0
                   ? '正在读取目录'
+                  : layoutMode == ReaderLayoutMode.paginated
+                  ? '${(progress * 100).round()}% · 第 ${pageIndex + 1} / $pageCount 页 · 第 ${chapterIndex + 1} / $chapterCount 章'
                   : '${(progress * 100).round()}% · ${chapterIndex + 1} / $chapterCount',
             ),
             const SizedBox(width: 8),
             IconButton(
-              tooltip: '下一章',
+              tooltip: layoutMode == ReaderLayoutMode.paginated
+                  ? '下一页，或下一章'
+                  : '下一章',
               onPressed: onNext,
               icon: const Icon(Icons.chevron_right),
             ),
@@ -885,6 +1032,27 @@ class _BookReadingSettingsDialog extends HookWidget {
                   if (font != null) {
                     settings.value = settings.value.copyWith(font: font);
                   }
+                },
+              ),
+              const SizedBox(height: 16),
+              SegmentedButton<ReaderLayoutMode>(
+                segments: [
+                  for (final mode in ReaderLayoutMode.values)
+                    ButtonSegment(
+                      value: mode,
+                      icon: Icon(
+                        mode == ReaderLayoutMode.scroll
+                            ? Icons.swap_vert
+                            : Icons.auto_stories_outlined,
+                      ),
+                      label: Text(mode.label),
+                    ),
+                ],
+                selected: {settings.value.layoutMode},
+                onSelectionChanged: (selection) {
+                  settings.value = settings.value.copyWith(
+                    layoutMode: selection.first,
+                  );
                 },
               ),
               const SizedBox(height: 16),

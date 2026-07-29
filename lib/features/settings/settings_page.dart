@@ -162,6 +162,25 @@ class SettingsPage extends StatelessWidget {
         const SizedBox(height: 28),
         Text('阅读偏好', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
+        SegmentedButton<ReaderLayoutMode>(
+          segments: [
+            for (final mode in ReaderLayoutMode.values)
+              ButtonSegment(
+                value: mode,
+                icon: Icon(
+                  mode == ReaderLayoutMode.scroll
+                      ? Icons.swap_vert
+                      : Icons.auto_stories_outlined,
+                ),
+                label: Text(mode.label),
+              ),
+          ],
+          selected: {readingSettings.layoutMode},
+          onSelectionChanged: (selection) => onReadingSettingsChanged(
+            readingSettings.copyWith(layoutMode: selection.first),
+          ),
+        ),
+        const SizedBox(height: 12),
         SwitchListTile(
           value: readingSettings.doubleColumn,
           onChanged: (value) => onReadingSettingsChanged(

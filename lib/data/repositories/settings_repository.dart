@@ -116,6 +116,9 @@ class SettingsRepository {
       pageMargin: (value['page_margin']! as num).toDouble(),
       doubleColumn:
           value['double_column'] == true || value['double_column'] == 1,
+      layoutMode: ReaderLayoutMode.values.byName(
+        value['layout_mode'] as String? ?? ReaderLayoutMode.scroll.name,
+      ),
     );
   }
 
@@ -125,5 +128,6 @@ class SettingsRepository {
     'line_height': settings.lineHeight,
     'page_margin': settings.pageMargin,
     'double_column': settings.doubleColumn ? 1 : 0,
+    'layout_mode': settings.layoutMode.name,
   };
 }

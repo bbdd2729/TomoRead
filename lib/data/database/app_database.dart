@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 3,
+        version: 4,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -43,6 +43,9 @@ class AppDatabase {
           }
           if (oldVersion < 3) {
             await _upgradeToVersion3(database);
+          }
+          if (oldVersion < 4) {
+            await _upgradeToVersion4(database);
           }
         },
       ),
@@ -84,6 +87,7 @@ class AppDatabase {
               line_height REAL NOT NULL,
               page_margin REAL NOT NULL,
               double_column INTEGER NOT NULL,
+              layout_mode TEXT NOT NULL DEFAULT 'scroll',
               updated_at INTEGER NOT NULL
             )
           ''');
@@ -141,6 +145,10 @@ class AppDatabase {
 
   Future<void> _upgradeToVersion3(Database database) =>
       _createAnnotationsTable(database);
+
+  Future<void> _upgradeToVersion4(Database database) => database.execute(
+    "ALTER TABLE book_reading_overrides ADD COLUMN layout_mode TEXT NOT NULL DEFAULT 'scroll'",
+  );
 
   Future<void> _createAnnotationsTable(Database database) async {
     await database.execute('''

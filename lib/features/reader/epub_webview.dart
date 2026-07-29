@@ -7,6 +7,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:webview_flutter_windows/webview_flutter_windows.dart';
 
 import '../../app/providers.dart';
+import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_annotation.dart';
@@ -20,9 +21,13 @@ class EpubWebView extends HookConsumerWidget {
     required this.settings,
     required this.annotations,
     required this.initialScrollRatio,
+    required this.initialAnchor,
+    required this.direction,
+    required this.requestedPage,
     required this.restoreRevision,
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
+    required this.onPaginationChanged,
     required this.onTextSelectionChanged,
   });
 
@@ -33,9 +38,14 @@ class EpubWebView extends HookConsumerWidget {
   final ReadingSettings settings;
   final List<ReadingAnnotation> annotations;
   final double initialScrollRatio;
+  final String? initialAnchor;
+  final ReadingDirection direction;
+  final int? requestedPage;
   final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
-  final void Function(String href, double ratio) onScrollPositionChanged;
+  final void Function(String href, double ratio, String? anchor)
+  onScrollPositionChanged;
+  final void Function(int pageIndex, int pageCount) onPaginationChanged;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
 
   @override
@@ -61,7 +71,7 @@ class EpubWebView extends HookConsumerWidget {
     Future<void> restoreScrollPosition() async {
       try {
         await controller.executeScript(
-          _restoreScrollScript(initialScrollRatio),
+          _restoreScrollScript(initialScrollRatio, initialAnchor),
         );
       } catch (_) {
         // Navigation can complete while the controller is being disposed.
@@ -111,15 +121,16 @@ class EpubWebView extends HookConsumerWidget {
       });
       unawaited(controller.loadUrl(_chapterUrl(href)));
       return subscription.cancel;
-    }, [controller, href, initialized.value, styleScript]);
+    }, [controller, href, initialized.value]);
 
     useEffect(() {
       final subscription = controller.url.listen((url) {
         final uri = Uri.tryParse(url);
         if (uri?.host != _hostName) return;
-        final nextHref = uri!.path.startsWith('/')
+        final path = uri!.path.startsWith('/')
             ? uri.path.substring(1)
             : uri.path;
+        final nextHref = uri.fragment.isEmpty ? path : '$path#${uri.fragment}';
         if (nextHref != href) onNavigateToHref(nextHref);
       });
       return subscription.cancel;
@@ -131,8 +142,19 @@ class EpubWebView extends HookConsumerWidget {
         final messageHref = message['href'];
         if (message['type'] == 'scrollProgress') {
           final ratio = message['ratio'];
+          final anchor = message['anchor'];
           if (messageHref is String && ratio is num) {
-            onScrollPositionChanged(messageHref, ratio.toDouble());
+            onScrollPositionChanged(
+              messageHref,
+              ratio.toDouble(),
+              anchor is String && anchor.isNotEmpty ? anchor : null,
+            );
+          }
+        } else if (message['type'] == 'pageChanged') {
+          final pageIndex = message['pageIndex'];
+          final pageCount = message['pageCount'];
+          if (pageIndex is num && pageCount is num) {
+            onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
           }
         } else if (message['type'] == 'textSelection') {
           final text = message['text'];
@@ -169,7 +191,14 @@ class EpubWebView extends HookConsumerWidget {
     useEffect(() {
       if (initialized.value) unawaited(restoreScrollPosition());
       return null;
-    }, [initialized.value, href, restoreRevision]);
+    }, [initialized.value, href, initialAnchor, restoreRevision]);
+
+    useEffect(() {
+      final page = requestedPage;
+      if (!initialized.value || page == null) return null;
+      unawaited(controller.executeScript(_goToPageScript(page)));
+      return null;
+    }, [controller, href, initialized.value, requestedPage]);
 
     useEffect(
       () =>
@@ -198,11 +227,40 @@ class EpubWebView extends HookConsumerWidget {
 
   String _styleScript(BuildContext context, ReadingSettings settings) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isPaginated = settings.layoutMode == ReaderLayoutMode.paginated;
+    final readingDirection = direction == ReadingDirection.rtl ? 'rtl' : 'ltr';
+    final margin = settings.pageMargin;
+    final layoutCss = isPaginated
+        ? '''
+html { height: 100%; overflow: hidden !important; }
+body {
+  height: 100vh !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: ${margin}px !important;
+  column-width: calc(100vw - ${margin * 2}px) !important;
+  column-gap: ${margin * 2}px !important;
+  column-fill: auto !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scroll-snap-type: x mandatory;
+}
+body > * { break-inside: avoid; }
+'''
+        : '''
+html { overflow-y: auto; }
+body {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: ${margin}px;
+}
+''';
     final css =
         '''
 html { color-scheme: ${Theme.of(context).brightness == Brightness.dark ? 'dark' : 'light'}; }
-html, body { background: ${_cssColor(colorScheme.surface)} !important; color: ${_cssColor(colorScheme.onSurface)} !important; }
-body { box-sizing: border-box; max-width: 980px; margin: 0 auto; padding: ${settings.pageMargin}px; font-family: ${jsonEncode(settings.font.fontFamily)} !important; font-size: ${settings.fontSize}px !important; line-height: ${settings.lineHeight} !important; }
+html, body { background: ${_cssColor(colorScheme.surface)} !important; color: ${_cssColor(colorScheme.onSurface)} !important; direction: $readingDirection !important; }
+body { box-sizing: border-box; font-family: ${jsonEncode(settings.font.fontFamily)} !important; font-size: ${settings.fontSize}px !important; line-height: ${settings.lineHeight} !important; }
+$layoutCss
 body * { max-width: 100%; box-sizing: border-box; }
 p, li, blockquote { font: inherit; line-height: inherit; }
 img, svg, video { display: block; height: auto !important; margin: 1.25em auto; }
@@ -221,6 +279,8 @@ a { color: ${_cssColor(colorScheme.primary)}; }
         document.head.appendChild(style);
       }
       style.textContent = ${jsonEncode(css)};
+      window.__tomoReadPaginated = $isPaginated;
+      window.__tomoReadRtl = ${direction == ReadingDirection.rtl};
       if (!window.__tomoReadScrollListener) {
         let scheduled = false;
         const reportProgress = () => {
@@ -229,18 +289,55 @@ a { color: ${_cssColor(colorScheme.primary)}; }
           window.setTimeout(() => {
             scheduled = false;
             const root = document.scrollingElement || document.documentElement;
-            const range = Math.max(0, root.scrollHeight - window.innerHeight);
-            const ratio = range === 0 ? 0 : root.scrollTop / range;
+            const paginated = window.__tomoReadPaginated === true;
+            const viewportSize = paginated ? window.innerWidth : window.innerHeight;
+            const extent = paginated ? root.scrollWidth : root.scrollHeight;
+            const offset = paginated ? Math.abs(root.scrollLeft) : root.scrollTop;
+            const range = Math.max(0, extent - viewportSize);
+            const ratio = range === 0 ? 0 : offset / range;
+            const viewportOffset = offset + 16;
+            let activeAnchor = '';
+            for (const element of document.querySelectorAll('[id]')) {
+              const rect = element.getBoundingClientRect();
+              const position = paginated
+                ? rect.left + offset
+                : rect.top + root.scrollTop;
+              if (position <= viewportOffset) activeAnchor = element.id;
+            }
             window.chrome?.webview?.postMessage({
               type: 'scrollProgress',
               href: window.location.pathname.replace(/^\\//, ''),
               ratio,
+              anchor: activeAnchor,
             });
+            if (paginated) {
+              const pageCount = Math.max(1, Math.ceil(extent / viewportSize));
+              const pageIndex = Math.min(
+                pageCount - 1,
+                Math.max(0, Math.round(offset / viewportSize)),
+              );
+              window.chrome?.webview?.postMessage({
+                type: 'pageChanged',
+                pageIndex,
+                pageCount,
+              });
+            }
           }, 200);
         };
         window.addEventListener('scroll', reportProgress, { passive: true });
+        window.__tomoReadReportProgress = reportProgress;
         window.__tomoReadScrollListener = true;
       }
+      window.__tomoReadGoToPage = (requestedPage) => {
+        const root = document.scrollingElement || document.documentElement;
+        if (window.__tomoReadPaginated !== true) return;
+        const viewportSize = window.innerWidth;
+        const pageCount = Math.max(1, Math.ceil(root.scrollWidth / viewportSize));
+        const pageIndex = Math.min(pageCount - 1, Math.max(0, requestedPage));
+        root.scrollLeft = window.__tomoReadRtl ? -pageIndex * viewportSize : pageIndex * viewportSize;
+        window.requestAnimationFrame(() => window.__tomoReadReportProgress?.());
+      };
+      window.__tomoReadReportProgress?.();
       if (!window.__tomoReadSelectionListener) {
         const reportSelection = () => {
           const selection = window.getSelection();
@@ -316,17 +413,39 @@ a { color: ${_cssColor(colorScheme.primary)}; }
     })();''';
   }
 
-  String _restoreScrollScript(double ratio) =>
+  String _restoreScrollScript(double ratio, String? anchor) =>
       '''(() => {
     const root = document.scrollingElement || document.documentElement;
     const clampedRatio = ${ratio.clamp(0, 1)};
+    const anchor = ${jsonEncode(anchor)};
     window.requestAnimationFrame(() => {
       window.setTimeout(() => {
-        const range = Math.max(0, root.scrollHeight - window.innerHeight);
-        root.scrollTop = range * clampedRatio;
+        if (anchor) {
+          const target = document.getElementById(anchor);
+          if (target) {
+            target.scrollIntoView({ block: 'start', inline: 'start' });
+            window.__tomoReadReportProgress?.();
+            return;
+          }
+        }
+        const paginated = window.__tomoReadPaginated === true;
+        const viewportSize = paginated ? window.innerWidth : window.innerHeight;
+        const extent = paginated ? root.scrollWidth : root.scrollHeight;
+        const range = Math.max(0, extent - viewportSize);
+        if (paginated) {
+          root.scrollLeft = window.__tomoReadRtl
+            ? -range * clampedRatio
+            : range * clampedRatio;
+        } else {
+          root.scrollTop = range * clampedRatio;
+        }
+        window.__tomoReadReportProgress?.();
       }, 0);
     });
   })();''';
+
+  String _goToPageScript(int pageIndex) =>
+      'window.__tomoReadGoToPage?.(${pageIndex.clamp(0, 100000)});';
 
   String _cssColor(Color color) =>
       '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';

@@ -45,12 +45,17 @@ void main() {
         lineHeight: 2.1,
         pageMargin: 40,
         doubleColumn: false,
+        layoutMode: ReaderLayoutMode.paginated,
       ),
     );
     await settings.saveBookOverride(
       const BookReadingOverride(
         bookId: 'book-a',
-        settings: ReadingSettings(font: FontChoice.monospace, fontSize: 18),
+        settings: ReadingSettings(
+          font: FontChoice.monospace,
+          fontSize: 18,
+          layoutMode: ReaderLayoutMode.paginated,
+        ),
       ),
     );
 
@@ -62,8 +67,10 @@ void main() {
     expect(stored.appearance.uiFont, FontChoice.monospace);
     expect(stored.readingSettings.font, FontChoice.serif);
     expect(stored.readingSettings.doubleColumn, isFalse);
+    expect(stored.readingSettings.layoutMode, ReaderLayoutMode.paginated);
     expect(override?.settings.font, FontChoice.monospace);
     expect(override?.settings.fontSize, 18);
+    expect(override?.settings.layoutMode, ReaderLayoutMode.paginated);
 
     await settings.clearBookOverride('book-a');
     expect(await settings.loadBookOverride('book-a'), isNull);

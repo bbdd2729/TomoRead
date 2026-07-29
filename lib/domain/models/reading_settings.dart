@@ -1,5 +1,14 @@
 import 'font_choice.dart';
 
+enum ReaderLayoutMode { scroll, paginated }
+
+extension ReaderLayoutModeLabel on ReaderLayoutMode {
+  String get label => switch (this) {
+    ReaderLayoutMode.scroll => '滚动',
+    ReaderLayoutMode.paginated => '分页',
+  };
+}
+
 class ReadingSettings {
   const ReadingSettings({
     this.font = FontChoice.system,
@@ -7,6 +16,7 @@ class ReadingSettings {
     this.lineHeight = 1.9,
     this.pageMargin = 32,
     this.doubleColumn = true,
+    this.layoutMode = ReaderLayoutMode.scroll,
   });
 
   final FontChoice font;
@@ -14,6 +24,7 @@ class ReadingSettings {
   final double lineHeight;
   final double pageMargin;
   final bool doubleColumn;
+  final ReaderLayoutMode layoutMode;
 
   ReadingSettings copyWith({
     FontChoice? font,
@@ -21,6 +32,7 @@ class ReadingSettings {
     double? lineHeight,
     double? pageMargin,
     bool? doubleColumn,
+    ReaderLayoutMode? layoutMode,
   }) {
     return ReadingSettings(
       font: font ?? this.font,
@@ -28,6 +40,7 @@ class ReadingSettings {
       lineHeight: lineHeight ?? this.lineHeight,
       pageMargin: pageMargin ?? this.pageMargin,
       doubleColumn: doubleColumn ?? this.doubleColumn,
+      layoutMode: layoutMode ?? this.layoutMode,
     );
   }
 }
