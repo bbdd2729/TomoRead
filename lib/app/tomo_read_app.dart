@@ -30,19 +30,8 @@ class _TomoReadRoot extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     final appearance = settings.value?.appearance ?? const AppAppearance();
-    final theme = ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: appearance.seed.color),
-      useMaterial3: true,
-      fontFamily: appearance.uiFont.fontFamily,
-    );
-    final darkTheme = ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: appearance.seed.color,
-        brightness: Brightness.dark,
-      ),
-      useMaterial3: true,
-      fontFamily: appearance.uiFont.fontFamily,
-    );
+    final theme = _buildTheme(appearance);
+    final darkTheme = _buildTheme(appearance, brightness: Brightness.dark);
 
     return MaterialApp(
       title: 'TomoRead',
@@ -84,4 +73,36 @@ class _TomoReadRoot extends ConsumerWidget {
       ),
     );
   }
+}
+
+ThemeData _buildTheme(AppAppearance appearance, {Brightness? brightness}) {
+  final colorScheme = ColorScheme.fromSeed(
+    seedColor: appearance.seed.color,
+    brightness: brightness ?? Brightness.light,
+  );
+  return ThemeData(
+    colorScheme: colorScheme,
+    useMaterial3: true,
+    fontFamily: appearance.uiFont.fontFamily,
+    appBarTheme: const AppBarTheme(centerTitle: false, toolbarHeight: 56),
+    cardTheme: const CardThemeData(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+    ),
+    dividerTheme: const DividerThemeData(space: 1, thickness: 1),
+    navigationRailTheme: NavigationRailThemeData(
+      groupAlignment: -1,
+      indicatorColor: colorScheme.secondaryContainer,
+      selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer),
+      selectedLabelTextStyle: TextStyle(color: colorScheme.onSurface),
+    ),
+    tooltipTheme: TooltipThemeData(
+      waitDuration: const Duration(milliseconds: 500),
+      decoration: BoxDecoration(
+        color: colorScheme.inverseSurface,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      textStyle: TextStyle(color: colorScheme.onInverseSurface),
+    ),
+  );
 }

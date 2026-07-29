@@ -15,6 +15,7 @@ import '../settings/settings_page.dart';
 import '../skills/skills_page.dart';
 import '../statistics/statistics_page.dart';
 import 'book_search_delegate.dart';
+import '../../shared/widgets/resizable_pane.dart';
 
 enum AppDestination {
   library,
@@ -61,6 +62,9 @@ class AppShell extends HookConsumerWidget {
   final ValueChanged<ReadingSettings> onReadingSettingsChanged;
 
   static const _desktopBreakpoint = 840.0;
+  static const _desktopNavigationMinWidth = 220.0;
+  static const _desktopNavigationMaxWidth = 320.0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tabs = useState(<WorkspaceTab>[
@@ -71,6 +75,11 @@ class AppShell extends HookConsumerWidget {
       ),
     ]);
     final activeTabId = useState('library');
+    final navigationWidth = useState(appearance.desktopNavigationWidth);
+    useEffect(() {
+      navigationWidth.value = appearance.desktopNavigationWidth;
+      return null;
+    }, [appearance.desktopNavigationWidth]);
     final activeTab = tabs.value.firstWhere(
       (tab) => tab.id == activeTabId.value,
       orElse: () => tabs.value.first,
@@ -191,12 +200,21 @@ class AppShell extends HookConsumerWidget {
           body: isDesktop
               ? Row(
                   children: [
-                    _AppNavigationRail(
-                      selected: activeDestination,
-                      onSelected: openDestination,
-                      onAddBook: onImportBooks,
+                    ResizablePane(
+                      width: navigationWidth.value,
+                      minWidth: _desktopNavigationMinWidth,
+                      maxWidth: _desktopNavigationMaxWidth,
+                      defaultWidth: 240,
+                      onWidthChanged: (value) => navigationWidth.value = value,
+                      onWidthChangeEnd: (value) => onAppearanceChanged(
+                        appearance.copyWith(desktopNavigationWidth: value),
+                      ),
+                      child: _AppNavigationRail(
+                        selected: activeDestination,
+                        onSelected: openDestination,
+                        onAddBook: onImportBooks,
+                      ),
                     ),
-                    const VerticalDivider(width: 1),
                     Expanded(child: content),
                   ],
                 )

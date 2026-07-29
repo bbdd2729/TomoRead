@@ -44,6 +44,7 @@ class SettingsRepository {
         'seed': appearance.seed.name,
         'textScale': appearance.textScale,
         'uiFont': appearance.uiFont.name,
+        'desktopNavigationWidth': appearance.desktopNavigationWidth,
       }),
     );
   }
@@ -100,6 +101,10 @@ class SettingsRepository {
       seed: ThemeSeed.values.byName(value['seed']! as String),
       textScale: (value['textScale']! as num).toDouble(),
       uiFont: FontChoice.values.byName(value['uiFont']! as String),
+      desktopNavigationWidth:
+          ((value['desktopNavigationWidth'] as num?)?.toDouble() ?? 240)
+              .clamp(220, 320)
+              .toDouble(),
     );
   }
 

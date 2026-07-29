@@ -28,24 +28,29 @@ class AppAppearance {
     this.seed = ThemeSeed.blue,
     this.textScale = 1,
     this.uiFont = FontChoice.system,
+    this.desktopNavigationWidth = 240,
   });
 
   final ThemeMode mode;
   final ThemeSeed seed;
   final double textScale;
   final FontChoice uiFont;
+  final double desktopNavigationWidth;
 
   AppAppearance copyWith({
     ThemeMode? mode,
     ThemeSeed? seed,
     double? textScale,
     FontChoice? uiFont,
+    double? desktopNavigationWidth,
   }) {
     return AppAppearance(
       mode: mode ?? this.mode,
       seed: seed ?? this.seed,
       textScale: textScale ?? this.textScale,
       uiFont: uiFont ?? this.uiFont,
+      desktopNavigationWidth:
+          desktopNavigationWidth ?? this.desktopNavigationWidth,
     );
   }
 }

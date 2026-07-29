@@ -36,6 +36,7 @@ void main() {
         seed: ThemeSeed.green,
         textScale: 1.25,
         uiFont: FontChoice.monospace,
+        desktopNavigationWidth: 288,
       ),
     );
     await settings.saveReadingSettings(
@@ -67,6 +68,7 @@ void main() {
     expect(stored.appearance.mode, ThemeMode.dark);
     expect(stored.appearance.seed, ThemeSeed.green);
     expect(stored.appearance.uiFont, FontChoice.monospace);
+    expect(stored.appearance.desktopNavigationWidth, 288);
     expect(stored.readingSettings.font, FontChoice.serif);
     expect(stored.readingSettings.doubleColumn, isFalse);
     expect(stored.readingSettings.layoutMode, ReaderLayoutMode.paginated);
