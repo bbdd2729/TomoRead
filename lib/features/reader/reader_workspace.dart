@@ -10,13 +10,17 @@ import '../../domain/models/bookmark.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/font_choice.dart';
+import '../../domain/models/library_book.dart';
 import '../../domain/models/reader_chapter.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../shared/widgets/resizable_pane.dart';
+import '../../shared/widgets/book_cover.dart';
 import 'epub_webview.dart';
 import 'reader_search_dialog.dart';
+
+enum _MobileReaderToolbarAction { search, settings, focus }
 
 class ReaderWorkspace extends HookConsumerWidget {
   const ReaderWorkspace({
@@ -66,6 +70,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final requestedPage = useState<int?>(null);
     final focusedAnnotationId = useState<String?>(null);
     final annotationFocusRevision = useState(0);
+    final mobileScaffoldKey = useMemoized(GlobalKey<ScaffoldState>.new);
     final progressWriteTimer = useRef<Timer?>(null);
     final selectedText = useState<ReaderTextSelection?>(null);
     final override = readingOverride.value;
@@ -369,6 +374,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         const contentMinWidth = 440.0;
+        final isMobile = constraints.maxWidth < 840;
         final showToc =
             !focusMode.value &&
             tocVisible.value &&
@@ -381,18 +387,23 @@ class ReaderWorkspace extends HookConsumerWidget {
                     sidePanelWidth.value +
                     8 +
                     (showToc ? tocPanelWidth.value + 8 : 0);
-        return Column(
+        final readerBody = Column(
           children: [
             _ReaderToolbar(
               title: title,
               tocVisible: tocVisible.value,
               sidePanelVisible: sidePanelVisible.value,
+              mobileReaderControls: isMobile,
               focusMode: focusMode.value,
               bookmarked: isBookmarked,
               canCreateAnnotation:
                   selectedText.value?.href == chapter.value?.href,
-              onToggleToc: toggleToc,
-              onToggleSidePanel: toggleSidePanel,
+              onToggleToc: isMobile
+                  ? () => mobileScaffoldKey.currentState?.openDrawer()
+                  : toggleToc,
+              onToggleSidePanel: isMobile
+                  ? () => mobileScaffoldKey.currentState?.openEndDrawer()
+                  : toggleSidePanel,
               onToggleFocusMode: () => focusMode.value = !focusMode.value,
               onToggleBookmark: toggleBookmark,
               onCreateAnnotation: createAnnotation,
@@ -547,6 +558,55 @@ class ReaderWorkspace extends HookConsumerWidget {
               ),
           ],
         );
+        if (!isMobile) return readerBody;
+        return Scaffold(
+          key: mobileScaffoldKey,
+          drawer: _MobileReaderTocDrawer(
+            title: title,
+            book: readerBook.value,
+            chapterCount: totalChapters,
+            toc: manifest.value?.toc ?? const [],
+            activeChapterIndex: activeChapterIndex,
+            onSelected: (item) {
+              final target = Uri.tryParse(item.href);
+              unawaited(
+                selectChapter(
+                  item.spineIndex,
+                  anchor: target?.fragment.isEmpty ?? true
+                      ? null
+                      : target!.fragment,
+                ),
+              );
+              mobileScaffoldKey.currentState?.closeDrawer();
+            },
+          ),
+          endDrawer: _MobileReaderSideDrawer(
+            showBookmarks: showBookmarks.value,
+            bookmarks: bookmarkItems,
+            annotations: annotations,
+            onPanelChanged: (value) => showBookmarks.value = value,
+            onSelectBookmark: (bookmark) async {
+              await selectBookmark(bookmark);
+              mobileScaffoldKey.currentState?.closeEndDrawer();
+            },
+            onRemoveBookmark: removeBookmark,
+            onSelectAnnotation: (annotation) {
+              selectAnnotation(annotation);
+              mobileScaffoldKey.currentState?.closeEndDrawer();
+            },
+            onEditAnnotation: editAnnotation,
+            onRemoveAnnotation: (annotation) async {
+              await ref
+                  .read(annotationRepositoryProvider)
+                  .remove(annotation.id);
+              ref.invalidate(annotationsForBookProvider(bookId));
+              if (focusedAnnotationId.value == annotation.id) {
+                focusedAnnotationId.value = null;
+              }
+            },
+          ),
+          body: readerBody,
+        );
       },
     );
   }
@@ -557,6 +617,7 @@ class _ReaderToolbar extends StatelessWidget {
     required this.title,
     required this.tocVisible,
     required this.sidePanelVisible,
+    required this.mobileReaderControls,
     required this.focusMode,
     required this.bookmarked,
     required this.canCreateAnnotation,
@@ -572,6 +633,7 @@ class _ReaderToolbar extends StatelessWidget {
   final String title;
   final bool tocVisible;
   final bool sidePanelVisible;
+  final bool mobileReaderControls;
   final bool focusMode;
   final bool bookmarked;
   final bool canCreateAnnotation;
@@ -592,55 +654,109 @@ class _ReaderToolbar extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
-              tooltip: tocVisible ? '隐藏目录' : '显示目录',
+              tooltip: mobileReaderControls
+                  ? '打开目录'
+                  : tocVisible
+                  ? '隐藏目录'
+                  : '显示目录',
               onPressed: onToggleToc,
               key: const Key('reader-toc'),
               icon: Icon(
-                tocVisible ? Icons.format_list_bulleted : Icons.menu_open,
+                mobileReaderControls
+                    ? Icons.menu
+                    : tocVisible
+                    ? Icons.format_list_bulleted
+                    : Icons.menu_open,
               ),
             ),
             IconButton(
-              tooltip: sidePanelVisible ? '隐藏笔记面板' : '显示笔记面板',
+              tooltip: mobileReaderControls
+                  ? '打开书签和笔记'
+                  : sidePanelVisible
+                  ? '隐藏笔记面板'
+                  : '显示笔记面板',
               onPressed: onToggleSidePanel,
               key: const Key('reader-side-panel'),
               icon: const Icon(Icons.sticky_note_2_outlined),
             ),
-            const VerticalDivider(width: 20),
+            if (!mobileReaderControls) const VerticalDivider(width: 20),
             IconButton(
               tooltip: bookmarked ? '移除书签' : '添加书签',
               onPressed: onToggleBookmark,
               key: const Key('reader-bookmark'),
               icon: Icon(bookmarked ? Icons.bookmark : Icons.bookmark_border),
             ),
-            IconButton(
-              tooltip: canCreateAnnotation ? '高亮或添加笔记' : '请先选择文本',
-              onPressed: canCreateAnnotation ? onCreateAnnotation : null,
-              icon: const Icon(Icons.highlight_alt_outlined),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(title, overflow: TextOverflow.ellipsis)),
-            IconButton(
-              tooltip: '搜索书内内容',
-              onPressed: onOpenSearch,
-              icon: const Icon(Icons.search),
-            ),
-            const VerticalDivider(width: 20),
-            IconButton(
-              tooltip: '本书阅读设置',
-              onPressed: onOpenBookSettings,
-              key: const Key('reader-book-settings'),
-              icon: const Icon(Icons.format_size),
-            ),
-            IconButton(
-              tooltip: focusMode ? '退出专注模式' : '进入专注模式',
-              key: const Key('reader-focus-mode'),
-              onPressed: onToggleFocusMode,
-              icon: Icon(
-                focusMode
-                    ? Icons.center_focus_strong_outlined
-                    : Icons.center_focus_weak_outlined,
+            if (!mobileReaderControls)
+              IconButton(
+                tooltip: canCreateAnnotation ? '高亮或添加笔记' : '请先选择文本',
+                onPressed: canCreateAnnotation ? onCreateAnnotation : null,
+                icon: const Icon(Icons.highlight_alt_outlined),
               ),
-            ),
+            SizedBox(width: mobileReaderControls ? 4 : 12),
+            Expanded(child: Text(title, overflow: TextOverflow.ellipsis)),
+            if (!mobileReaderControls)
+              IconButton(
+                tooltip: '搜索书内内容',
+                onPressed: onOpenSearch,
+                icon: const Icon(Icons.search),
+              ),
+            if (!mobileReaderControls) const VerticalDivider(width: 20),
+            if (!mobileReaderControls)
+              IconButton(
+                tooltip: '本书阅读设置',
+                onPressed: onOpenBookSettings,
+                key: const Key('reader-book-settings'),
+                icon: const Icon(Icons.format_size),
+              ),
+            if (!mobileReaderControls)
+              IconButton(
+                tooltip: focusMode ? '退出专注模式' : '进入专注模式',
+                key: const Key('reader-focus-mode'),
+                onPressed: onToggleFocusMode,
+                icon: Icon(
+                  focusMode
+                      ? Icons.center_focus_strong_outlined
+                      : Icons.center_focus_weak_outlined,
+                ),
+              ),
+            if (mobileReaderControls)
+              PopupMenuButton<_MobileReaderToolbarAction>(
+                key: const Key('reader-mobile-more'),
+                tooltip: '更多阅读控制',
+                onSelected: (action) => switch (action) {
+                  _MobileReaderToolbarAction.search => onOpenSearch(),
+                  _MobileReaderToolbarAction.settings => onOpenBookSettings(),
+                  _MobileReaderToolbarAction.focus => onToggleFocusMode(),
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: _MobileReaderToolbarAction.search,
+                    child: ListTile(
+                      leading: Icon(Icons.search),
+                      title: Text('搜索书内内容'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: _MobileReaderToolbarAction.settings,
+                    child: ListTile(
+                      leading: Icon(Icons.format_size),
+                      title: Text('本书阅读设置'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _MobileReaderToolbarAction.focus,
+                    child: ListTile(
+                      leading: Icon(
+                        focusMode
+                            ? Icons.center_focus_strong_outlined
+                            : Icons.center_focus_weak_outlined,
+                      ),
+                      title: Text(focusMode ? '退出专注模式' : '进入专注模式'),
+                    ),
+                  ),
+                ],
+                icon: const Icon(Icons.more_vert),
+              ),
           ],
         ),
       ),
@@ -733,6 +849,222 @@ class _ReaderTocPanel extends HookWidget {
       ],
     ];
   }
+}
+
+class _MobileReaderTocDrawer extends StatelessWidget {
+  const _MobileReaderTocDrawer({
+    required this.title,
+    required this.book,
+    required this.chapterCount,
+    required this.toc,
+    required this.activeChapterIndex,
+    required this.onSelected,
+  });
+
+  final String title;
+  final LibraryBook? book;
+  final int chapterCount;
+  final List<EpubTocItem> toc;
+  final int activeChapterIndex;
+  final ValueChanged<EpubTocItem> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final bookTitle = book?.title ?? title;
+    final author = book?.author;
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              key: const Key('reader-mobile-toc-header'),
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 64,
+                    height: 92,
+                    child: book == null
+                        ? const DecoratedBox(
+                            decoration: BoxDecoration(color: Colors.grey),
+                            child: Icon(Icons.menu_book_outlined),
+                          )
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: BookCover(book: book!),
+                          ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          bookTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          author == null || author.isEmpty
+                              ? 'Unknown author'
+                              : author,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '$chapterCount chapters',
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('reader-mobile-toc-close'),
+                    tooltip: 'Close directory',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: toc.isEmpty
+                  ? const Center(child: Text('No table of contents available.'))
+                  : ListView(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      children: [
+                        for (final item in toc)
+                          _MobileTocEntry(
+                            item: item,
+                            activeChapterIndex: activeChapterIndex,
+                            onSelected: onSelected,
+                          ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileTocEntry extends StatelessWidget {
+  const _MobileTocEntry({
+    required this.item,
+    required this.activeChapterIndex,
+    required this.onSelected,
+    this.depth = 0,
+  });
+
+  final EpubTocItem item;
+  final int activeChapterIndex;
+  final ValueChanged<EpubTocItem> onSelected;
+  final int depth;
+
+  @override
+  Widget build(BuildContext context) {
+    final padding = EdgeInsetsDirectional.only(start: 12 + depth * 16.0);
+    if (item.children.isEmpty) {
+      return ListTile(
+        contentPadding: padding,
+        selected: item.spineIndex == activeChapterIndex,
+        enabled: item.spineIndex >= 0,
+        title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+        onTap: item.spineIndex < 0 ? null : () => onSelected(item),
+      );
+    }
+    return ExpansionTile(
+      tilePadding: padding,
+      initiallyExpanded: _containsActiveChapter(item),
+      title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+      children: [
+        for (final child in item.children)
+          _MobileTocEntry(
+            item: child,
+            activeChapterIndex: activeChapterIndex,
+            onSelected: onSelected,
+            depth: depth + 1,
+          ),
+      ],
+    );
+  }
+
+  bool _containsActiveChapter(EpubTocItem entry) =>
+      entry.spineIndex == activeChapterIndex ||
+      entry.children.any(_containsActiveChapter);
+}
+
+class _MobileReaderSideDrawer extends StatelessWidget {
+  const _MobileReaderSideDrawer({
+    required this.showBookmarks,
+    required this.bookmarks,
+    required this.annotations,
+    required this.onPanelChanged,
+    required this.onSelectBookmark,
+    required this.onRemoveBookmark,
+    required this.onSelectAnnotation,
+    required this.onEditAnnotation,
+    required this.onRemoveAnnotation,
+  });
+
+  final bool showBookmarks;
+  final List<Bookmark> bookmarks;
+  final List<ReadingAnnotation> annotations;
+  final ValueChanged<bool> onPanelChanged;
+  final Future<void> Function(Bookmark bookmark) onSelectBookmark;
+  final Future<void> Function(Bookmark bookmark) onRemoveBookmark;
+  final ValueChanged<ReadingAnnotation> onSelectAnnotation;
+  final Future<void> Function(ReadingAnnotation annotation) onEditAnnotation;
+  final Future<void> Function(ReadingAnnotation annotation) onRemoveAnnotation;
+
+  @override
+  Widget build(BuildContext context) => Drawer(
+    child: SafeArea(
+      child: Column(
+        children: [
+          Padding(
+            key: const Key('reader-mobile-side-header'),
+            padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Bookmarks and notes',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close panel',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _ReaderSidePanel(
+              showBookmarks: showBookmarks,
+              bookmarks: bookmarks,
+              annotations: annotations,
+              onPanelChanged: onPanelChanged,
+              onSelectBookmark: onSelectBookmark,
+              onRemoveBookmark: onRemoveBookmark,
+              onSelectAnnotation: onSelectAnnotation,
+              onEditAnnotation: onEditAnnotation,
+              onRemoveAnnotation: onRemoveAnnotation,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ReaderArticle extends StatelessWidget {

@@ -25,6 +25,13 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
   }
 
+  void configureMobile(WidgetTester tester) {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
   Future<void> pumpShell(
     WidgetTester tester, {
     ValueChanged<AppAppearance>? onAppearanceChanged,
@@ -126,6 +133,49 @@ void main() {
     await tester.tap(find.byKey(const Key('reader-focus-mode')));
     await tester.pump();
     expect(find.byKey(const Key('reader-footer')), findsNothing);
+  });
+
+  testWidgets('opens mobile reader navigation drawers', (tester) async {
+    configureMobile(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(
+            _FakeSettingsRepository(),
+          ),
+          bookmarkRepositoryProvider.overrideWithValue(
+            _FakeBookmarkRepository(),
+          ),
+          annotationRepositoryProvider.overrideWithValue(
+            _FakeAnnotationRepository(),
+          ),
+          bookRepositoryProvider.overrideWithValue(_FakeBookRepository()),
+        ],
+        child: const MaterialApp(
+          home: ReaderWorkspace(
+            bookId: 'book-a',
+            title: 'Test book',
+            readingSettings: ReadingSettings(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('reader-toc')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('reader-mobile-toc-header')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('reader-mobile-toc-close')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const Key('reader-side-panel')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(const Key('reader-mobile-side-header')), findsOneWidget);
+    expect(find.byKey(const Key('reader-mobile-more')), findsOneWidget);
   });
 
   testWidgets('opens settings from the single navigation entry', (
