@@ -648,7 +648,7 @@ class _ReaderToolbar extends StatelessWidget {
   }
 }
 
-class _ReaderTocPanel extends StatelessWidget {
+class _ReaderTocPanel extends HookWidget {
   const _ReaderTocPanel({
     required this.toc,
     required this.activeChapterIndex,
@@ -661,27 +661,75 @@ class _ReaderTocPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final query = useState('');
+    final hasMatches = _hasMatchingItem(toc, query.value);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text('目录', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
-        if (toc.isEmpty) const Text('该书没有可用目录。') else ..._buildTocItems(toc),
+        TextField(
+          key: const Key('reader-toc-search'),
+          onChanged: (value) => query.value = value,
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search),
+            hintText: '搜索目录',
+            border: const OutlineInputBorder(),
+            suffixIcon: query.value.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: '清除搜索',
+                    onPressed: () => query.value = '',
+                    icon: const Icon(Icons.clear),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (toc.isEmpty)
+          const Text('该书没有可用目录。')
+        else if (!hasMatches)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: Text('没有匹配的章节。')),
+          )
+        else
+          ..._buildTocItems(toc, 0, query.value),
       ],
     );
   }
 
-  List<Widget> _buildTocItems(List<EpubTocItem> items, [int depth = 0]) {
+  bool _hasMatchingItem(List<EpubTocItem> items, String query) {
+    final normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return true;
+    return items.any(
+      (item) =>
+          item.title.toLowerCase().contains(normalizedQuery) ||
+          _hasMatchingItem(item.children, query),
+    );
+  }
+
+  List<Widget> _buildTocItems(
+    List<EpubTocItem> items, [
+    int depth = 0,
+    String query = '',
+  ]) {
+    final normalizedQuery = query.trim().toLowerCase();
     return [
       for (final item in items) ...[
-        ListTile(
-          contentPadding: EdgeInsets.only(left: depth * 16.0),
-          enabled: item.spineIndex >= 0,
-          selected: item.spineIndex == activeChapterIndex,
-          title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-          onTap: item.spineIndex < 0 ? null : () => onSelected(item),
-        ),
-        ..._buildTocItems(item.children, depth + 1),
+        if (normalizedQuery.isEmpty ||
+            item.title.toLowerCase().contains(normalizedQuery))
+          ListTile(
+            contentPadding: EdgeInsets.only(left: depth * 16.0),
+            enabled: item.spineIndex >= 0,
+            selected: item.spineIndex == activeChapterIndex,
+            title: Text(
+              item.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            onTap: item.spineIndex < 0 ? null : () => onSelected(item),
+          ),
+        ..._buildTocItems(item.children, depth + 1, query),
       ],
     ];
   }
@@ -882,16 +930,16 @@ class _ReaderSidePanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SegmentedButton<bool>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: false,
-                icon: Icon(Icons.sticky_note_2_outlined),
-                label: Text('笔记'),
+                icon: const Icon(Icons.sticky_note_2_outlined),
+                label: Text('笔记 ${annotations.length}'),
               ),
               ButtonSegment(
                 value: true,
-                icon: Icon(Icons.bookmark_border),
-                label: Text('书签'),
+                icon: const Icon(Icons.bookmark_border),
+                label: Text('书签 ${bookmarks.length}'),
               ),
             ],
             selected: {showBookmarks},
