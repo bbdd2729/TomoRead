@@ -8,6 +8,8 @@ import 'package:webview_flutter_windows/webview_flutter_windows.dart';
 
 import '../../app/providers.dart';
 import '../../domain/models/font_choice.dart';
+import '../../domain/models/reader_text_selection.dart';
+import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
 
 class EpubWebView extends HookConsumerWidget {
@@ -16,10 +18,12 @@ class EpubWebView extends HookConsumerWidget {
     required this.bookId,
     required this.href,
     required this.settings,
+    required this.annotations,
     required this.initialScrollRatio,
     required this.restoreRevision,
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
+    required this.onTextSelectionChanged,
   });
 
   static const _hostName = 'reader.tomoread';
@@ -27,10 +31,12 @@ class EpubWebView extends HookConsumerWidget {
   final String bookId;
   final String href;
   final ReadingSettings settings;
+  final List<ReadingAnnotation> annotations;
   final double initialScrollRatio;
   final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
   final void Function(String href, double ratio) onScrollPositionChanged;
+  final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,6 +47,7 @@ class EpubWebView extends HookConsumerWidget {
     final initialized = useState(false);
     final initializationError = useState<Object?>(null);
     final styleScript = _styleScript(context, settings);
+    final annotationScript = _annotationScript(annotations, href);
     final resourceDirectory = extractedDirectory.value;
 
     Future<void> applyStyle() async {
@@ -58,6 +65,14 @@ class EpubWebView extends HookConsumerWidget {
         );
       } catch (_) {
         // Navigation can complete while the controller is being disposed.
+      }
+    }
+
+    Future<void> applyAnnotations() async {
+      try {
+        await controller.executeScript(annotationScript);
+      } catch (_) {
+        // The document can change while the WebView is navigating.
       }
     }
 
@@ -90,6 +105,7 @@ class EpubWebView extends HookConsumerWidget {
       final subscription = controller.loadingState.listen((state) {
         if (state == LoadingState.navigationCompleted) {
           unawaited(applyStyle());
+          unawaited(applyAnnotations());
           unawaited(restoreScrollPosition());
         }
       });
@@ -111,20 +127,44 @@ class EpubWebView extends HookConsumerWidget {
 
     useEffect(() {
       final subscription = controller.webMessage.listen((message) {
-        if (message is! Map || message['type'] != 'scrollProgress') return;
+        if (message is! Map) return;
         final messageHref = message['href'];
-        final ratio = message['ratio'];
-        if (messageHref is String && ratio is num) {
-          onScrollPositionChanged(messageHref, ratio.toDouble());
+        if (message['type'] == 'scrollProgress') {
+          final ratio = message['ratio'];
+          if (messageHref is String && ratio is num) {
+            onScrollPositionChanged(messageHref, ratio.toDouble());
+          }
+        } else if (message['type'] == 'textSelection') {
+          final text = message['text'];
+          final startOffset = message['startOffset'];
+          final endOffset = message['endOffset'];
+          if (messageHref is String &&
+              text is String &&
+              startOffset is num &&
+              endOffset is num) {
+            onTextSelectionChanged(
+              ReaderTextSelection(
+                href: messageHref,
+                text: text,
+                startOffset: startOffset.toInt(),
+                endOffset: endOffset.toInt(),
+              ),
+            );
+          }
         }
       });
       return subscription.cancel;
-    }, [controller, onScrollPositionChanged]);
+    }, [controller, onScrollPositionChanged, onTextSelectionChanged]);
 
     useEffect(() {
       if (initialized.value) unawaited(applyStyle());
       return null;
     }, [initialized.value, styleScript]);
+
+    useEffect(() {
+      if (initialized.value) unawaited(applyAnnotations());
+      return null;
+    }, [initialized.value, annotationScript]);
 
     useEffect(() {
       if (initialized.value) unawaited(restoreScrollPosition());
@@ -168,6 +208,10 @@ p, li, blockquote { font: inherit; line-height: inherit; }
 img, svg, video { display: block; height: auto !important; margin: 1.25em auto; }
 pre { overflow-x: auto; white-space: pre-wrap; }
 a { color: ${_cssColor(colorScheme.primary)}; }
+::highlight(tomoread-yellow) { background: #f7d15499; }
+::highlight(tomoread-green) { background: #80c78399; }
+::highlight(tomoread-blue) { background: #7db8f299; }
+::highlight(tomoread-pink) { background: #ec91b699; }
 ''';
     return '''(() => {
       let style = document.getElementById('tomoread-reader-style');
@@ -196,6 +240,78 @@ a { color: ${_cssColor(colorScheme.primary)}; }
         };
         window.addEventListener('scroll', reportProgress, { passive: true });
         window.__tomoReadScrollListener = true;
+      }
+      if (!window.__tomoReadSelectionListener) {
+        const reportSelection = () => {
+          const selection = window.getSelection();
+          if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+          const range = selection.getRangeAt(0);
+          if (!document.body.contains(range.commonAncestorContainer)) return;
+          const text = selection.toString().replace(/\\s+/g, ' ').trim();
+          if (!text) return;
+          const before = range.cloneRange();
+          before.selectNodeContents(document.body);
+          before.setEnd(range.startContainer, range.startOffset);
+          window.chrome?.webview?.postMessage({
+            type: 'textSelection',
+            href: window.location.pathname.replace(/^\\//, ''),
+            text,
+            startOffset: before.toString().length,
+            endOffset: before.toString().length + range.toString().length,
+          });
+        };
+        document.addEventListener('selectionchange', reportSelection);
+        window.__tomoReadSelectionListener = true;
+      }
+    })();''';
+  }
+
+  String _annotationScript(List<ReadingAnnotation> annotations, String href) {
+    final values = annotations
+        .where((annotation) => annotation.href == href)
+        .map((annotation) {
+          final offsets = annotation.locator.split(':');
+          return {
+            'start': int.tryParse(offsets.first) ?? -1,
+            'end': offsets.length == 2 ? int.tryParse(offsets.last) ?? -1 : -1,
+            'color': annotation.color.name,
+          };
+        })
+        .where((annotation) => (annotation['start']! as int) >= 0)
+        .toList();
+    return '''(() => {
+      if (!window.CSS?.highlights || typeof Highlight === 'undefined') return;
+      for (const name of Array.from(CSS.highlights.keys())) {
+        if (name.startsWith('tomoread-')) CSS.highlights.delete(name);
+      }
+      const annotations = ${jsonEncode(values)};
+      const root = document.body;
+      const rangeAt = (offset) => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let remaining = offset;
+        let node;
+        while ((node = walker.nextNode())) {
+          if (remaining <= node.textContent.length) {
+            return { node, offset: remaining };
+          }
+          remaining -= node.textContent.length;
+        }
+        return null;
+      };
+      const grouped = new Map();
+      for (const annotation of annotations) {
+        const start = rangeAt(annotation.start);
+        const end = rangeAt(annotation.end);
+        if (!start || !end || annotation.end <= annotation.start) continue;
+        const range = document.createRange();
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+        const ranges = grouped.get(annotation.color) || [];
+        ranges.push(range);
+        grouped.set(annotation.color, ranges);
+      }
+      for (const [color, ranges] of grouped) {
+        CSS.highlights.set(`tomoread-\${color}`, new Highlight(...ranges));
       }
     })();''';
   }

@@ -3,12 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tomoread/app/appearance.dart';
 import 'package:tomoread/app/providers.dart';
 import 'package:tomoread/data/database/app_database.dart';
+import 'package:tomoread/data/repositories/annotation_repository.dart';
 import 'package:tomoread/data/repositories/bookmark_repository.dart';
 import 'package:tomoread/data/repositories/book_repository.dart';
 import 'package:tomoread/data/repositories/settings_repository.dart';
 import 'package:tomoread/domain/models/bookmark.dart';
 import 'package:tomoread/domain/models/library_book.dart';
 import 'package:tomoread/domain/models/reading_settings.dart';
+import 'package:tomoread/domain/models/reading_annotation.dart';
 import 'package:tomoread/features/reader/reader_workspace.dart';
 import 'package:tomoread/features/workspace/app_shell.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -33,6 +35,9 @@ void main() {
           ),
           bookmarkRepositoryProvider.overrideWithValue(
             _FakeBookmarkRepository(),
+          ),
+          annotationRepositoryProvider.overrideWithValue(
+            _FakeAnnotationRepository(),
           ),
           bookRepositoryProvider.overrideWithValue(_FakeBookRepository()),
         ],
@@ -69,6 +74,9 @@ void main() {
           ),
           bookmarkRepositoryProvider.overrideWithValue(
             _FakeBookmarkRepository(),
+          ),
+          annotationRepositoryProvider.overrideWithValue(
+            _FakeAnnotationRepository(),
           ),
           bookRepositoryProvider.overrideWithValue(_FakeBookRepository()),
         ],
@@ -164,4 +172,11 @@ class _FakeBookRepository extends BookRepository {
 
   @override
   Future<List<LibraryBook>> listBooks() async => const [];
+}
+
+class _FakeAnnotationRepository extends AnnotationRepository {
+  _FakeAnnotationRepository() : super(AppDatabase.inMemory());
+
+  @override
+  Future<List<ReadingAnnotation>> listForBook(String bookId) async => const [];
 }

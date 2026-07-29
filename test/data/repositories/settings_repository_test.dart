@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tomoread/app/appearance.dart';
 import 'package:tomoread/data/database/app_database.dart';
+import 'package:tomoread/data/repositories/annotation_repository.dart';
 import 'package:tomoread/data/repositories/bookmark_repository.dart';
 import 'package:tomoread/data/repositories/book_repository.dart';
 import 'package:tomoread/data/repositories/settings_repository.dart';
@@ -9,17 +10,20 @@ import 'package:tomoread/domain/models/epub_manifest.dart';
 import 'package:tomoread/domain/models/font_choice.dart';
 import 'package:tomoread/domain/models/library_book.dart';
 import 'package:tomoread/domain/models/reading_settings.dart';
+import 'package:tomoread/domain/models/reading_annotation.dart';
 
 void main() {
   late AppDatabase database;
   late SettingsRepository settings;
   late BookmarkRepository bookmarks;
+  late AnnotationRepository annotations;
   late BookRepository books;
 
   setUp(() {
     database = AppDatabase.inMemory();
     settings = SettingsRepository(database);
     bookmarks = BookmarkRepository(database);
+    annotations = AnnotationRepository(database);
     books = BookRepository(database);
   });
 
@@ -84,6 +88,38 @@ void main() {
     await bookmarks.remove(first.id);
     expect(await bookmarks.listForBook('book-a'), isEmpty);
     expect(await bookmarks.listForBook('book-b'), hasLength(1));
+  });
+
+  test('stores annotations with their text location and note', () async {
+    final rawDatabase = await database.database;
+    await rawDatabase.insert('books', {
+      'id': 'book-a',
+      'title': 'Book',
+      'author': '',
+      'progress': 0,
+      'chapter_index': 0,
+      'chapter_count': 1,
+      'read_direction': 'ltr',
+      'created_at': DateTime(2026).millisecondsSinceEpoch,
+      'updated_at': DateTime(2026).millisecondsSinceEpoch,
+    });
+    final annotation = await annotations.add(
+      bookId: 'book-a',
+      href: 'OPS/chapter-1.xhtml',
+      locator: '12:34',
+      selectedText: '真正的阅读',
+      color: AnnotationColor.yellow,
+      note: '保留这个观点。',
+    );
+
+    final stored = await annotations.listForBook('book-a');
+    expect(stored, hasLength(1));
+    expect(stored.single.id, annotation.id);
+    expect(stored.single.locator, '12:34');
+    expect(stored.single.note, '保留这个观点。');
+
+    await annotations.remove(annotation.id);
+    expect(await annotations.listForBook('book-a'), isEmpty);
   });
 
   test('stores imported books with their EPUB manifest', () async {

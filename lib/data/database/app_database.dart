@@ -34,12 +34,15 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 2,
+        version: 3,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
           if (oldVersion < 2) {
             await _upgradeToVersion2(database);
+          }
+          if (oldVersion < 3) {
+            await _upgradeToVersion3(database);
           }
         },
       ),
@@ -106,6 +109,7 @@ class AppDatabase {
               FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
             )
           ''');
+    await _createAnnotationsTable(database);
   }
 
   Future<void> _upgradeToVersion2(Database database) async {
@@ -133,6 +137,28 @@ class AppDatabase {
         FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  Future<void> _upgradeToVersion3(Database database) =>
+      _createAnnotationsTable(database);
+
+  Future<void> _createAnnotationsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE reading_annotations (
+        id TEXT PRIMARY KEY,
+        book_id TEXT NOT NULL,
+        href TEXT NOT NULL,
+        locator TEXT NOT NULL,
+        selected_text TEXT NOT NULL,
+        note TEXT,
+        color TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX reading_annotations_book_id ON reading_annotations(book_id)',
+    );
   }
 
   static Future<String> _defaultPath() async {

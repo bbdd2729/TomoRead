@@ -9,6 +9,8 @@ import '../../domain/models/bookmark.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_chapter.dart';
+import '../../domain/models/reader_text_selection.dart';
+import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
 import 'epub_webview.dart';
 
@@ -51,6 +53,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
     final readerBook = ref.watch(readerBookProvider(bookId));
     final manifest = ref.watch(readerManifestProvider(bookId));
+    final annotationsState = ref.watch(annotationsForBookProvider(bookId));
     final tocVisible = useState(true);
     final sidePanelVisible = useState(true);
     final showBookmarks = useState(false);
@@ -58,8 +61,10 @@ class ReaderWorkspace extends HookConsumerWidget {
     final scrollRatio = useState(0.0);
     final restoreRevision = useState(0);
     final progressWriteTimer = useRef<Timer?>(null);
+    final selectedText = useState<ReaderTextSelection?>(null);
     final override = readingOverride.value;
     final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
+    final annotations = annotationsState.value ?? const <ReadingAnnotation>[];
     final settings = override?.settings ?? readingSettings;
     final totalChapters = manifest.value?.spine.length ?? 0;
     final activeChapterIndex = totalChapters == 0
@@ -170,6 +175,28 @@ class ReaderWorkspace extends HookConsumerWidget {
       ref.invalidate(bookReadingOverrideProvider(bookId));
     }
 
+    Future<void> createAnnotation() async {
+      final selection = selectedText.value;
+      if (selection == null || selection.href != chapter.value?.href) return;
+      final draft = await showDialog<_AnnotationDraft>(
+        context: context,
+        builder: (context) => _AnnotationDialog(selection: selection),
+      );
+      if (draft == null || !context.mounted) return;
+      await ref
+          .read(annotationRepositoryProvider)
+          .add(
+            bookId: bookId,
+            href: selection.href,
+            locator: selection.locator,
+            selectedText: selection.text,
+            color: draft.color,
+            note: draft.note,
+          );
+      selectedText.value = null;
+      ref.invalidate(annotationsForBookProvider(bookId));
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final canShowPanels = constraints.maxWidth >= 980;
@@ -182,10 +209,13 @@ class ReaderWorkspace extends HookConsumerWidget {
               tocVisible: tocVisible.value,
               sidePanelVisible: sidePanelVisible.value,
               bookmarked: isBookmarked,
+              canCreateAnnotation:
+                  selectedText.value?.href == chapter.value?.href,
               onToggleToc: () => tocVisible.value = !tocVisible.value,
               onToggleSidePanel: () =>
                   sidePanelVisible.value = !sidePanelVisible.value,
               onToggleBookmark: toggleBookmark,
+              onCreateAnnotation: createAnnotation,
               onOpenBookSettings: openBookSettings,
             ),
             Expanded(
@@ -211,6 +241,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                               error: chapter.error,
                               bookId: readerBook.value == null ? null : bookId,
                               initialScrollRatio: scrollRatio.value,
+                              annotations: annotations,
                               restoreRevision: restoreRevision.value,
                               onNavigateToHref: (href) {
                                 final nextIndex = manifest.value?.spine
@@ -230,6 +261,11 @@ class ReaderWorkspace extends HookConsumerWidget {
                                   chapterRatio: clampedRatio,
                                 );
                               },
+                              onTextSelectionChanged: (selection) {
+                                if (selection.href == chapter.value?.href) {
+                                  selectedText.value = selection;
+                                }
+                              },
                             ),
                           ),
                           if (showSidePanel) const VerticalDivider(width: 1),
@@ -239,8 +275,17 @@ class ReaderWorkspace extends HookConsumerWidget {
                               child: _ReaderSidePanel(
                                 showBookmarks: showBookmarks.value,
                                 bookmarks: bookmarkItems,
+                                annotations: annotations,
                                 onPanelChanged: (value) =>
                                     showBookmarks.value = value,
+                                onRemoveAnnotation: (annotation) async {
+                                  await ref
+                                      .read(annotationRepositoryProvider)
+                                      .remove(annotation.id);
+                                  ref.invalidate(
+                                    annotationsForBookProvider(bookId),
+                                  );
+                                },
                               ),
                             ),
                         ],
@@ -271,9 +316,11 @@ class _ReaderToolbar extends StatelessWidget {
     required this.tocVisible,
     required this.sidePanelVisible,
     required this.bookmarked,
+    required this.canCreateAnnotation,
     required this.onToggleToc,
     required this.onToggleSidePanel,
     required this.onToggleBookmark,
+    required this.onCreateAnnotation,
     required this.onOpenBookSettings,
   });
 
@@ -281,9 +328,11 @@ class _ReaderToolbar extends StatelessWidget {
   final bool tocVisible;
   final bool sidePanelVisible;
   final bool bookmarked;
+  final bool canCreateAnnotation;
   final VoidCallback onToggleToc;
   final VoidCallback onToggleSidePanel;
   final VoidCallback onToggleBookmark;
+  final VoidCallback onCreateAnnotation;
   final VoidCallback onOpenBookSettings;
 
   @override
@@ -313,6 +362,11 @@ class _ReaderToolbar extends StatelessWidget {
               onPressed: onToggleBookmark,
               key: const Key('reader-bookmark'),
               icon: Icon(bookmarked ? Icons.bookmark : Icons.bookmark_border),
+            ),
+            IconButton(
+              tooltip: canCreateAnnotation ? '高亮或添加笔记' : '请先选择文本',
+              onPressed: canCreateAnnotation ? onCreateAnnotation : null,
+              icon: const Icon(Icons.highlight_alt_outlined),
             ),
             const Spacer(),
             Flexible(child: Text(title, overflow: TextOverflow.ellipsis)),
@@ -382,8 +436,10 @@ class _ReaderArticle extends StatelessWidget {
     required this.bookId,
     required this.initialScrollRatio,
     required this.restoreRevision,
+    required this.annotations,
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
+    required this.onTextSelectionChanged,
   });
 
   final ReadingSettings settings;
@@ -392,8 +448,10 @@ class _ReaderArticle extends StatelessWidget {
   final String? bookId;
   final double initialScrollRatio;
   final int restoreRevision;
+  final List<ReadingAnnotation> annotations;
   final ValueChanged<String> onNavigateToHref;
   final void Function(String href, double ratio) onScrollPositionChanged;
+  final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -412,8 +470,10 @@ class _ReaderArticle extends StatelessWidget {
         settings: settings,
         initialScrollRatio: initialScrollRatio,
         restoreRevision: restoreRevision,
+        annotations: annotations,
         onNavigateToHref: onNavigateToHref,
         onScrollPositionChanged: onScrollPositionChanged,
+        onTextSelectionChanged: onTextSelectionChanged,
       );
     }
     final blocks = chapter!.blocks;
@@ -511,12 +571,16 @@ class _ReaderSidePanel extends StatelessWidget {
   const _ReaderSidePanel({
     required this.showBookmarks,
     required this.bookmarks,
+    required this.annotations,
     required this.onPanelChanged,
+    required this.onRemoveAnnotation,
   });
 
   final bool showBookmarks;
   final List<Bookmark> bookmarks;
+  final List<ReadingAnnotation> annotations;
   final ValueChanged<bool> onPanelChanged;
+  final Future<void> Function(ReadingAnnotation annotation) onRemoveAnnotation;
 
   @override
   Widget build(BuildContext context) {
@@ -567,22 +631,137 @@ class _ReaderSidePanel extends StatelessWidget {
           ] else ...[
             Text('笔记与标注', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            const ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(radius: 8, backgroundColor: Colors.amber),
-              title: Text('真正的阅读是一种主动的工作。'),
-              subtitle: Text('第二章 · 位置 38%'),
-            ),
-            const Divider(),
-            Text(
-              '选中文本后可创建高亮和笔记。',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            if (annotations.isEmpty)
+              const Expanded(child: Center(child: Text('选中文本后可创建高亮和笔记。')))
+            else
+              Expanded(
+                child: ListView.separated(
+                  itemCount: annotations.length,
+                  separatorBuilder: (context, index) => const Divider(),
+                  itemBuilder: (context, index) {
+                    final annotation = annotations[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        radius: 8,
+                        backgroundColor: _annotationColor(annotation.color),
+                      ),
+                      title: Text(
+                        annotation.selectedText,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: annotation.note == null
+                          ? const Text('高亮')
+                          : Text(annotation.note!, maxLines: 3),
+                      trailing: IconButton(
+                        tooltip: '删除标注',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => onRemoveAnnotation(annotation),
+                      ),
+                    );
+                  },
+                ),
+              ),
           ],
         ],
       ),
     );
   }
+
+  Color _annotationColor(AnnotationColor color) => switch (color) {
+    AnnotationColor.yellow => Colors.amber,
+    AnnotationColor.green => Colors.green,
+    AnnotationColor.blue => Colors.lightBlue,
+    AnnotationColor.pink => Colors.pink,
+  };
+}
+
+class _AnnotationDraft {
+  const _AnnotationDraft({required this.color, this.note});
+
+  final AnnotationColor color;
+  final String? note;
+}
+
+class _AnnotationDialog extends HookWidget {
+  const _AnnotationDialog({required this.selection});
+
+  final ReaderTextSelection selection;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = useState(AnnotationColor.yellow);
+    final noteController = useTextEditingController();
+    return AlertDialog(
+      title: const Text('添加高亮与笔记'),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              selection.text,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                for (final option in AnnotationColor.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Tooltip(
+                      message: option.label,
+                      child: IconButton(
+                        isSelected: color.value == option,
+                        onPressed: () => color.value = option,
+                        icon: CircleAvatar(
+                          radius: 12,
+                          backgroundColor: _annotationSwatch(option),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteController,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: '笔记（可选）',
+                alignLabelWithHint: true,
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            _AnnotationDraft(color: color.value, note: noteController.text),
+          ),
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
+
+  Color _annotationSwatch(AnnotationColor color) => switch (color) {
+    AnnotationColor.yellow => Colors.amber,
+    AnnotationColor.green => Colors.green,
+    AnnotationColor.blue => Colors.lightBlue,
+    AnnotationColor.pink => Colors.pink,
+  };
 }
 
 class _ReaderFooter extends StatelessWidget {

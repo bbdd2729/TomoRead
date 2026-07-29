@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../data/database/app_database.dart';
 import '../data/repositories/bookmark_repository.dart';
+import '../data/repositories/annotation_repository.dart';
 import '../data/repositories/book_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/services/book_import_service.dart';
@@ -14,6 +15,7 @@ import '../domain/models/epub_manifest.dart';
 import '../domain/models/library_book.dart';
 import '../domain/models/reader_chapter.dart';
 import '../domain/models/reading_settings.dart';
+import '../domain/models/reading_annotation.dart';
 import 'appearance.dart';
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -28,6 +30,10 @@ final settingsRepositoryProvider = Provider<SettingsRepository>(
 
 final bookmarkRepositoryProvider = Provider<BookmarkRepository>(
   (ref) => BookmarkRepository(ref.watch(appDatabaseProvider)),
+);
+
+final annotationRepositoryProvider = Provider<AnnotationRepository>(
+  (ref) => AnnotationRepository(ref.watch(appDatabaseProvider)),
 );
 
 final bookRepositoryProvider = Provider<BookRepository>(
@@ -122,6 +128,12 @@ final bookmarksForBookProvider = FutureProvider.autoDispose
     .family<List<Bookmark>, String>(
       (ref, bookId) =>
           ref.watch(bookmarkRepositoryProvider).listForBook(bookId),
+    );
+
+final annotationsForBookProvider = FutureProvider.autoDispose
+    .family<List<ReadingAnnotation>, String>(
+      (ref, bookId) =>
+          ref.watch(annotationRepositoryProvider).listForBook(bookId),
     );
 
 final readerBookProvider = FutureProvider.autoDispose
