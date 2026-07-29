@@ -58,6 +58,17 @@ class AnnotationRepository {
     );
   }
 
+  Future<void> updateNote(String annotationId, String? note) async {
+    final database = await _database.database;
+    final normalizedNote = note?.trim();
+    await database.update(
+      'reading_annotations',
+      {'note': normalizedNote?.isEmpty ?? true ? null : normalizedNote},
+      where: 'id = ?',
+      whereArgs: [annotationId],
+    );
+  }
+
   ReadingAnnotation _fromRow(Map<String, Object?> row) => ReadingAnnotation(
     id: row['id']! as String,
     bookId: row['book_id']! as String,

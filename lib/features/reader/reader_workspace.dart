@@ -56,6 +56,8 @@ class ReaderWorkspace extends HookConsumerWidget {
     final pageIndex = useState(0);
     final pageCount = useState(1);
     final requestedPage = useState<int?>(null);
+    final focusedAnnotationId = useState<String?>(null);
+    final annotationFocusRevision = useState(0);
     final progressWriteTimer = useRef<Timer?>(null);
     final selectedText = useState<ReaderTextSelection?>(null);
     final override = readingOverride.value;
@@ -255,6 +257,28 @@ class ReaderWorkspace extends HookConsumerWidget {
       ref.invalidate(bookmarksForBookProvider(bookId));
     }
 
+    void selectAnnotation(ReadingAnnotation annotation) {
+      final nextIndex = manifest.value?.spine.indexWhere(
+        (item) => item.href == annotation.href,
+      );
+      if (nextIndex == null || nextIndex < 0) return;
+      focusedAnnotationId.value = annotation.id;
+      annotationFocusRevision.value += 1;
+      unawaited(selectChapter(nextIndex));
+    }
+
+    Future<void> editAnnotation(ReadingAnnotation annotation) async {
+      final draft = await showDialog<_AnnotationNoteDraft>(
+        context: context,
+        builder: (context) => _AnnotationNoteDialog(annotation: annotation),
+      );
+      if (draft == null || !context.mounted) return;
+      await ref
+          .read(annotationRepositoryProvider)
+          .updateNote(annotation.id, draft.note);
+      ref.invalidate(annotationsForBookProvider(bookId));
+    }
+
     void navigateToHref(String targetHref) {
       final target = Uri.tryParse(targetHref);
       final targetPath = target == null
@@ -357,6 +381,9 @@ class ReaderWorkspace extends HookConsumerWidget {
                                   ReadingDirection.ltr,
                               requestedPage: requestedPage.value,
                               annotations: annotations,
+                              focusedAnnotationId: focusedAnnotationId.value,
+                              annotationFocusRevision:
+                                  annotationFocusRevision.value,
                               restoreRevision: restoreRevision.value,
                               onNavigateToHref: navigateToHref,
                               onScrollPositionChanged: (href, ratio, anchor) {
@@ -400,6 +427,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                                     showBookmarks.value = value,
                                 onSelectBookmark: selectBookmark,
                                 onRemoveBookmark: removeBookmark,
+                                onSelectAnnotation: selectAnnotation,
+                                onEditAnnotation: editAnnotation,
                                 onRemoveAnnotation: (annotation) async {
                                   await ref
                                       .read(annotationRepositoryProvider)
@@ -407,6 +436,10 @@ class ReaderWorkspace extends HookConsumerWidget {
                                   ref.invalidate(
                                     annotationsForBookProvider(bookId),
                                   );
+                                  if (focusedAnnotationId.value ==
+                                      annotation.id) {
+                                    focusedAnnotationId.value = null;
+                                  }
                                 },
                               ),
                             ),
@@ -571,6 +604,8 @@ class _ReaderArticle extends StatelessWidget {
     required this.requestedPage,
     required this.restoreRevision,
     required this.annotations,
+    required this.focusedAnnotationId,
+    required this.annotationFocusRevision,
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
     required this.onPaginationChanged,
@@ -589,6 +624,8 @@ class _ReaderArticle extends StatelessWidget {
   final int? requestedPage;
   final int restoreRevision;
   final List<ReadingAnnotation> annotations;
+  final String? focusedAnnotationId;
+  final int annotationFocusRevision;
   final ValueChanged<String> onNavigateToHref;
   final void Function(String href, double ratio, String? anchor)
   onScrollPositionChanged;
@@ -618,6 +655,8 @@ class _ReaderArticle extends StatelessWidget {
         requestedPage: requestedPage,
         restoreRevision: restoreRevision,
         annotations: annotations,
+        focusedAnnotationId: focusedAnnotationId,
+        annotationFocusRevision: annotationFocusRevision,
         onNavigateToHref: onNavigateToHref,
         onScrollPositionChanged: onScrollPositionChanged,
         onPaginationChanged: onPaginationChanged,
@@ -725,6 +764,8 @@ class _ReaderSidePanel extends StatelessWidget {
     required this.onPanelChanged,
     required this.onSelectBookmark,
     required this.onRemoveBookmark,
+    required this.onSelectAnnotation,
+    required this.onEditAnnotation,
     required this.onRemoveAnnotation,
   });
 
@@ -734,6 +775,8 @@ class _ReaderSidePanel extends StatelessWidget {
   final ValueChanged<bool> onPanelChanged;
   final Future<void> Function(Bookmark bookmark) onSelectBookmark;
   final Future<void> Function(Bookmark bookmark) onRemoveBookmark;
+  final ValueChanged<ReadingAnnotation> onSelectAnnotation;
+  final Future<void> Function(ReadingAnnotation annotation) onEditAnnotation;
   final Future<void> Function(ReadingAnnotation annotation) onRemoveAnnotation;
 
   @override
@@ -814,10 +857,21 @@ class _ReaderSidePanel extends StatelessWidget {
                       subtitle: annotation.note == null
                           ? const Text('高亮')
                           : Text(annotation.note!, maxLines: 3),
-                      trailing: IconButton(
-                        tooltip: '删除标注',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () => onRemoveAnnotation(annotation),
+                      onTap: () => onSelectAnnotation(annotation),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: '编辑笔记',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () => onEditAnnotation(annotation),
+                          ),
+                          IconButton(
+                            tooltip: '删除标注',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => onRemoveAnnotation(annotation),
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -842,6 +896,65 @@ class _AnnotationDraft {
 
   final AnnotationColor color;
   final String? note;
+}
+
+class _AnnotationNoteDraft {
+  const _AnnotationNoteDraft(this.note);
+
+  final String note;
+}
+
+class _AnnotationNoteDialog extends HookWidget {
+  const _AnnotationNoteDialog({required this.annotation});
+
+  final ReadingAnnotation annotation;
+
+  @override
+  Widget build(BuildContext context) {
+    final noteController = useTextEditingController(
+      text: annotation.note ?? '',
+    );
+    return AlertDialog(
+      title: const Text('编辑笔记'),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              annotation.selectedText,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: noteController,
+              maxLines: 4,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: '笔记（留空以移除）',
+                alignLabelWithHint: true,
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.pop(context, _AnnotationNoteDraft(noteController.text)),
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
 }
 
 class _AnnotationDialog extends HookWidget {

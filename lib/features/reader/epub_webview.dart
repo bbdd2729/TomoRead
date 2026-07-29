@@ -20,6 +20,8 @@ class EpubWebView extends HookConsumerWidget {
     required this.href,
     required this.settings,
     required this.annotations,
+    required this.focusedAnnotationId,
+    required this.annotationFocusRevision,
     required this.initialScrollRatio,
     required this.initialAnchor,
     required this.direction,
@@ -39,6 +41,8 @@ class EpubWebView extends HookConsumerWidget {
   final String href;
   final ReadingSettings settings;
   final List<ReadingAnnotation> annotations;
+  final String? focusedAnnotationId;
+  final int annotationFocusRevision;
   final double initialScrollRatio;
   final String? initialAnchor;
   final ReadingDirection direction;
@@ -61,7 +65,12 @@ class EpubWebView extends HookConsumerWidget {
     final initialized = useState(false);
     final initializationError = useState<Object?>(null);
     final styleScript = _styleScript(context, settings);
-    final annotationScript = _annotationScript(annotations, href);
+    final annotationScript = _annotationScript(
+      annotations,
+      href,
+      focusedAnnotationId,
+      annotationFocusRevision,
+    );
     final resourceDirectory = extractedDirectory.value;
 
     Future<void> applyStyle() async {
@@ -444,7 +453,12 @@ a { color: ${_cssColor(colorScheme.primary)}; }
     })();''';
   }
 
-  String _annotationScript(List<ReadingAnnotation> annotations, String href) {
+  String _annotationScript(
+    List<ReadingAnnotation> annotations,
+    String href,
+    String? focusedAnnotationId,
+    int focusRevision,
+  ) {
     final values = annotations
         .where((annotation) => annotation.href == href)
         .map((annotation) {
@@ -453,19 +467,24 @@ a { color: ${_cssColor(colorScheme.primary)}; }
             'start': int.tryParse(offsets.first) ?? -1,
             'end': offsets.length == 2 ? int.tryParse(offsets.last) ?? -1 : -1,
             'color': annotation.color.name,
+            'id': annotation.id,
           };
         })
         .where((annotation) => (annotation['start']! as int) >= 0)
         .toList();
     return '''(() => {
-      if (!window.CSS?.highlights || typeof Highlight === 'undefined') return;
-      for (const name of Array.from(CSS.highlights.keys())) {
-        if (name.startsWith('tomoread-')) CSS.highlights.delete(name);
+      const supportsHighlights = window.CSS?.highlights && typeof Highlight !== 'undefined';
+      if (supportsHighlights) {
+        for (const name of Array.from(CSS.highlights.keys())) {
+          if (name.startsWith('tomoread-')) CSS.highlights.delete(name);
+        }
       }
       const annotations = ${jsonEncode(values)};
-      const root = document.body;
+      const focusedAnnotationId = ${jsonEncode(focusedAnnotationId)};
+      const focusRevision = $focusRevision;
+      const contentRoot = document.body;
       const rangeAt = (offset) => {
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        const walker = document.createTreeWalker(contentRoot, NodeFilter.SHOW_TEXT);
         let remaining = offset;
         let node;
         while ((node = walker.nextNode())) {
@@ -477,6 +496,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
         return null;
       };
       const grouped = new Map();
+      let focusedRange;
       for (const annotation of annotations) {
         const start = rangeAt(annotation.start);
         const end = rangeAt(annotation.end);
@@ -487,9 +507,26 @@ a { color: ${_cssColor(colorScheme.primary)}; }
         const ranges = grouped.get(annotation.color) || [];
         ranges.push(range);
         grouped.set(annotation.color, ranges);
+        if (annotation.id === focusedAnnotationId) focusedRange = range;
       }
-      for (const [color, ranges] of grouped) {
-        CSS.highlights.set(`tomoread-\${color}`, new Highlight(...ranges));
+      if (supportsHighlights) {
+        for (const [color, ranges] of grouped) {
+          CSS.highlights.set(`tomoread-\${color}`, new Highlight(...ranges));
+        }
+      }
+      if (focusedRange) {
+        window.requestAnimationFrame(() => {
+          const rect = focusedRange.getBoundingClientRect();
+          if (window.__tomoReadPaginated === true) {
+            const scrollRoot = document.scrollingElement || document.documentElement;
+            const offset = Math.abs(scrollRoot.scrollLeft) + rect.left;
+            window.__tomoReadGoToPage?.(Math.max(0, Math.round(offset / window.innerWidth)));
+          } else {
+            const scrollRoot = document.scrollingElement || document.documentElement;
+            scrollRoot.scrollTop += rect.top - 24;
+            window.__tomoReadReportProgress?.();
+          }
+        });
       }
     })();''';
   }

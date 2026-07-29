@@ -123,6 +123,15 @@ void main() {
     expect(stored, hasLength(1));
     expect(stored.single.id, annotation.id);
     expect(stored.single.locator, '12:34');
+
+    await annotations.updateNote(annotation.id, 'updated note');
+    expect(
+      (await annotations.listForBook('book-a')).single.note,
+      'updated note',
+    );
+
+    await annotations.updateNote(annotation.id, '   ');
+    expect((await annotations.listForBook('book-a')).single.note, isNull);
     expect(stored.single.note, '保留这个观点。');
 
     await annotations.remove(annotation.id);
