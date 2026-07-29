@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/appearance.dart';
+import '../../app/providers.dart';
 import '../../domain/models/library_book.dart';
 import '../../domain/models/reading_settings.dart';
 import '../chat/chat_page.dart';
@@ -13,6 +14,7 @@ import '../reader/pdf_reader_workspace.dart';
 import '../settings/settings_page.dart';
 import '../skills/skills_page.dart';
 import '../statistics/statistics_page.dart';
+import 'book_search_delegate.dart';
 
 enum AppDestination {
   library,
@@ -125,10 +127,21 @@ class AppShell extends HookConsumerWidget {
       }
     }
 
-    void showPlaceholderMessage(String message) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+    Future<void> openLibrarySearch() async {
+      try {
+        final books = await ref.read(libraryBooksProvider.future);
+        if (!context.mounted) return;
+        final selected = await showSearch<LibraryBook?>(
+          context: context,
+          delegate: BookSearchDelegate(books),
+        );
+        if (selected != null) openReader(selected);
+      } catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('无法搜索书库：$error')));
+      }
     }
 
     return LayoutBuilder(
@@ -145,7 +158,6 @@ class AppShell extends HookConsumerWidget {
           onAppearanceChanged: onAppearanceChanged,
           onReadingSettingsChanged: onReadingSettingsChanged,
           onOpenReader: openReader,
-          onAction: showPlaceholderMessage,
         );
 
         return Scaffold(
@@ -154,7 +166,8 @@ class AppShell extends HookConsumerWidget {
             actions: [
               IconButton(
                 tooltip: '搜索',
-                onPressed: () => showPlaceholderMessage('书库搜索将在下一阶段接入。'),
+                key: const Key('global-search'),
+                onPressed: openLibrarySearch,
                 icon: const Icon(Icons.search),
               ),
               const SizedBox(width: 8),
@@ -205,7 +218,6 @@ class _WorkspaceContent extends StatelessWidget {
     required this.onAppearanceChanged,
     required this.onReadingSettingsChanged,
     required this.onOpenReader,
-    required this.onAction,
   });
 
   final AppDestination destination;
@@ -217,7 +229,6 @@ class _WorkspaceContent extends StatelessWidget {
   final ValueChanged<AppAppearance> onAppearanceChanged;
   final ValueChanged<ReadingSettings> onReadingSettingsChanged;
   final ValueChanged<LibraryBook> onOpenReader;
-  final ValueChanged<String> onAction;
 
   @override
   Widget build(BuildContext context) {

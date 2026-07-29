@@ -203,6 +203,34 @@ void main() {
     expect(find.byKey(const Key('book-pdf-book')), findsOneWidget);
   });
 
+  testWidgets('searches the library from the app bar', (tester) async {
+    configureDesktop(tester);
+    final book = LibraryBook(
+      id: 'global-search-book',
+      fileHash: 'global-search-book',
+      title: 'Searchable Book',
+      author: 'Alice',
+      filePath: 'C:/books/search.epub',
+      progress: 0.2,
+      importedAt: DateTime(2026),
+      format: 'epub',
+      chapterCount: 1,
+      direction: ReadingDirection.ltr,
+    );
+    await pumpShell(tester, books: [book]);
+
+    await tester.tap(find.byKey(const Key('global-search')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    tester.testTextInput.enterText('searchable');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(ListTile, 'Searchable Book'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(ReaderWorkspace), findsOneWidget);
+  });
+
   testWidgets('removes a book after confirmation', (tester) async {
     configureDesktop(tester);
     final book = LibraryBook(
