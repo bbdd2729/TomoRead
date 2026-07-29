@@ -202,6 +202,31 @@ void main() {
     expect(find.byKey(const Key('book-epub-book')), findsNothing);
     expect(find.byKey(const Key('book-pdf-book')), findsOneWidget);
   });
+
+  testWidgets('removes a book after confirmation', (tester) async {
+    configureDesktop(tester);
+    final book = LibraryBook(
+      id: 'book-delete',
+      fileHash: 'book-delete',
+      title: 'Delete me',
+      author: '',
+      filePath: 'C:/books/delete.epub',
+      progress: 0,
+      importedAt: DateTime(2026),
+      format: 'epub',
+      chapterCount: 1,
+      direction: ReadingDirection.ltr,
+    );
+    await pumpShell(tester, books: [book]);
+
+    await tester.tap(find.byTooltip('删除书籍'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('book-book-delete')), findsNothing);
+  });
 }
 
 class _FakeSettingsRepository extends SettingsRepository {
@@ -258,6 +283,11 @@ class _FakeBookRepository extends BookRepository {
 
   @override
   Future<List<LibraryBook>> listBooks() async => _books;
+
+  @override
+  Future<void> deleteBook(String bookId) async {
+    _books.removeWhere((book) => book.id == bookId);
+  }
 }
 
 class _FakeAnnotationRepository extends AnnotationRepository {

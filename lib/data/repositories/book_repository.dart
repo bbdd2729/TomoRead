@@ -59,6 +59,33 @@ class BookRepository {
     );
   }
 
+  Future<void> deleteBook(String bookId) async {
+    final database = await _database.database;
+    await database.transaction((transaction) async {
+      await transaction.delete(
+        'bookmarks',
+        where: 'book_id = ?',
+        whereArgs: [bookId],
+      );
+      await transaction.delete(
+        'book_reading_overrides',
+        where: 'book_id = ?',
+        whereArgs: [bookId],
+      );
+      await transaction.delete(
+        'reading_annotations',
+        where: 'book_id = ?',
+        whereArgs: [bookId],
+      );
+      await transaction.delete(
+        'book_manifests',
+        where: 'book_id = ?',
+        whereArgs: [bookId],
+      );
+      await transaction.delete('books', where: 'id = ?', whereArgs: [bookId]);
+    });
+  }
+
   Future<void> saveImportedBook(ImportedBook importedBook) async {
     final database = await _database.database;
     final book = importedBook.book;

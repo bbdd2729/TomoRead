@@ -8,6 +8,7 @@ import '../data/repositories/annotation_repository.dart';
 import '../data/repositories/book_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/services/book_import_service.dart';
+import '../data/services/book_storage_service.dart';
 import '../data/services/epub_content_service.dart';
 import '../data/services/epub_extraction_service.dart';
 import '../domain/models/bookmark.dart';
@@ -42,6 +43,10 @@ final bookRepositoryProvider = Provider<BookRepository>(
 
 final bookImportServiceProvider = Provider<BookImportService>(
   (ref) => BookImportService(repository: ref.watch(bookRepositoryProvider)),
+);
+
+final bookStorageServiceProvider = Provider<BookStorageService>(
+  (ref) => BookStorageService(repository: ref.watch(bookRepositoryProvider)),
 );
 
 final epubContentServiceProvider = Provider<EpubContentService>(

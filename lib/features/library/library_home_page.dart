@@ -21,6 +21,7 @@ class LibraryHomePage extends HookConsumerWidget {
     final searchQuery = useState('');
     final formatFilter = useState(_LibraryFormatFilter.all);
     final sort = useState(_LibrarySort.recent);
+    final removingBookId = useState<String?>(null);
 
     Future<void> importBooks() async {
       if (isImporting.value) return;
@@ -47,6 +48,51 @@ class LibraryHomePage extends HookConsumerWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
+    }
+
+    Future<void> removeBook(LibraryBook book) async {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('删除书籍'),
+          content: Text('“${book.title}”将从 TomoRead 书库和本地托管文件中移除。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+      removingBookId.value = book.id;
+      try {
+        final result = await ref
+            .read(bookStorageServiceProvider)
+            .removeBook(book);
+        ref.invalidate(libraryBooksProvider);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.hasCleanupErrors
+                  ? '书籍已移除，但部分本地缓存未能清理。'
+                  : '已删除《${book.title}》。',
+            ),
+          ),
+        );
+      } catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('删除失败：$error')));
+      } finally {
+        if (context.mounted) removingBookId.value = null;
+      }
     }
 
     return books.when(
@@ -107,6 +153,8 @@ class LibraryHomePage extends HookConsumerWidget {
                   itemBuilder: (context, index) => _BookCard(
                     book: visibleBooks[index],
                     onTap: () => onOpenReader(visibleBooks[index]),
+                    isRemoving: removingBookId.value == visibleBooks[index].id,
+                    onDelete: () => removeBook(visibleBooks[index]),
                   ),
                 ),
               ],
@@ -356,26 +404,56 @@ class _ContinueReadingCard extends StatelessWidget {
 }
 
 class _BookCard extends StatelessWidget {
-  const _BookCard({required this.book, required this.onTap});
+  const _BookCard({
+    required this.book,
+    required this.onTap,
+    required this.isRemoving,
+    required this.onDelete,
+  });
 
   final LibraryBook book;
   final VoidCallback onTap;
+  final bool isRemoving;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) => Card(
     key: Key('book-${book.id}'),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
-      onTap: onTap,
+      onTap: isRemoving ? null : onTap,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: SizedBox(
-                width: double.infinity,
-                child: _BookCover(book: book),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _BookCover(book: book),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Material(
+                      color: Theme.of(context).colorScheme.surfaceContainer,
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        tooltip: '删除书籍',
+                        onPressed: isRemoving ? null : onDelete,
+                        icon: isRemoving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.delete_outline),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),
