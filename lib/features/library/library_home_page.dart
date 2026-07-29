@@ -18,6 +18,9 @@ class LibraryHomePage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final books = ref.watch(libraryBooksProvider);
     final isImporting = useState(false);
+    final searchQuery = useState('');
+    final formatFilter = useState(_LibraryFormatFilter.all);
+    final sort = useState(_LibrarySort.recent);
 
     Future<void> importBooks() async {
       if (isImporting.value) return;
@@ -52,47 +55,199 @@ class LibraryHomePage extends HookConsumerWidget {
         message: '无法读取书库：$error',
         onRetry: () => ref.invalidate(libraryBooksProvider),
       ),
-      data: (items) => ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          PageHeader(
-            title: '书库',
-            subtitle: '管理并继续阅读你的 EPUB 与 PDF 书籍。',
-            actionLabel: isImporting.value ? '正在导入' : '导入书籍',
-            actionIcon: Icons.add,
-            onAction: isImporting.value ? null : importBooks,
-          ),
-          const SizedBox(height: 24),
-          if (items.isEmpty)
-            _EmptyLibrary(onImport: isImporting.value ? null : importBooks)
-          else ...[
-            _ContinueReadingCard(
-              book: items.first,
-              onOpenReader: () => onOpenReader(items.first),
+      data: (items) {
+        final visibleBooks = _filterAndSortBooks(
+          items,
+          query: searchQuery.value,
+          formatFilter: formatFilter.value,
+          sort: sort.value,
+        );
+        return ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            PageHeader(
+              title: '书库',
+              subtitle: '管理并继续阅读你的 EPUB 与 PDF 书籍。',
+              actionLabel: isImporting.value ? '正在导入' : '导入书籍',
+              actionIcon: Icons.add,
+              onAction: isImporting.value ? null : importBooks,
             ),
-            const SizedBox(height: 28),
-            Text('全部书籍', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 16),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 190,
-                mainAxisExtent: 270,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
+            const SizedBox(height: 24),
+            if (items.isEmpty)
+              _EmptyLibrary(onImport: isImporting.value ? null : importBooks)
+            else ...[
+              _LibraryControls(
+                formatFilter: formatFilter.value,
+                sort: sort.value,
+                onQueryChanged: (value) => searchQuery.value = value,
+                onFormatChanged: (value) => formatFilter.value = value,
+                onSortChanged: (value) => sort.value = value,
               ),
-              itemCount: items.length,
-              itemBuilder: (context, index) => _BookCard(
-                book: items[index],
-                onTap: () => onOpenReader(items[index]),
-              ),
-            ),
+              const SizedBox(height: 24),
+              if (visibleBooks.isEmpty)
+                const _NoMatchingBooks()
+              else ...[
+                _ContinueReadingCard(
+                  book: visibleBooks.first,
+                  onOpenReader: () => onOpenReader(visibleBooks.first),
+                ),
+                const SizedBox(height: 28),
+                Text('全部书籍', style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 16),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 190,
+                    mainAxisExtent: 270,
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                  ),
+                  itemCount: visibleBooks.length,
+                  itemBuilder: (context, index) => _BookCard(
+                    book: visibleBooks[index],
+                    onTap: () => onOpenReader(visibleBooks[index]),
+                  ),
+                ),
+              ],
+            ],
           ],
-        ],
-      ),
+        );
+      },
     );
   }
+}
+
+enum _LibraryFormatFilter { all, epub, pdf }
+
+extension on _LibraryFormatFilter {
+  String get label => switch (this) {
+    _LibraryFormatFilter.all => '全部',
+    _LibraryFormatFilter.epub => 'EPUB',
+    _LibraryFormatFilter.pdf => 'PDF',
+  };
+}
+
+enum _LibrarySort { recent, title, progress }
+
+extension on _LibrarySort {
+  String get label => switch (this) {
+    _LibrarySort.recent => '最近导入',
+    _LibrarySort.title => '书名',
+    _LibrarySort.progress => '阅读进度',
+  };
+}
+
+List<LibraryBook> _filterAndSortBooks(
+  List<LibraryBook> books, {
+  required String query,
+  required _LibraryFormatFilter formatFilter,
+  required _LibrarySort sort,
+}) {
+  final normalizedQuery = query.trim().toLowerCase();
+  final filtered = books.where((book) {
+    final matchesFormat = switch (formatFilter) {
+      _LibraryFormatFilter.all => true,
+      _LibraryFormatFilter.epub => book.format == 'epub',
+      _LibraryFormatFilter.pdf => book.format == 'pdf',
+    };
+    final searchableText = '${book.title} ${book.author}'.toLowerCase();
+    return matchesFormat &&
+        (normalizedQuery.isEmpty || searchableText.contains(normalizedQuery));
+  }).toList();
+  filtered.sort(switch (sort) {
+    _LibrarySort.recent => (first, second) => second.importedAt.compareTo(
+      first.importedAt,
+    ),
+    _LibrarySort.title =>
+      (first, second) =>
+          first.title.toLowerCase().compareTo(second.title.toLowerCase()),
+    _LibrarySort.progress => (first, second) => second.progress.compareTo(
+      first.progress,
+    ),
+  });
+  return filtered;
+}
+
+class _LibraryControls extends StatelessWidget {
+  const _LibraryControls({
+    required this.formatFilter,
+    required this.sort,
+    required this.onQueryChanged,
+    required this.onFormatChanged,
+    required this.onSortChanged,
+  });
+
+  final _LibraryFormatFilter formatFilter;
+  final _LibrarySort sort;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<_LibraryFormatFilter> onFormatChanged;
+  final ValueChanged<_LibrarySort> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 12,
+    runSpacing: 12,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      SizedBox(
+        width: 320,
+        child: TextField(
+          key: const Key('library-search'),
+          onChanged: onQueryChanged,
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search),
+            hintText: '搜索书名或作者',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ),
+      SegmentedButton<_LibraryFormatFilter>(
+        segments: [
+          for (final filter in _LibraryFormatFilter.values)
+            ButtonSegment(value: filter, label: Text(filter.label)),
+        ],
+        selected: {formatFilter},
+        onSelectionChanged: (selection) => onFormatChanged(selection.first),
+      ),
+      SizedBox(
+        width: 152,
+        child: DropdownButtonFormField<_LibrarySort>(
+          initialValue: sort,
+          decoration: const InputDecoration(
+            labelText: '排序',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            for (final option in _LibrarySort.values)
+              DropdownMenuItem(value: option, child: Text(option.label)),
+          ],
+          onChanged: (value) {
+            if (value != null) onSortChanged(value);
+          },
+        ),
+      ),
+    ],
+  );
+}
+
+class _NoMatchingBooks extends StatelessWidget {
+  const _NoMatchingBooks();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 72),
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.manage_search_outlined, size: 44),
+          const SizedBox(height: 12),
+          Text('没有匹配的书籍', style: Theme.of(context).textTheme.titleMedium),
+        ],
+      ),
+    ),
+  );
 }
 
 class _EmptyLibrary extends StatelessWidget {

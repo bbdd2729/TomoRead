@@ -8,6 +8,7 @@ import 'package:tomoread/data/repositories/bookmark_repository.dart';
 import 'package:tomoread/data/repositories/book_repository.dart';
 import 'package:tomoread/data/repositories/settings_repository.dart';
 import 'package:tomoread/domain/models/bookmark.dart';
+import 'package:tomoread/domain/models/epub_manifest.dart';
 import 'package:tomoread/domain/models/library_book.dart';
 import 'package:tomoread/domain/models/reading_settings.dart';
 import 'package:tomoread/domain/models/reading_annotation.dart';
@@ -26,6 +27,7 @@ void main() {
   Future<void> pumpShell(
     WidgetTester tester, {
     ValueChanged<AppAppearance>? onAppearanceChanged,
+    List<LibraryBook> books = const [],
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -39,7 +41,7 @@ void main() {
           annotationRepositoryProvider.overrideWithValue(
             _FakeAnnotationRepository(),
           ),
-          bookRepositoryProvider.overrideWithValue(_FakeBookRepository()),
+          bookRepositoryProvider.overrideWithValue(_FakeBookRepository(books)),
         ],
         child: MaterialApp(
           home: AppShell(
@@ -154,6 +156,52 @@ void main() {
     expect(find.byKey(const Key('book-reading-margin')), findsOneWidget);
     expect(find.byKey(const Key('book-reading-double-column')), findsOneWidget);
   });
+
+  testWidgets('filters the library by title or author', (tester) async {
+    configureDesktop(tester);
+    final epub = LibraryBook(
+      id: 'epub-book',
+      fileHash: 'epub-book',
+      title: 'Dart Patterns',
+      author: 'Alice',
+      filePath: 'C:/books/dart.epub',
+      progress: 0.4,
+      importedAt: DateTime(2026),
+      format: 'epub',
+      chapterCount: 8,
+      direction: ReadingDirection.ltr,
+    );
+    final pdf = LibraryBook(
+      id: 'pdf-book',
+      fileHash: 'pdf-book',
+      title: 'PDF Notes',
+      author: 'Bob',
+      filePath: 'C:/books/notes.pdf',
+      progress: 0,
+      importedAt: DateTime(2025),
+      format: 'pdf',
+      chapterCount: 12,
+      direction: ReadingDirection.ltr,
+    );
+    await pumpShell(tester, books: [epub, pdf]);
+
+    expect(find.byKey(const Key('book-epub-book')), findsOneWidget);
+    expect(find.byKey(const Key('book-pdf-book')), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('library-search')), 'alice');
+    await tester.pump();
+
+    expect(find.byKey(const Key('book-epub-book')), findsOneWidget);
+    expect(find.byKey(const Key('book-pdf-book')), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('library-search')), '');
+    await tester.pump();
+    await tester.tap(find.text('PDF'));
+    await tester.pump();
+
+    expect(find.byKey(const Key('book-epub-book')), findsNothing);
+    expect(find.byKey(const Key('book-pdf-book')), findsOneWidget);
+  });
 }
 
 class _FakeSettingsRepository extends SettingsRepository {
@@ -204,10 +252,12 @@ class _FakeBookmarkRepository extends BookmarkRepository {
 }
 
 class _FakeBookRepository extends BookRepository {
-  _FakeBookRepository() : super(AppDatabase.inMemory());
+  _FakeBookRepository([this._books = const []]) : super(AppDatabase.inMemory());
+
+  final List<LibraryBook> _books;
 
   @override
-  Future<List<LibraryBook>> listBooks() async => const [];
+  Future<List<LibraryBook>> listBooks() async => _books;
 }
 
 class _FakeAnnotationRepository extends AnnotationRepository {
