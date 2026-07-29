@@ -1,11 +1,9 @@
-name: Build
+name: CI Build
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    branches: ['**']
   pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -52,7 +50,7 @@ jobs:
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v7
         with:
-          name: tomoread-linux
+          name: tomoread-ci-linux
           path: build/linux/x64/release/bundle/
           if-no-files-found: error
           retention-days: 14
@@ -75,7 +73,7 @@ jobs:
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v7
         with:
-          name: tomoread-windows
+          name: tomoread-ci-windows
           path: build/windows/x64/runner/Release/
           if-no-files-found: error
           retention-days: 14
@@ -84,11 +82,6 @@ jobs:
     name: Android
     needs: verify
     runs-on: ubuntu-latest
-    env:
-      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v6
       - name: Set up Flutter
@@ -99,53 +92,11 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - name: Configure Android release signing
-        if: >-
-          env.ANDROID_KEYSTORE_BASE64 != '' &&
-          env.ANDROID_KEYSTORE_PASSWORD != '' &&
-          env.ANDROID_KEY_ALIAS != '' &&
-          env.ANDROID_KEY_PASSWORD != ''
-        shell: bash
-        run: |
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/upload-keystore.jks
-          cat > android/key.properties <<EOF
-          storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyPassword=$ANDROID_KEY_PASSWORD
-          keyAlias=$ANDROID_KEY_ALIAS
-          storeFile=upload-keystore.jks
-          EOF
-      - name: Build Android release artifacts
-        if: >-
-          env.ANDROID_KEYSTORE_BASE64 != '' &&
-          env.ANDROID_KEYSTORE_PASSWORD != '' &&
-          env.ANDROID_KEY_ALIAS != '' &&
-          env.ANDROID_KEY_PASSWORD != ''
-        run: |
-          flutter build apk --release
-          flutter build appbundle --release
-      - name: Build Android debug APK
-        if: >-
-          env.ANDROID_KEYSTORE_BASE64 == '' ||
-          env.ANDROID_KEYSTORE_PASSWORD == '' ||
-          env.ANDROID_KEY_ALIAS == '' ||
-          env.ANDROID_KEY_PASSWORD == ''
-        run: flutter build apk --debug
-      - name: Upload Android APK
+      - run: flutter build apk --debug
+      - name: Upload Android debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: tomoread-android-apk
-          path: build/app/outputs/flutter-apk/*.apk
-          if-no-files-found: error
-          retention-days: 14
-      - name: Upload Android app bundle
-        if: >-
-          env.ANDROID_KEYSTORE_BASE64 != '' &&
-          env.ANDROID_KEYSTORE_PASSWORD != '' &&
-          env.ANDROID_KEY_ALIAS != '' &&
-          env.ANDROID_KEY_PASSWORD != ''
-        uses: actions/upload-artifact@v7
-        with:
-          name: tomoread-android-aab
-          path: build/app/outputs/bundle/release/*.aab
+          name: tomoread-ci-android-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 14

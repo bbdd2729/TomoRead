@@ -1,7 +1,8 @@
 # Android release signing
 
-The GitHub Actions workflow builds a release APK and AAB only when all four
-repository secrets below are configured. Otherwise it builds a debug APK.
+The automatic `CI Build` workflow always builds an unsigned debug APK and never
+reads signing secrets. The manual `Release` workflow builds a signed APK and AAB
+only when all four repository secrets below are configured; otherwise it fails.
 
 | Secret | Value |
 | --- | --- |
@@ -28,3 +29,8 @@ Encode the keystore for the GitHub secret:
 Keep the keystore and all passwords private. Do not commit `android/key.properties`
 or the `.jks` file. For Google Play, upload the signed `.aab`; Google Play signs
 the APK delivered to end users through Play App Signing.
+
+To publish a release, open **Actions > Release > Run workflow**, enter a new
+`x.y.z` version, select one or more platforms, and run it from the commit or
+branch that should be released. The workflow creates the matching `vX.Y.Z` tag
+only after all selected packages and checks succeed.

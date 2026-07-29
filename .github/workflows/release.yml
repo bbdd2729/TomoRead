@@ -1,0 +1,248 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version in x.y.z format, for example 1.2.3
+        required: true
+        type: string
+      build_android:
+        description: Build signed Android APK and AAB
+        required: true
+        default: true
+        type: boolean
+      build_linux:
+        description: Build Linux x64 archive
+        required: true
+        default: true
+        type: boolean
+      build_windows:
+        description: Build Windows x64 archive
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: 3.44.8
+
+jobs:
+  prepare:
+    name: Validate release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      build_number: ${{ steps.release.outputs.build_number }}
+      commit_sha: ${{ steps.release.outputs.commit_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: release
+        name: Validate version and tag
+        env:
+          VERSION: ${{ inputs.version }}
+          BUILD_ANDROID: ${{ inputs.build_android }}
+          BUILD_LINUX: ${{ inputs.build_linux }}
+          BUILD_WINDOWS: ${{ inputs.build_windows }}
+        shell: bash
+        run: |
+          if [[ "$BUILD_ANDROID" != "true" && "$BUILD_LINUX" != "true" && "$BUILD_WINDOWS" != "true" ]]; then
+            echo "Select at least one target platform." >&2
+            exit 1
+          fi
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must use the x.y.z format, for example 1.2.3." >&2
+            exit 1
+          fi
+
+          tag="v$VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "Tag $tag already exists and cannot be overwritten." >&2
+            exit 1
+          fi
+
+          {
+            echo "version=$VERSION"
+            echo "tag=$tag"
+            echo "build_number=${GITHUB_RUN_NUMBER}"
+            echo "commit_sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: Verify
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter analyze lib test
+      - run: flutter test
+
+  linux:
+    name: Linux release
+    needs: [prepare, verify]
+    if: inputs.build_linux
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ninja-build libgtk-3-dev libsqlite3-dev
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build linux --release --build-name "$VERSION" --build-number "$BUILD_NUMBER"
+      - name: Package Linux archive
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -C build/linux/x64/release -czf "dist/TomoRead-${VERSION}-linux-x64.tar.gz" bundle
+      - name: Upload Linux release package
+        uses: actions/upload-artifact@v7
+        with:
+          name: tomoread-release-linux
+          path: dist/TomoRead-*-linux-x64.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Windows release
+    needs: [prepare, verify]
+    if: inputs.build_windows
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release --build-name $env:VERSION --build-number $env:BUILD_NUMBER
+      - name: Package Windows archive
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath "dist/TomoRead-$env:VERSION-windows-x64.zip"
+      - name: Upload Windows release package
+        uses: actions/upload-artifact@v7
+        with:
+          name: tomoread-release-windows
+          path: dist/TomoRead-*-windows-x64.zip
+          if-no-files-found: error
+
+  android:
+    name: Android release
+    needs: [prepare, verify]
+    if: inputs.build_android
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - name: Configure Android release signing
+        shell: bash
+        run: |
+          for secret in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!secret}" ]]; then
+              echo "Missing required repository secret: $secret" >&2
+              exit 1
+            fi
+          done
+
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+      - name: Build Android release artifacts
+        shell: bash
+        run: |
+          flutter build apk --release --build-name "$VERSION" --build-number "$BUILD_NUMBER"
+          flutter build appbundle --release --build-name "$VERSION" --build-number "$BUILD_NUMBER"
+      - name: Collect Android release packages
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/TomoRead-${VERSION}-android.apk"
+          cp build/app/outputs/bundle/release/app-release.aab "dist/TomoRead-${VERSION}-android.aab"
+      - name: Upload Android release packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: tomoread-release-android
+          path: |
+            dist/TomoRead-*-android.apk
+            dist/TomoRead-*-android.aab
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [prepare, verify, linux, windows, android]
+    if: >-
+      always() &&
+      needs.prepare.result == 'success' &&
+      needs.verify.result == 'success' &&
+      (needs.linux.result == 'success' || needs.linux.result == 'skipped') &&
+      (needs.windows.result == 'success' || needs.windows.result == 'skipped') &&
+      (needs.android.result == 'success' || needs.android.result == 'skipped')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      COMMIT_SHA: ${{ needs.prepare.outputs.commit_sha }}
+    steps:
+      - name: Download release packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: tomoread-release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create GitHub release and tag
+        shell: bash
+        run: |
+          gh release create "$TAG" release-assets/* \
+            --target "$COMMIT_SHA" \
+            --title "TomoRead $VERSION" \
+            --generate-notes
