@@ -225,7 +225,11 @@ class _WorkspaceContent extends StatelessWidget {
       AppDestination.library => LibraryHomePage(onOpenReader: onOpenReader),
       AppDestination.reader =>
         readerFormat == 'pdf'
-            ? PdfReaderWorkspace(bookId: readerBookId ?? '', title: readerTitle)
+            ? PdfReaderWorkspace(
+                key: ValueKey(readerBookId),
+                bookId: readerBookId ?? '',
+                title: readerTitle,
+              )
             : ReaderWorkspace(
                 bookId: readerBookId ?? 'demo-reading-art',
                 title: readerTitle,
