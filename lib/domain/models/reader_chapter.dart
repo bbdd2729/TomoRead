@@ -10,6 +10,24 @@ class ReaderChapter {
   final String href;
   final String title;
   final List<ReaderChapterBlock> blocks;
+
+  String get plainText => blocks.map((block) => block.text).join('\n');
+}
+
+class EpubSearchResult {
+  const EpubSearchResult({
+    required this.chapterIndex,
+    required this.href,
+    required this.chapterTitle,
+    required this.excerpt,
+    required this.chapterRatio,
+  });
+
+  final int chapterIndex;
+  final String href;
+  final String chapterTitle;
+  final String excerpt;
+  final double chapterRatio;
 }
 
 class ReaderChapterBlock {

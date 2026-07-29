@@ -57,6 +57,20 @@ void main() {
       throwsA(isA<EpubContentException>()),
     );
   });
+
+  test('finds EPUB text and returns a chapter-aware result', () {
+    final results = service.searchFromBytes(
+      epubBytes: _buildEpub(),
+      manifest: manifest,
+      query: '第一段',
+    );
+
+    expect(results, hasLength(1));
+    expect(results.single.chapterIndex, 0);
+    expect(results.single.chapterTitle, '第一章 真实内容');
+    expect(results.single.excerpt, contains('这是第一段文字。'));
+    expect(results.single.chapterRatio, greaterThan(0));
+  });
 }
 
 List<int> _buildEpub() {

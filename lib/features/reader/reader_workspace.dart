@@ -13,6 +13,7 @@ import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
 import 'epub_webview.dart';
+import 'reader_search_dialog.dart';
 
 class ReaderWorkspace extends HookConsumerWidget {
   const ReaderWorkspace({
@@ -122,19 +123,19 @@ class ReaderWorkspace extends HookConsumerWidget {
       );
     }
 
-    Future<void> selectChapter(int index) async {
+    Future<void> selectChapter(int index, {double scrollPosition = 0}) async {
       if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
       progressWriteTimer.value?.cancel();
       chapterIndex.value = index;
-      scrollRatio.value = 0;
+      scrollRatio.value = scrollPosition.clamp(0, 1).toDouble();
       restoreRevision.value++;
       await ref
           .read(bookRepositoryProvider)
           .updateReadingPosition(
             bookId: bookId,
             chapterIndex: index,
-            progress: _overallProgress(index, 0, totalChapters),
-            locator: _locatorFor(index, 0),
+            progress: _overallProgress(index, scrollRatio.value, totalChapters),
+            locator: _locatorFor(index, scrollRatio.value),
           );
       ref.invalidate(libraryBooksProvider);
     }
@@ -197,6 +198,22 @@ class ReaderWorkspace extends HookConsumerWidget {
       ref.invalidate(annotationsForBookProvider(bookId));
     }
 
+    Future<void> openSearch() async {
+      final book = readerBook.value;
+      final currentManifest = manifest.value;
+      if (book == null || currentManifest == null) return;
+      final result = await showDialog<EpubSearchResult>(
+        context: context,
+        builder: (context) =>
+            ReaderSearchDialog(book: book, manifest: currentManifest),
+      );
+      if (result == null || !context.mounted) return;
+      await selectChapter(
+        result.chapterIndex,
+        scrollPosition: result.chapterRatio,
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final canShowPanels = constraints.maxWidth >= 980;
@@ -217,6 +234,7 @@ class ReaderWorkspace extends HookConsumerWidget {
               onToggleBookmark: toggleBookmark,
               onCreateAnnotation: createAnnotation,
               onOpenBookSettings: openBookSettings,
+              onOpenSearch: openSearch,
             ),
             Expanded(
               child: isLoading
@@ -322,6 +340,7 @@ class _ReaderToolbar extends StatelessWidget {
     required this.onToggleBookmark,
     required this.onCreateAnnotation,
     required this.onOpenBookSettings,
+    required this.onOpenSearch,
   });
 
   final String title;
@@ -334,6 +353,7 @@ class _ReaderToolbar extends StatelessWidget {
   final VoidCallback onToggleBookmark;
   final VoidCallback onCreateAnnotation;
   final VoidCallback onOpenBookSettings;
+  final VoidCallback onOpenSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -379,7 +399,7 @@ class _ReaderToolbar extends StatelessWidget {
             ),
             IconButton(
               tooltip: '搜索书内内容',
-              onPressed: () {},
+              onPressed: onOpenSearch,
               icon: const Icon(Icons.search),
             ),
           ],

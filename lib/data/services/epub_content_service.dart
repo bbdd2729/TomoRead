@@ -63,6 +63,72 @@ class EpubContentService {
     }
   }
 
+  Future<List<EpubSearchResult>> search({
+    required LibraryBook book,
+    required EpubManifest manifest,
+    required String query,
+    int maxResults = 100,
+  }) async {
+    final file = File(book.filePath);
+    if (!await file.exists()) {
+      throw const EpubContentException('找不到已导入的 EPUB 文件');
+    }
+    return searchFromBytes(
+      epubBytes: await file.readAsBytes(),
+      manifest: manifest,
+      query: query,
+      maxResults: maxResults,
+    );
+  }
+
+  List<EpubSearchResult> searchFromBytes({
+    required List<int> epubBytes,
+    required EpubManifest manifest,
+    required String query,
+    int maxResults = 100,
+  }) {
+    final normalizedQuery = _normalizeText(query).toLowerCase();
+    if (normalizedQuery.isEmpty || maxResults <= 0) return const [];
+    try {
+      final archive = ZipDecoder().decodeBytes(epubBytes);
+      final results = <EpubSearchResult>[];
+      for (var index = 0; index < manifest.spine.length; index++) {
+        final spineItem = manifest.spine[index];
+        final file = archive.findFile(spineItem.href);
+        if (file == null) continue;
+        final chapter = _parseChapter(
+          utf8.decode(file.content as List<int>, allowMalformed: true),
+          index: index,
+          href: spineItem.href,
+        );
+        final text = chapter.plainText;
+        final searchableText = text.toLowerCase();
+        var matchIndex = searchableText.indexOf(normalizedQuery);
+        while (matchIndex >= 0 && results.length < maxResults) {
+          results.add(
+            EpubSearchResult(
+              chapterIndex: index,
+              href: spineItem.href,
+              chapterTitle: chapter.title,
+              excerpt: _excerpt(text, matchIndex, normalizedQuery.length),
+              chapterRatio: text.isEmpty ? 0 : matchIndex / text.length,
+            ),
+          );
+          matchIndex = searchableText.indexOf(
+            normalizedQuery,
+            matchIndex + normalizedQuery.length,
+          );
+        }
+        if (results.length >= maxResults) break;
+      }
+      return results;
+    } on EpubContentException {
+      rethrow;
+    } catch (error) {
+      throw EpubContentException('无法搜索 EPUB 内容：$error');
+    }
+  }
+
   ReaderChapter _parseChapter(
     String source, {
     required int index,
@@ -105,4 +171,14 @@ class EpubContentService {
 
   String _normalizeText(String value) =>
       value.replaceAll(RegExp(r'\s+'), ' ').replaceAll('\u00a0', ' ').trim();
+
+  String _excerpt(String text, int matchIndex, int matchLength) {
+    const leadingLength = 56;
+    const trailingLength = 96;
+    final start = (matchIndex - leadingLength).clamp(0, text.length).toInt();
+    final end = (matchIndex + matchLength + trailingLength)
+        .clamp(0, text.length)
+        .toInt();
+    return '${start > 0 ? '…' : ''}${text.substring(start, end)}${end < text.length ? '…' : ''}';
+  }
 }
