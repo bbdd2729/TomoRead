@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -12,6 +13,7 @@ import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
+import 'epub_webview_android.dart';
 
 class EpubWebView extends HookConsumerWidget {
   const EpubWebView({
@@ -58,6 +60,19 @@ class EpubWebView extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (Platform.isAndroid) {
+      return AndroidEpubWebView(
+        bookId: bookId,
+        href: href,
+        settings: settings,
+        initialScrollRatio: initialScrollRatio,
+        initialAnchor: initialAnchor,
+        direction: direction,
+        restoreRevision: restoreRevision,
+        onNavigateToHref: onNavigateToHref,
+        onScrollPositionChanged: onScrollPositionChanged,
+      );
+    }
     final extractedDirectory = ref.watch(
       epubExtractedDirectoryProvider(bookId),
     );
