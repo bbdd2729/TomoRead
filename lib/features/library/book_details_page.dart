@@ -18,12 +18,12 @@ class BookDetailsPage extends HookWidget {
   Widget build(BuildContext context) {
     final isDescriptionExpanded = useState(false);
     final hasProgress = book.progress > 0;
-    final author = book.author.isEmpty ? 'Unknown author' : book.author;
+    final author = book.author.isEmpty ? '未知作者' : book.author;
     final description = book.description?.trim();
-    final readLabel = hasProgress ? 'Continue reading' : 'Start reading';
+    final readLabel = hasProgress ? '继续阅读' : '开始阅读';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Book details')),
+      appBar: AppBar(title: const Text('书籍详情')),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 760;
@@ -133,18 +133,15 @@ class _BookDetailsContent extends StatelessWidget {
             ),
             Chip(
               avatar: const Icon(Icons.format_list_numbered, size: 18),
-              label: Text('${book.chapterCount} chapters'),
+              label: Text('${book.chapterCount} 章'),
             ),
           ],
         ),
         const SizedBox(height: 28),
-        Text('Description', style: theme.textTheme.titleLarge),
+        Text('简介', style: theme.textTheme.titleLarge),
         const SizedBox(height: 10),
         if (descriptionText.isEmpty)
-          Text(
-            'No description is available for this book.',
-            style: theme.textTheme.bodyMedium,
-          )
+          Text('暂无可用简介。', style: theme.textTheme.bodyMedium)
         else ...[
           Text(
             descriptionText,
@@ -155,16 +152,16 @@ class _BookDetailsContent extends StatelessWidget {
           if (descriptionText.length > 300)
             TextButton(
               onPressed: onDescriptionExpansionChanged,
-              child: Text(isDescriptionExpanded ? 'Show less' : 'Show more'),
+              child: Text(isDescriptionExpanded ? '收起' : '展开全部'),
             ),
         ],
         const SizedBox(height: 28),
-        Text('Reading progress', style: theme.textTheme.titleLarge),
+        Text('阅读进度', style: theme.textTheme.titleLarge),
         const SizedBox(height: 12),
         LinearProgressIndicator(value: book.progress),
         const SizedBox(height: 8),
         Text(
-          '${(book.progress * 100).round()}% complete',
+          '已读 ${(book.progress * 100).round()}%',
           style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(height: 32),

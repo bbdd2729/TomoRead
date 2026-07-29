@@ -907,16 +907,14 @@ class _MobileReaderTocDrawer extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          author == null || author.isEmpty
-                              ? 'Unknown author'
-                              : author,
+                          author == null || author.isEmpty ? '未知作者' : author,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '$chapterCount chapters',
+                          '$chapterCount 章',
                           style: Theme.of(context).textTheme.labelMedium,
                         ),
                       ],
@@ -924,7 +922,7 @@ class _MobileReaderTocDrawer extends StatelessWidget {
                   ),
                   IconButton(
                     key: const Key('reader-mobile-toc-close'),
-                    tooltip: 'Close directory',
+                    tooltip: '关闭目录',
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),
                   ),
@@ -934,7 +932,7 @@ class _MobileReaderTocDrawer extends StatelessWidget {
             const Divider(height: 1),
             Expanded(
               child: toc.isEmpty
-                  ? const Center(child: Text('No table of contents available.'))
+                  ? const Center(child: Text('暂无可用目录。'))
                   : ListView(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       children: [
@@ -1035,12 +1033,12 @@ class _MobileReaderSideDrawer extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Bookmarks and notes',
+                    '书签与笔记',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Close panel',
+                  tooltip: '关闭面板',
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close),
                 ),
