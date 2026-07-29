@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 enum ResizablePaneEdge { leading, trailing }
 
@@ -49,12 +50,23 @@ class _ResizablePaneState extends State<ResizablePane> {
 
   void _updateWidth(double delta) {
     final direction = widget.edge == ResizablePaneEdge.trailing ? 1 : -1;
-    final value = (_width + delta * direction)
+    _setWidth(_width + delta * direction);
+  }
+
+  bool _setWidth(double targetWidth) {
+    final value = targetWidth
         .clamp(widget.minWidth, widget.maxWidth)
         .toDouble();
-    if (value == _width) return;
+    if (value == _width) return false;
     setState(() => _width = value);
     widget.onWidthChanged(value);
+    return true;
+  }
+
+  void _changeWidthByKeyboard(double delta) {
+    if (_setWidth(_width + delta)) {
+      widget.onWidthChangeEnd?.call(_width);
+    }
   }
 
   void _resetWidth() {
@@ -77,6 +89,9 @@ class _ResizablePaneState extends State<ResizablePane> {
         widget.onWidthChangeEnd?.call(_width);
       },
       onDoubleTap: _resetWidth,
+      onIncrease: () => _changeWidthByKeyboard(8),
+      onDecrease: () => _changeWidthByKeyboard(-8),
+      value: _width,
     );
     final pane = SizedBox(width: _width, child: widget.child);
 
@@ -93,32 +108,75 @@ class _ResizeHandle extends StatelessWidget {
     required this.onDragUpdate,
     required this.onDragEnd,
     required this.onDoubleTap,
+    required this.onIncrease,
+    required this.onDecrease,
+    required this.value,
   });
 
   final VoidCallback onDragStart;
   final ValueChanged<double> onDragUpdate;
   final VoidCallback onDragEnd;
   final VoidCallback onDoubleTap;
+  final VoidCallback onIncrease;
+  final VoidCallback onDecrease;
+  final double value;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeLeftRight,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onDoubleTap: onDoubleTap,
-        onHorizontalDragStart: (_) => onDragStart(),
-        onHorizontalDragUpdate: (details) => onDragUpdate(details.delta.dx),
-        onHorizontalDragEnd: (_) => onDragEnd(),
-        onHorizontalDragCancel: onDragEnd,
-        child: SizedBox(
-          width: 8,
-          child: Center(
-            child: Container(width: 1, color: colorScheme.outlineVariant),
+    return Semantics(
+      label: 'Resize panel',
+      slider: true,
+      value: '${value.round()} pixels',
+      onIncrease: onIncrease,
+      onDecrease: onDecrease,
+      child: FocusableActionDetector(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.arrowRight):
+              _IncreasePanelSizeIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowLeft):
+              _DecreasePanelSizeIntent(),
+        },
+        actions: {
+          _IncreasePanelSizeIntent: CallbackAction<_IncreasePanelSizeIntent>(
+            onInvoke: (_) {
+              onIncrease();
+              return null;
+            },
+          ),
+          _DecreasePanelSizeIntent: CallbackAction<_DecreasePanelSizeIntent>(
+            onInvoke: (_) {
+              onDecrease();
+              return null;
+            },
+          ),
+        },
+        child: MouseRegion(
+          cursor: SystemMouseCursors.resizeLeftRight,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onDoubleTap: onDoubleTap,
+            onHorizontalDragStart: (_) => onDragStart(),
+            onHorizontalDragUpdate: (details) => onDragUpdate(details.delta.dx),
+            onHorizontalDragEnd: (_) => onDragEnd(),
+            onHorizontalDragCancel: onDragEnd,
+            child: SizedBox(
+              width: 8,
+              child: Center(
+                child: Container(width: 1, color: colorScheme.outlineVariant),
+              ),
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+class _IncreasePanelSizeIntent extends Intent {
+  const _IncreasePanelSizeIntent();
+}
+
+class _DecreasePanelSizeIntent extends Intent {
+  const _DecreasePanelSizeIntent();
 }

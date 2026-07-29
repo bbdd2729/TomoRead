@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -169,102 +170,139 @@ class AppShell extends HookConsumerWidget {
       }
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isDesktop = constraints.maxWidth >= _desktopBreakpoint;
-        final activeDestination = activeTab.destination;
-        final content = _WorkspaceContent(
-          destination: activeDestination,
-          appearance: appearance,
-          readingSettings: readingSettings,
-          readerBookId: activeTab.bookId,
-          readerFormat: activeTab.bookFormat,
-          readerTitle: activeTab.title,
-          onAppearanceChanged: onAppearanceChanged,
-          onReadingSettingsChanged: onReadingSettingsChanged,
-          onOpenReader: openReader,
-        );
-
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('TomoRead'),
-            actions: [
-              if (isDesktop)
-                IconButton(
-                  key: const Key('desktop-navigation-toggle'),
-                  tooltip: navigationCollapsed.value
-                      ? 'Show navigation'
-                      : 'Hide navigation',
-                  onPressed: toggleNavigation,
-                  icon: Icon(
-                    navigationCollapsed.value
-                        ? Icons.keyboard_double_arrow_right
-                        : Icons.keyboard_double_arrow_left,
-                  ),
-                ),
-              IconButton(
-                tooltip: '搜索',
-                key: const Key('global-search'),
-                onPressed: openLibrarySearch,
-                icon: const Icon(Icons.search),
-              ),
-              const SizedBox(width: 8),
-            ],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(48),
-              child: _WorkspaceTabBar(
-                tabs: tabs.value,
-                activeTabId: activeTabId.value,
-                onSelected: (tab) => activeTabId.value = tab.id,
-                onClosed: closeTab,
-              ),
-            ),
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _OpenLibrarySearchIntent(),
+        SingleActivator(LogicalKeyboardKey.keyB, control: true):
+            _ToggleNavigationIntent(),
+      },
+      child: Actions(
+        actions: {
+          _OpenLibrarySearchIntent: CallbackAction<_OpenLibrarySearchIntent>(
+            onInvoke: (_) {
+              openLibrarySearch();
+              return null;
+            },
           ),
-          drawer: isDesktop
-              ? null
-              : _AppNavigationDrawer(
-                  selected: activeDestination,
-                  onSelected: openDestination,
-                ),
-          body: isDesktop
-              ? Row(
-                  children: [
-                    if (navigationCollapsed.value)
-                      SizedBox(
-                        width: 72,
-                        child: _AppNavigationRail(
-                          extended: false,
-                          selected: activeDestination,
-                          onSelected: openDestination,
-                          onAddBook: onImportBooks,
-                        ),
-                      )
-                    else
-                      ResizablePane(
-                        width: navigationWidth.value,
-                        minWidth: _desktopNavigationMinWidth,
-                        maxWidth: _desktopNavigationMaxWidth,
-                        defaultWidth: 240,
-                        onWidthChanged: (value) =>
-                            navigationWidth.value = value,
-                        onWidthChangeEnd: (value) => onAppearanceChanged(
-                          appearance.copyWith(desktopNavigationWidth: value),
-                        ),
-                        child: _AppNavigationRail(
-                          extended: true,
-                          selected: activeDestination,
-                          onSelected: openDestination,
-                          onAddBook: onImportBooks,
+          _ToggleNavigationIntent: CallbackAction<_ToggleNavigationIntent>(
+            onInvoke: (_) {
+              toggleNavigation();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isDesktop = constraints.maxWidth >= _desktopBreakpoint;
+              final activeDestination = activeTab.destination;
+              final content = _WorkspaceContent(
+                destination: activeDestination,
+                appearance: appearance,
+                readingSettings: readingSettings,
+                readerBookId: activeTab.bookId,
+                readerFormat: activeTab.bookFormat,
+                readerTitle: activeTab.title,
+                onAppearanceChanged: onAppearanceChanged,
+                onReadingSettingsChanged: onReadingSettingsChanged,
+                onOpenReader: openReader,
+              );
+
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text('TomoRead'),
+                  actions: [
+                    if (isDesktop)
+                      IconButton(
+                        key: const Key('desktop-navigation-toggle'),
+                        tooltip: navigationCollapsed.value
+                            ? 'Show navigation'
+                            : 'Hide navigation',
+                        onPressed: toggleNavigation,
+                        icon: Icon(
+                          navigationCollapsed.value
+                              ? Icons.keyboard_double_arrow_right
+                              : Icons.keyboard_double_arrow_left,
                         ),
                       ),
-                    Expanded(child: content),
+                    IconButton(
+                      tooltip: '搜索',
+                      key: const Key('global-search'),
+                      onPressed: openLibrarySearch,
+                      icon: const Icon(Icons.search),
+                    ),
+                    const SizedBox(width: 8),
                   ],
-                )
-              : content,
-        );
-      },
+                  bottom: PreferredSize(
+                    preferredSize: const Size.fromHeight(48),
+                    child: _WorkspaceTabBar(
+                      tabs: tabs.value,
+                      activeTabId: activeTabId.value,
+                      onSelected: (tab) => activeTabId.value = tab.id,
+                      onClosed: closeTab,
+                    ),
+                  ),
+                ),
+                drawer: isDesktop
+                    ? null
+                    : _AppNavigationDrawer(
+                        selected: activeDestination,
+                        onSelected: openDestination,
+                      ),
+                body: isDesktop
+                    ? Row(
+                        children: [
+                          if (navigationCollapsed.value)
+                            SizedBox(
+                              width: 72,
+                              child: _AppNavigationRail(
+                                extended: false,
+                                selected: activeDestination,
+                                onSelected: openDestination,
+                                onAddBook: onImportBooks,
+                              ),
+                            )
+                          else
+                            ResizablePane(
+                              width: navigationWidth.value,
+                              minWidth: _desktopNavigationMinWidth,
+                              maxWidth: _desktopNavigationMaxWidth,
+                              defaultWidth: 240,
+                              onWidthChanged: (value) =>
+                                  navigationWidth.value = value,
+                              onWidthChangeEnd: (value) => onAppearanceChanged(
+                                appearance.copyWith(
+                                  desktopNavigationWidth: value,
+                                ),
+                              ),
+                              child: _AppNavigationRail(
+                                extended: true,
+                                selected: activeDestination,
+                                onSelected: openDestination,
+                                onAddBook: onImportBooks,
+                              ),
+                            ),
+                          Expanded(child: content),
+                        ],
+                      )
+                    : content,
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
+}
+
+class _OpenLibrarySearchIntent extends Intent {
+  const _OpenLibrarySearchIntent();
+}
+
+class _ToggleNavigationIntent extends Intent {
+  const _ToggleNavigationIntent();
 }
 
 class _WorkspaceContent extends StatelessWidget {
