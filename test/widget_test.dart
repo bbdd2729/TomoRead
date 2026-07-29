@@ -12,6 +12,7 @@ import 'package:tomoread/domain/models/epub_manifest.dart';
 import 'package:tomoread/domain/models/library_book.dart';
 import 'package:tomoread/domain/models/reading_settings.dart';
 import 'package:tomoread/domain/models/reading_annotation.dart';
+import 'package:tomoread/features/library/book_details_page.dart';
 import 'package:tomoread/features/reader/reader_workspace.dart';
 import 'package:tomoread/features/workspace/app_shell.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -286,7 +287,41 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    expect(find.byType(BookDetailsPage), findsOneWidget);
+    await tester.tap(find.byKey(const Key('book-detail-read')));
+    await tester.pump();
+
     expect(find.byType(ReaderWorkspace), findsOneWidget);
+  });
+
+  testWidgets('opens book details before the reader', (tester) async {
+    configureDesktop(tester);
+    final book = LibraryBook(
+      id: 'detail-book',
+      fileHash: 'detail-book',
+      title: 'Book Detail Title',
+      author: 'Detail Author',
+      filePath: 'C:/books/detail.epub',
+      progress: 0.35,
+      importedAt: DateTime(2026),
+      format: 'epub',
+      chapterCount: 12,
+      direction: ReadingDirection.ltr,
+      description: 'A book description for the detail page.',
+    );
+    await pumpShell(tester, books: [book]);
+
+    await tester.tap(find.byKey(const Key('book-detail-book')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BookDetailsPage), findsOneWidget);
+    expect(find.text('Book Detail Title'), findsWidgets);
+    expect(find.text('Detail Author'), findsOneWidget);
+    expect(
+      find.text('A book description for the detail page.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('book-detail-cover')), findsOneWidget);
   });
 
   testWidgets('removes a book after confirmation', (tester) async {

@@ -8,6 +8,7 @@ import '../../app/providers.dart';
 import '../../domain/models/library_book.dart';
 import '../../domain/models/reading_settings.dart';
 import '../chat/chat_page.dart';
+import '../library/book_details_page.dart';
 import '../library/library_home_page.dart';
 import '../notes/notes_page.dart';
 import '../reader/reader_workspace.dart';
@@ -134,6 +135,19 @@ class AppShell extends HookConsumerWidget {
       activeTabId.value = tabId;
     }
 
+    Future<void> openBookDetails(LibraryBook book) =>
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (routeContext) => BookDetailsPage(
+              book: book,
+              onOpenReader: (selectedBook) {
+                Navigator.of(routeContext).pop();
+                openReader(selectedBook);
+              },
+            ),
+          ),
+        );
+
     void closeTab(WorkspaceTab tab) {
       if (!tab.closable) return;
       final index = tabs.value.indexOf(tab);
@@ -161,7 +175,7 @@ class AppShell extends HookConsumerWidget {
           context: context,
           delegate: BookSearchDelegate(books),
         );
-        if (selected != null) openReader(selected);
+        if (selected != null) openBookDetails(selected);
       } catch (error) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(
@@ -207,7 +221,7 @@ class AppShell extends HookConsumerWidget {
                 readerTitle: activeTab.title,
                 onAppearanceChanged: onAppearanceChanged,
                 onReadingSettingsChanged: onReadingSettingsChanged,
-                onOpenReader: openReader,
+                onOpenBookDetails: openBookDetails,
               );
 
               return Scaffold(
@@ -315,7 +329,7 @@ class _WorkspaceContent extends StatelessWidget {
     required this.readerTitle,
     required this.onAppearanceChanged,
     required this.onReadingSettingsChanged,
-    required this.onOpenReader,
+    required this.onOpenBookDetails,
   });
 
   final AppDestination destination;
@@ -326,12 +340,14 @@ class _WorkspaceContent extends StatelessWidget {
   final String readerTitle;
   final ValueChanged<AppAppearance> onAppearanceChanged;
   final ValueChanged<ReadingSettings> onReadingSettingsChanged;
-  final ValueChanged<LibraryBook> onOpenReader;
+  final ValueChanged<LibraryBook> onOpenBookDetails;
 
   @override
   Widget build(BuildContext context) {
     return switch (destination) {
-      AppDestination.library => LibraryHomePage(onOpenReader: onOpenReader),
+      AppDestination.library => LibraryHomePage(
+        onOpenBookDetails: onOpenBookDetails,
+      ),
       AppDestination.reader =>
         readerFormat == 'pdf'
             ? PdfReaderWorkspace(

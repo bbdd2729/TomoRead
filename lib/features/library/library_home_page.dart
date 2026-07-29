@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -7,12 +5,13 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/services/book_import_service.dart';
 import '../../domain/models/library_book.dart';
+import '../../shared/widgets/book_cover.dart';
 import '../../shared/widgets/page_header.dart';
 
 class LibraryHomePage extends HookConsumerWidget {
-  const LibraryHomePage({super.key, required this.onOpenReader});
+  const LibraryHomePage({super.key, required this.onOpenBookDetails});
 
-  final ValueChanged<LibraryBook> onOpenReader;
+  final ValueChanged<LibraryBook> onOpenBookDetails;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -138,7 +137,7 @@ class LibraryHomePage extends HookConsumerWidget {
               else ...[
                 _ContinueReadingCard(
                   book: visibleBooks.first,
-                  onOpenReader: () => onOpenReader(visibleBooks.first),
+                  onOpenReader: () => onOpenBookDetails(visibleBooks.first),
                 ),
                 const SizedBox(height: 28),
                 Row(
@@ -169,7 +168,7 @@ class LibraryHomePage extends HookConsumerWidget {
                     itemCount: visibleBooks.length,
                     itemBuilder: (context, index) => _BookCard(
                       book: visibleBooks[index],
-                      onTap: () => onOpenReader(visibleBooks[index]),
+                      onTap: () => onOpenBookDetails(visibleBooks[index]),
                       isRemoving:
                           removingBookId.value == visibleBooks[index].id,
                       onDelete: () => removeBook(visibleBooks[index]),
@@ -183,7 +182,7 @@ class LibraryHomePage extends HookConsumerWidget {
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) => _BookListItem(
                       book: visibleBooks[index],
-                      onTap: () => onOpenReader(visibleBooks[index]),
+                      onTap: () => onOpenBookDetails(visibleBooks[index]),
                       isRemoving:
                           removingBookId.value == visibleBooks[index].id,
                       onDelete: () => removeBook(visibleBooks[index]),
@@ -420,7 +419,7 @@ class _ContinueReadingCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          SizedBox(width: 96, height: 132, child: _BookCover(book: book)),
+          SizedBox(width: 96, height: 132, child: BookCover(book: book)),
           const SizedBox(width: 20),
           Expanded(
             child: Column(
@@ -495,7 +494,10 @@ class _BookCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _BookCover(book: book),
+                  Hero(
+                    tag: bookCoverHeroTag(book),
+                    child: BookCover(book: book),
+                  ),
                   Positioned(
                     top: 4,
                     right: 4,
@@ -569,7 +571,14 @@ class _BookListItem extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            SizedBox(width: 52, height: 76, child: _BookCover(book: book)),
+            SizedBox(
+              width: 52,
+              height: 76,
+              child: Hero(
+                tag: bookCoverHeroTag(book),
+                child: BookCover(book: book),
+              ),
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -627,39 +636,6 @@ class _BookListItem extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    ),
-  );
-}
-
-class _BookCover extends StatelessWidget {
-  const _BookCover({required this.book});
-
-  final LibraryBook book;
-
-  @override
-  Widget build(BuildContext context) {
-    final coverPath = book.coverPath;
-    if (coverPath != null && File(coverPath).existsSync()) {
-      return Image.file(
-        File(coverPath),
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _fallback(context),
-      );
-    }
-    return _fallback(context);
-  }
-
-  Widget _fallback(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.secondaryContainer,
-    ),
-    child: Center(
-      child: Icon(
-        book.format == 'pdf'
-            ? Icons.picture_as_pdf_outlined
-            : Icons.menu_book_outlined,
-        size: 44,
       ),
     ),
   );
