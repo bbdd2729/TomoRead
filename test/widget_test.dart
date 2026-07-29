@@ -268,12 +268,11 @@ void main() {
     await pumpShell(tester, books: [book]);
 
     await tester.tap(find.byTooltip('更多操作'));
-    await tester.pump();
-    await tester.tap(find.text('删除书籍'));
-    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, '删除书籍'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
-    await tester.pump();
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('book-book-delete')), findsNothing);
   });
