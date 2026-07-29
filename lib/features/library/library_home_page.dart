@@ -138,7 +138,19 @@ class LibraryHomePage extends HookConsumerWidget {
                   onOpenReader: () => onOpenReader(visibleBooks.first),
                 ),
                 const SizedBox(height: 28),
-                Text('全部书籍', style: Theme.of(context).textTheme.headlineSmall),
+                Row(
+                  children: [
+                    Text(
+                      '全部书籍',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${visibleBooks.length} 本',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 GridView.builder(
                   shrinkWrap: true,
@@ -233,49 +245,56 @@ class _LibraryControls extends StatelessWidget {
   final ValueChanged<_LibrarySort> onSortChanged;
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 12,
-    runSpacing: 12,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    children: [
-      SizedBox(
-        width: 320,
-        child: TextField(
-          key: const Key('library-search'),
-          onChanged: onQueryChanged,
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
-            hintText: '搜索书名或作者',
-            border: OutlineInputBorder(),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final searchWidth = constraints.maxWidth < 520
+          ? constraints.maxWidth
+          : 320.0;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: searchWidth,
+            child: TextField(
+              key: const Key('library-search'),
+              onChanged: onQueryChanged,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: '搜索书名或作者',
+                border: OutlineInputBorder(),
+              ),
+            ),
           ),
-        ),
-      ),
-      SegmentedButton<_LibraryFormatFilter>(
-        segments: [
-          for (final filter in _LibraryFormatFilter.values)
-            ButtonSegment(value: filter, label: Text(filter.label)),
+          SegmentedButton<_LibraryFormatFilter>(
+            segments: [
+              for (final filter in _LibraryFormatFilter.values)
+                ButtonSegment(value: filter, label: Text(filter.label)),
+            ],
+            selected: {formatFilter},
+            onSelectionChanged: (selection) => onFormatChanged(selection.first),
+          ),
+          SizedBox(
+            width: 152,
+            child: DropdownButtonFormField<_LibrarySort>(
+              initialValue: sort,
+              decoration: const InputDecoration(
+                labelText: '排序',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final option in _LibrarySort.values)
+                  DropdownMenuItem(value: option, child: Text(option.label)),
+              ],
+              onChanged: (value) {
+                if (value != null) onSortChanged(value);
+              },
+            ),
+          ),
         ],
-        selected: {formatFilter},
-        onSelectionChanged: (selection) => onFormatChanged(selection.first),
-      ),
-      SizedBox(
-        width: 152,
-        child: DropdownButtonFormField<_LibrarySort>(
-          initialValue: sort,
-          decoration: const InputDecoration(
-            labelText: '排序',
-            border: OutlineInputBorder(),
-          ),
-          items: [
-            for (final option in _LibrarySort.values)
-              DropdownMenuItem(value: option, child: Text(option.label)),
-          ],
-          onChanged: (value) {
-            if (value != null) onSortChanged(value);
-          },
-        ),
-      ),
-    ],
+      );
+    },
   );
 }
 
@@ -438,9 +457,13 @@ class _BookCard extends StatelessWidget {
                     child: Material(
                       color: Theme.of(context).colorScheme.surfaceContainer,
                       shape: const CircleBorder(),
-                      child: IconButton(
-                        tooltip: '删除书籍',
-                        onPressed: isRemoving ? null : onDelete,
+                      child: PopupMenuButton<String>(
+                        tooltip: '更多操作',
+                        enabled: !isRemoving,
+                        onSelected: (_) => onDelete(),
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 'delete', child: Text('删除书籍')),
+                        ],
                         icon: isRemoving
                             ? const SizedBox(
                                 width: 18,
@@ -449,7 +472,7 @@ class _BookCard extends StatelessWidget {
                                   strokeWidth: 2,
                                 ),
                               )
-                            : const Icon(Icons.delete_outline),
+                            : const Icon(Icons.more_vert),
                       ),
                     ),
                   ),

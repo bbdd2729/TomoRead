@@ -18,26 +18,46 @@ class PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      runSpacing: 16,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.displaySmall),
-            const SizedBox(height: 6),
-            Text(subtitle, style: Theme.of(context).textTheme.bodyLarge),
-          ],
-        ),
-        if (actionLabel != null && actionIcon != null)
-          FilledButton.icon(
-            onPressed: onAction,
-            icon: Icon(actionIcon),
-            label: Text(actionLabel!),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 600;
+        final titleBlock = ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 6),
+              Text(subtitle, style: Theme.of(context).textTheme.bodyLarge),
+            ],
           ),
-      ],
+        );
+        final action = actionLabel != null && actionIcon != null
+            ? FilledButton.icon(
+                onPressed: onAction,
+                icon: Icon(actionIcon),
+                label: Text(actionLabel!),
+              )
+            : null;
+
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              titleBlock,
+              if (action != null) ...[const SizedBox(height: 16), action],
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: titleBlock),
+            if (action != null) ...[const SizedBox(width: 24), action],
+          ],
+        );
+      },
     );
   }
 }

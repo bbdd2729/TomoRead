@@ -267,7 +267,9 @@ void main() {
     );
     await pumpShell(tester, books: [book]);
 
-    await tester.tap(find.byTooltip('删除书籍'));
+    await tester.tap(find.byTooltip('更多操作'));
+    await tester.pump();
+    await tester.tap(find.text('删除书籍'));
     await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pump();
