@@ -46,6 +46,8 @@ class SettingsRepository {
         'uiFont': appearance.uiFont.name,
         'desktopNavigationWidth': appearance.desktopNavigationWidth,
         'desktopNavigationCollapsed': appearance.desktopNavigationCollapsed,
+        'readerTocWidth': appearance.readerTocWidth,
+        'readerSidePanelWidth': appearance.readerSidePanelWidth,
       }),
     );
   }
@@ -107,6 +109,13 @@ class SettingsRepository {
               .clamp(220, 320)
               .toDouble(),
       desktopNavigationCollapsed: value['desktopNavigationCollapsed'] == true,
+      readerTocWidth: ((value['readerTocWidth'] as num?)?.toDouble() ?? 280)
+          .clamp(240, 480)
+          .toDouble(),
+      readerSidePanelWidth:
+          ((value['readerSidePanelWidth'] as num?)?.toDouble() ?? 320)
+              .clamp(280, 520)
+              .toDouble(),
     );
   }
 

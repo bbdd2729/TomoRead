@@ -30,6 +30,8 @@ class AppAppearance {
     this.uiFont = FontChoice.system,
     this.desktopNavigationWidth = 240,
     this.desktopNavigationCollapsed = false,
+    this.readerTocWidth = 280,
+    this.readerSidePanelWidth = 320,
   });
 
   final ThemeMode mode;
@@ -38,6 +40,8 @@ class AppAppearance {
   final FontChoice uiFont;
   final double desktopNavigationWidth;
   final bool desktopNavigationCollapsed;
+  final double readerTocWidth;
+  final double readerSidePanelWidth;
 
   AppAppearance copyWith({
     ThemeMode? mode,
@@ -46,6 +50,8 @@ class AppAppearance {
     FontChoice? uiFont,
     double? desktopNavigationWidth,
     bool? desktopNavigationCollapsed,
+    double? readerTocWidth,
+    double? readerSidePanelWidth,
   }) {
     return AppAppearance(
       mode: mode ?? this.mode,
@@ -56,6 +62,8 @@ class AppAppearance {
           desktopNavigationWidth ?? this.desktopNavigationWidth,
       desktopNavigationCollapsed:
           desktopNavigationCollapsed ?? this.desktopNavigationCollapsed,
+      readerTocWidth: readerTocWidth ?? this.readerTocWidth,
+      readerSidePanelWidth: readerSidePanelWidth ?? this.readerSidePanelWidth,
     );
   }
 }

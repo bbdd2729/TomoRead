@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../app/appearance.dart';
 import '../../app/providers.dart';
 import '../../domain/models/bookmark.dart';
 import '../../domain/models/epub_manifest.dart';
@@ -13,6 +14,7 @@ import '../../domain/models/reader_chapter.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
+import '../../shared/widgets/resizable_pane.dart';
 import 'epub_webview.dart';
 import 'reader_search_dialog.dart';
 
@@ -46,8 +48,13 @@ class ReaderWorkspace extends HookConsumerWidget {
     final readerBook = ref.watch(readerBookProvider(bookId));
     final manifest = ref.watch(readerManifestProvider(bookId));
     final annotationsState = ref.watch(annotationsForBookProvider(bookId));
+    final appearance =
+        ref.watch(appSettingsProvider).value?.appearance ??
+        const AppAppearance();
     final tocVisible = useState(true);
     final sidePanelVisible = useState(true);
+    final tocPanelWidth = useState(appearance.readerTocWidth);
+    final sidePanelWidth = useState(appearance.readerSidePanelWidth);
     final showBookmarks = useState(false);
     final chapterIndex = useState(0);
     final scrollRatio = useState(0.0);
@@ -84,6 +91,12 @@ class ReaderWorkspace extends HookConsumerWidget {
     final isBookmarked = bookmarkItems.any(
       (bookmark) => bookmark.locator == currentLocator,
     );
+
+    useEffect(() {
+      tocPanelWidth.value = appearance.readerTocWidth;
+      sidePanelWidth.value = appearance.readerSidePanelWidth;
+      return null;
+    }, [appearance.readerTocWidth, appearance.readerSidePanelWidth]);
 
     useEffect(() {
       final savedIndex = readerBook.value?.chapterIndex;
@@ -322,9 +335,17 @@ class ReaderWorkspace extends HookConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final canShowPanels = constraints.maxWidth >= 980;
-        final showToc = canShowPanels && tocVisible.value;
-        final showSidePanel = canShowPanels && sidePanelVisible.value;
+        const contentMinWidth = 440.0;
+        final showToc =
+            tocVisible.value &&
+            constraints.maxWidth >= contentMinWidth + tocPanelWidth.value + 8;
+        final showSidePanel =
+            sidePanelVisible.value &&
+            constraints.maxWidth >=
+                contentMinWidth +
+                    sidePanelWidth.value +
+                    8 +
+                    (showToc ? tocPanelWidth.value + 8 : 0);
         return Column(
           children: [
             _ReaderToolbar(
@@ -349,8 +370,18 @@ class ReaderWorkspace extends HookConsumerWidget {
                       child: Row(
                         children: [
                           if (showToc)
-                            SizedBox(
-                              width: 260,
+                            ResizablePane(
+                              width: tocPanelWidth.value,
+                              minWidth: 240,
+                              maxWidth: 480,
+                              defaultWidth: 280,
+                              onWidthChanged: (value) =>
+                                  tocPanelWidth.value = value,
+                              onWidthChangeEnd: (value) => ref
+                                  .read(appSettingsProvider.notifier)
+                                  .updateAppearance(
+                                    appearance.copyWith(readerTocWidth: value),
+                                  ),
                               child: _ReaderTocPanel(
                                 toc: manifest.value?.toc ?? const [],
                                 activeChapterIndex: activeChapterIndex,
@@ -367,7 +398,6 @@ class ReaderWorkspace extends HookConsumerWidget {
                                 },
                               ),
                             ),
-                          if (showToc) const VerticalDivider(width: 1),
                           Expanded(
                             child: _ReaderArticle(
                               settings: settings,
@@ -415,10 +445,22 @@ class ReaderWorkspace extends HookConsumerWidget {
                               },
                             ),
                           ),
-                          if (showSidePanel) const VerticalDivider(width: 1),
                           if (showSidePanel)
-                            SizedBox(
-                              width: 280,
+                            ResizablePane(
+                              edge: ResizablePaneEdge.leading,
+                              width: sidePanelWidth.value,
+                              minWidth: 280,
+                              maxWidth: 520,
+                              defaultWidth: 320,
+                              onWidthChanged: (value) =>
+                                  sidePanelWidth.value = value,
+                              onWidthChangeEnd: (value) => ref
+                                  .read(appSettingsProvider.notifier)
+                                  .updateAppearance(
+                                    appearance.copyWith(
+                                      readerSidePanelWidth: value,
+                                    ),
+                                  ),
                               child: _ReaderSidePanel(
                                 showBookmarks: showBookmarks.value,
                                 bookmarks: bookmarkItems,
