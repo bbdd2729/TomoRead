@@ -177,4 +177,28 @@ void main() {
     expect(updated?.progress, 0.75);
     expect(updated?.locator, '0:0.75000');
   });
+
+  test('stores imported PDF books without an EPUB manifest', () async {
+    final pdf = LibraryBook(
+      id: 'pdf-a',
+      fileHash: 'pdf-a',
+      title: 'PDF book',
+      author: '',
+      filePath: 'C:/books/pdf-a.pdf',
+      progress: 0.25,
+      importedAt: DateTime(2026),
+      format: 'pdf',
+      chapterCount: 24,
+      chapterIndex: 5,
+      direction: ReadingDirection.ltr,
+    );
+
+    await books.saveImportedPdfBook(pdf);
+
+    final stored = await books.findById('pdf-a');
+    expect(stored?.format, 'pdf');
+    expect(stored?.chapterCount, 24);
+    expect(stored?.chapterIndex, 5);
+    expect(await books.loadManifest('pdf-a'), isNull);
+  });
 }

@@ -110,7 +110,7 @@ class LibraryBooksNotifier extends AsyncNotifier<List<LibraryBook>> {
   Future<List<BookImportResult>> importFromPicker() async {
     final results = await ref
         .read(bookImportServiceProvider)
-        .pickAndImportEpubs();
+        .pickAndImportBooks();
     if (results.any((result) => result.status == BookImportStatus.imported)) {
       state = AsyncData(await ref.read(bookRepositoryProvider).listBooks());
     }

@@ -9,6 +9,7 @@ import '../chat/chat_page.dart';
 import '../library/library_home_page.dart';
 import '../notes/notes_page.dart';
 import '../reader/reader_workspace.dart';
+import '../reader/pdf_reader_workspace.dart';
 import '../settings/settings_page.dart';
 import '../skills/skills_page.dart';
 import '../statistics/statistics_page.dart';
@@ -29,6 +30,7 @@ class WorkspaceTab {
     required this.title,
     required this.destination,
     this.bookId,
+    this.bookFormat,
     this.closable = false,
   });
 
@@ -36,6 +38,7 @@ class WorkspaceTab {
   final String title;
   final AppDestination destination;
   final String? bookId;
+  final String? bookFormat;
   final bool closable;
 }
 
@@ -103,6 +106,7 @@ class AppShell extends HookConsumerWidget {
             title: book.title,
             destination: AppDestination.reader,
             bookId: book.id,
+            bookFormat: book.format,
             closable: true,
           ),
         ];
@@ -136,6 +140,7 @@ class AppShell extends HookConsumerWidget {
           appearance: appearance,
           readingSettings: readingSettings,
           readerBookId: activeTab.bookId,
+          readerFormat: activeTab.bookFormat,
           readerTitle: activeTab.title,
           onAppearanceChanged: onAppearanceChanged,
           onReadingSettingsChanged: onReadingSettingsChanged,
@@ -195,6 +200,7 @@ class _WorkspaceContent extends StatelessWidget {
     required this.appearance,
     required this.readingSettings,
     required this.readerBookId,
+    required this.readerFormat,
     required this.readerTitle,
     required this.onAppearanceChanged,
     required this.onReadingSettingsChanged,
@@ -206,6 +212,7 @@ class _WorkspaceContent extends StatelessWidget {
   final AppAppearance appearance;
   final ReadingSettings readingSettings;
   final String? readerBookId;
+  final String? readerFormat;
   final String readerTitle;
   final ValueChanged<AppAppearance> onAppearanceChanged;
   final ValueChanged<ReadingSettings> onReadingSettingsChanged;
@@ -216,11 +223,14 @@ class _WorkspaceContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return switch (destination) {
       AppDestination.library => LibraryHomePage(onOpenReader: onOpenReader),
-      AppDestination.reader => ReaderWorkspace(
-        bookId: readerBookId ?? 'demo-reading-art',
-        title: readerTitle,
-        readingSettings: readingSettings,
-      ),
+      AppDestination.reader =>
+        readerFormat == 'pdf'
+            ? PdfReaderWorkspace(bookId: readerBookId ?? '', title: readerTitle)
+            : ReaderWorkspace(
+                bookId: readerBookId ?? 'demo-reading-art',
+                title: readerTitle,
+                readingSettings: readingSettings,
+              ),
       AppDestination.chat => const ChatPage(),
       AppDestination.notes => const NotesPage(),
       AppDestination.skills => const SkillsPage(),

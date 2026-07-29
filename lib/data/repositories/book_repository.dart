@@ -89,6 +89,27 @@ class BookRepository {
     });
   }
 
+  Future<void> saveImportedPdfBook(LibraryBook book) async {
+    final database = await _database.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await database.insert('books', {
+      'id': book.id,
+      'file_hash': book.fileHash,
+      'title': book.title,
+      'author': book.author,
+      'file_path': book.filePath,
+      'cover_path': book.coverPath,
+      'format': book.format,
+      'description': book.description,
+      'progress': book.progress,
+      'chapter_index': book.chapterIndex,
+      'chapter_count': book.chapterCount,
+      'read_direction': book.direction.name,
+      'created_at': book.importedAt.millisecondsSinceEpoch,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   Future<EpubManifest?> loadManifest(String bookId) async {
     final database = await _database.database;
     final rows = await database.query(

@@ -57,8 +57,8 @@ class LibraryHomePage extends HookConsumerWidget {
         children: [
           PageHeader(
             title: '书库',
-            subtitle: '管理并继续阅读你的 EPUB 书籍。',
-            actionLabel: isImporting.value ? '正在导入' : '导入 EPUB',
+            subtitle: '管理并继续阅读你的 EPUB 与 PDF 书籍。',
+            actionLabel: isImporting.value ? '正在导入' : '导入书籍',
             actionIcon: Icons.add,
             onAction: isImporting.value ? null : importBooks,
           ),
@@ -111,12 +111,12 @@ class _EmptyLibrary extends StatelessWidget {
           const SizedBox(height: 16),
           Text('还没有书籍', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
-          const Text('导入 EPUB 后会在这里显示。'),
+          const Text('导入 EPUB 或 PDF 后会在这里显示。'),
           const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: onImport,
             icon: const Icon(Icons.add),
-            label: const Text('导入 EPUB'),
+            label: const Text('导入书籍'),
           ),
         ],
       ),
@@ -172,6 +172,11 @@ class _ContinueReadingCard extends StatelessWidget {
                   book.author.isEmpty ? '未知作者' : book.author,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  book.format.toUpperCase(),
+                  style: Theme.of(context).textTheme.labelSmall,
                 ),
                 const SizedBox(height: 16),
                 LinearProgressIndicator(value: book.progress),
@@ -263,6 +268,13 @@ class _BookCover extends StatelessWidget {
     decoration: BoxDecoration(
       color: Theme.of(context).colorScheme.secondaryContainer,
     ),
-    child: const Center(child: Icon(Icons.menu_book_outlined, size: 44)),
+    child: Center(
+      child: Icon(
+        book.format == 'pdf'
+            ? Icons.picture_as_pdf_outlined
+            : Icons.menu_book_outlined,
+        size: 44,
+      ),
+    ),
   );
 }

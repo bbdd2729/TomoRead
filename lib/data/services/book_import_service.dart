@@ -4,8 +4,10 @@ import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:pdfrx/pdfrx.dart';
 
 import '../../domain/models/library_book.dart';
+import '../../domain/models/epub_manifest.dart';
 import '../repositories/book_repository.dart';
 import 'epub_parser.dart';
 
@@ -57,19 +59,31 @@ class BookImportService {
   final EpubParser parser;
   final Future<Directory> Function()? libraryRootProvider;
 
-  Future<List<BookImportResult>> pickAndImportEpubs() async {
+  Future<List<BookImportResult>> pickAndImportBooks() async {
     final selection = await FilePicker.pickFiles(
       allowMultiple: true,
       type: FileType.custom,
-      allowedExtensions: const ['epub'],
+      allowedExtensions: const ['epub', 'pdf'],
     );
     if (selection == null) return const [];
     return Future.wait(
       selection.files
           .map((file) => file.path)
           .whereType<String>()
-          .map(importEpubFile),
+          .map(importBookFile),
     );
+  }
+
+  Future<List<BookImportResult>> pickAndImportEpubs() => pickAndImportBooks();
+
+  Future<BookImportResult> importBookFile(String sourcePath) {
+    return switch (path.extension(sourcePath).toLowerCase()) {
+      '.epub' => importEpubFile(sourcePath),
+      '.pdf' => importPdfFile(sourcePath),
+      _ => Future.value(
+        BookImportResult.failed(sourcePath, '仅支持导入 EPUB 或 PDF 文件'),
+      ),
+    };
   }
 
   Future<BookImportResult> importEpubFile(String sourcePath) async {
@@ -136,6 +150,58 @@ class BookImportService {
     } catch (error) {
       if (await temporaryFile.exists()) await temporaryFile.delete();
       return BookImportResult.failed(sourcePath, '导入失败：$error');
+    }
+  }
+
+  Future<BookImportResult> importPdfFile(String sourcePath) async {
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      return BookImportResult.failed(sourcePath, '找不到选择的文件');
+    }
+    if (path.extension(sourcePath).toLowerCase() != '.pdf') {
+      return BookImportResult.failed(sourcePath, '仅支持导入 PDF 文件');
+    }
+
+    final directories = await _libraryDirectories();
+    final temporaryFile = File(
+      path.join(
+        directories.imports.path,
+        '${DateTime.now().microsecondsSinceEpoch}.pdf',
+      ),
+    );
+    try {
+      final hash = await _copyAndHash(source, temporaryFile);
+      final duplicate = await repository.findByHash(hash);
+      if (duplicate != null) {
+        await temporaryFile.delete();
+        return BookImportResult.duplicate(sourcePath, duplicate);
+      }
+      final targetFile = File(path.join(directories.books.path, '$hash.pdf'));
+      if (await targetFile.exists()) {
+        await temporaryFile.delete();
+      } else {
+        await temporaryFile.rename(targetFile.path);
+      }
+      final document = await PdfDocument.openFile(targetFile.path);
+      final pageCount = document.pages.length;
+      await document.dispose();
+      final book = LibraryBook(
+        id: hash,
+        fileHash: hash,
+        title: path.basenameWithoutExtension(sourcePath),
+        author: '',
+        filePath: targetFile.path,
+        progress: 0,
+        importedAt: DateTime.now(),
+        format: 'pdf',
+        chapterCount: pageCount,
+        direction: ReadingDirection.ltr,
+      );
+      await repository.saveImportedPdfBook(book);
+      return BookImportResult.imported(sourcePath, book);
+    } catch (error) {
+      if (await temporaryFile.exists()) await temporaryFile.delete();
+      return BookImportResult.failed(sourcePath, 'PDF 导入失败：$error');
     }
   }
 
