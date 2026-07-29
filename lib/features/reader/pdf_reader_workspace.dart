@@ -6,6 +6,7 @@ import 'package:pdfrx/pdfrx.dart';
 import '../../app/providers.dart';
 import '../../domain/models/bookmark.dart';
 import 'pdf_bookmarks_dialog.dart';
+import 'pdf_navigation_dialog.dart';
 import 'pdf_search_dialog.dart';
 
 class PdfReaderWorkspace extends HookConsumerWidget {
@@ -25,10 +26,29 @@ class PdfReaderWorkspace extends HookConsumerWidget {
     final currentPage = useState(1);
     final viewerController = useMemoized(PdfViewerController.new);
     final textSearcher = useState<PdfTextSearcher?>(null);
+    final pdfDocument = useState<PdfDocument?>(null);
+    final outline = useState(const <PdfOutlineNode>[]);
+    final outlineLoading = useState(false);
+    final outlineError = useState<Object?>(null);
 
     useEffect(() {
       return () => textSearcher.value?.dispose();
     }, [viewerController]);
+
+    Future<void> loadOutline(PdfDocument document) async {
+      outlineLoading.value = true;
+      outlineError.value = null;
+      try {
+        final loadedOutline = await document.loadOutline();
+        if (!context.mounted) return;
+        outline.value = loadedOutline;
+      } catch (error) {
+        if (!context.mounted) return;
+        outlineError.value = error;
+      } finally {
+        if (context.mounted) outlineLoading.value = false;
+      }
+    }
 
     return bookState.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -101,6 +121,24 @@ class PdfReaderWorkspace extends HookConsumerWidget {
           );
         }
 
+        Future<void> openNavigation() async {
+          final document = pdfDocument.value;
+          if (document == null) return;
+          final destination = await showDialog<PdfDest>(
+            context: context,
+            builder: (context) => PdfNavigationDialog(
+              document: document,
+              outline: outline.value,
+              isOutlineLoading: outlineLoading.value,
+              outlineError: outlineError.value,
+              currentPage: displayedPage,
+            ),
+          );
+          if (destination != null && viewerController.isReady) {
+            await viewerController.goToDest(destination);
+          }
+        }
+
         return Column(
           children: [
             Material(
@@ -130,6 +168,13 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                       icon: const Icon(Icons.format_list_bulleted),
                     ),
                     IconButton(
+                      tooltip: '目录和页面导航',
+                      onPressed: pdfDocument.value == null
+                          ? null
+                          : openNavigation,
+                      icon: const Icon(Icons.menu_book_outlined),
+                    ),
+                    IconButton(
                       tooltip: '搜索 PDF',
                       onPressed: textSearcher.value == null ? null : openSearch,
                       icon: const Icon(Icons.search),
@@ -149,6 +194,10 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                   onViewerReady: (_, controller) {
                     if (textSearcher.value == null) {
                       textSearcher.value = PdfTextSearcher(controller);
+                    }
+                    if (pdfDocument.value == null) {
+                      pdfDocument.value = controller.document;
+                      loadOutline(controller.document);
                     }
                   },
                   pagePaintCallbacks: textSearcher.value == null
