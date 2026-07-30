@@ -14,18 +14,18 @@ extension ThemeSeedX on ThemeSeed {
   };
 
   Color get color => switch (this) {
-    ThemeSeed.blue => Colors.blue,
-    ThemeSeed.teal => Colors.teal,
-    ThemeSeed.green => Colors.green,
-    ThemeSeed.orange => Colors.orange,
-    ThemeSeed.purple => Colors.deepPurple,
+    ThemeSeed.blue => const Color(0xFF216A83),
+    ThemeSeed.teal => const Color(0xFF006C67),
+    ThemeSeed.green => const Color(0xFF3F6B45),
+    ThemeSeed.orange => const Color(0xFFA24A1E),
+    ThemeSeed.purple => const Color(0xFF76518A),
   };
 }
 
 class AppAppearance {
   const AppAppearance({
     this.mode = ThemeMode.system,
-    this.seed = ThemeSeed.blue,
+    this.seed = ThemeSeed.teal,
     this.textScale = 1,
     this.uiFont = FontChoice.system,
     this.desktopNavigationWidth = 240,
