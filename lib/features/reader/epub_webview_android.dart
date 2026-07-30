@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -44,37 +45,65 @@ class AndroidEpubWebView extends HookConsumerWidget {
     final extractedDirectory = ref.watch(
       epubExtractedDirectoryProvider(bookId),
     );
+    final readerSession = ref.watch(epubReaderSessionProvider(bookId));
     final controller = useMemoized(_createController);
     final error = useState<Object?>(null);
     final style = _styleScript(context, settings, direction);
+    final runtimeScript = _runtimeOpenScript(
+      context,
+      settings,
+      href,
+      initialScrollRatio,
+    );
 
-    useEffect(() {
-      final directory = extractedDirectory.value;
-      if (directory == null) return null;
-      final file = File(path.join(directory, _pathWithoutFragment(href)));
-      Future<void> loadChapter() async {
-        if (!await file.exists()) {
-          error.value = StateError('EPUB chapter is unavailable: $href');
-          return;
+    useEffect(
+      () {
+        final useRuntime = settings.layoutMode == ReaderLayoutMode.paginated;
+        final directory = useRuntime
+            ? readerSession.value?.directoryPath
+            : extractedDirectory.value;
+        if (directory == null) return null;
+        final file = useRuntime
+            ? File(path.join(directory, '.tomoread-reader', 'index.html'))
+            : File(path.join(directory, _pathWithoutFragment(href)));
+        Future<void> loadChapter() async {
+          if (!await file.exists()) {
+            error.value = StateError('EPUB chapter is unavailable: $href');
+            return;
+          }
+          try {
+            await controller.loadFile(file.path);
+            if (useRuntime) {
+              await controller.runJavaScript(runtimeScript);
+            }
+          } catch (exception) {
+            error.value = exception;
+          }
         }
-        try {
-          await controller.loadFile(file.path);
-        } catch (exception) {
-          error.value = exception;
-        }
-      }
 
-      unawaited(loadChapter());
-      return null;
-    }, [controller, extractedDirectory.value, href]);
+        unawaited(loadChapter());
+        return null;
+      },
+      [
+        controller,
+        extractedDirectory.value,
+        readerSession.value?.directoryPath,
+        href,
+        settings.layoutMode,
+      ],
+    );
 
     useEffect(() {
       Future<void> applyStyleAndPosition() async {
         try {
-          await controller.runJavaScript(style);
-          await controller.runJavaScript(
-            _restoreScript(initialScrollRatio, initialAnchor),
-          );
+          if (settings.layoutMode == ReaderLayoutMode.paginated) {
+            await controller.runJavaScript(runtimeScript);
+          } else {
+            await controller.runJavaScript(style);
+            await controller.runJavaScript(
+              _restoreScript(initialScrollRatio, initialAnchor),
+            );
+          }
         } catch (_) {
           // The Android WebView may still be loading the next chapter.
         }
@@ -84,17 +113,21 @@ class AndroidEpubWebView extends HookConsumerWidget {
       return null;
     }, [controller, href, style, initialAnchor, restoreRevision]);
 
-    if (extractedDirectory.hasError || error.value != null) {
+    if (extractedDirectory.hasError ||
+        readerSession.hasError ||
+        error.value != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            'Unable to start EPUB renderer: ${error.value ?? extractedDirectory.error}',
+            'Unable to start EPUB renderer: ${error.value ?? extractedDirectory.error ?? readerSession.error}',
           ),
         ),
       );
     }
-    if (extractedDirectory.isLoading) {
+    if (extractedDirectory.isLoading ||
+        (settings.layoutMode == ReaderLayoutMode.paginated &&
+            readerSession.isLoading)) {
       return const Center(child: CircularProgressIndicator());
     }
     return WebViewWidget(controller: controller);
@@ -124,6 +157,31 @@ class AndroidEpubWebView extends HookConsumerWidget {
       ..addJavaScriptChannel(
         'TomoRead',
         onMessageReceived: (message) {
+          Object? runtimeMessage;
+          try {
+            runtimeMessage = jsonDecode(message.message);
+          } on FormatException {
+            // Legacy scroll and tap messages use a compact pipe format.
+          }
+          if (runtimeMessage is Map<String, dynamic> &&
+              runtimeMessage['type'] == 'runtimeRelocate') {
+            final href = runtimeMessage['href'];
+            final ratio = runtimeMessage['ratio'];
+            if (href is String && ratio is num) {
+              onScrollPositionChanged(
+                href,
+                ratio.toDouble(),
+                runtimeMessage['anchor'] as String?,
+                runtimeMessage['cfi'] as String?,
+              );
+            }
+            return;
+          }
+          if (runtimeMessage is Map<String, dynamic> &&
+              runtimeMessage['type'] == 'readerControls') {
+            onToggleControls();
+            return;
+          }
           final parts = message.message.split('|');
           switch (parts.first) {
             case 'scroll':
@@ -141,6 +199,43 @@ class AndroidEpubWebView extends HookConsumerWidget {
   }
 
   String _pathWithoutFragment(String value) => value.split('#').first;
+
+  String _runtimeOpenScript(
+    BuildContext context,
+    ReadingSettings settings,
+    String href,
+    double ratio,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final payload = jsonEncode({
+      'href': href,
+      'ratio': ratio.clamp(0, 1),
+      'settings': {
+        'flow': 'paginated',
+        'columnCount': settings.doubleColumn ? 2 : 1,
+        'maxInlineSize': 760,
+        'margin': settings.pageMargin,
+        'fontFamily': settings.font.fontFamily,
+        'fontSize': settings.fontSize,
+        'lineHeight': settings.lineHeight,
+        'foreground':
+            '#${scheme.onSurface.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
+        'background':
+            '#${scheme.surface.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
+        'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr',
+        'pageTransition': settings.pageTransition.name,
+      },
+    });
+    return '''(() => {
+      let attempts = 0;
+      const open = () => {
+        const runtime = window.TomoReadEpubRuntime;
+        if (runtime) { void runtime.open($payload); }
+        else if (attempts++ < 100) { window.setTimeout(open, 20); }
+      };
+      open();
+    })();''';
+  }
 
   String _styleScript(
     BuildContext context,
