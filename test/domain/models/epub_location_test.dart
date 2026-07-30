@@ -17,6 +17,7 @@ void main() {
     expect(restored.chapterIndex, 4);
     expect(restored.scrollRatio, closeTo(0.375, 0.00001));
     expect(restored.anchor, 'section:two');
+    expect(location.toLocator(), 'epub:v2|4|0.37500|section%3Atwo');
   });
 
   test('reads legacy progress and chapter bookmark locators', () {
@@ -30,5 +31,22 @@ void main() {
     expect(progress.scrollRatio, 0.5);
     expect(bookmark.chapterIndex, 3);
     expect(bookmark.scrollRatio, 0);
+  });
+
+  test('matches versioned locations with legacy bookmarks', () {
+    const current = EpubLocation(
+      chapterIndex: 2,
+      scrollRatio: 0.5,
+      anchor: 'heading',
+    );
+
+    expect(
+      EpubLocation.matchesLocator(
+        'epub:2|0.50000|',
+        current,
+        fallbackChapterIndex: 0,
+      ),
+      isTrue,
+    );
   });
 }

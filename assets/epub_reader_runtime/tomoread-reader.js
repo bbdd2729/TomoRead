@@ -64,6 +64,12 @@ const anchorFor = (fragment, fraction) => {
   return doc => doc.getElementById(id) ?? doc.querySelector(`[name="${CSS.escape(id)}"]`) ?? fraction ?? 0
 }
 
+const nearestAnchor = range => {
+  let element = range?.startContainer
+  if (element?.nodeType !== Node.ELEMENT_NODE) element = element?.parentElement
+  return element?.closest?.('[id]')?.id ?? null
+}
+
 const emitRelocation = detail => {
   const section = getSections()[detail.index]
   if (!section || !paginator) return
@@ -72,6 +78,7 @@ const emitRelocation = detail => {
     href: section.href,
     chapterIndex: detail.index,
     ratio: Number.isFinite(detail.fraction) ? detail.fraction : 0,
+    anchor: nearestAnchor(detail.range),
     pageIndex: Math.max(0, paginator.page || 0),
     pageCount: Math.max(1, paginator.pages || 1),
   })

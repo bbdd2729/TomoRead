@@ -107,17 +107,22 @@ class ReaderWorkspace extends HookConsumerWidget {
     final chapter = ref.watch(
       readerChapterProvider((bookId: bookId, chapterIndex: activeChapterIndex)),
     );
-    final currentLocator = EpubLocation(
+    final currentLocation = EpubLocation(
       chapterIndex: activeChapterIndex,
       scrollRatio: scrollRatio.value,
       anchor: activeAnchor.value,
-    ).toLocator();
+    );
+    final currentLocator = currentLocation.toLocator();
     final chapterTitle =
         chapter.value?.title ?? '第 ${activeChapterIndex + 1} 章';
     final isLoading =
         readingOverride.isLoading || bookmarks.isLoading || chapter.isLoading;
     final isBookmarked = bookmarkItems.any(
-      (bookmark) => bookmark.locator == currentLocator,
+      (bookmark) => EpubLocation.matchesLocator(
+        bookmark.locator,
+        currentLocation,
+        fallbackChapterIndex: activeChapterIndex,
+      ),
     );
 
     useEffect(() {
@@ -210,7 +215,13 @@ class ReaderWorkspace extends HookConsumerWidget {
     Future<void> toggleBookmark() async {
       final repository = ref.read(bookmarkRepositoryProvider);
       final existing = bookmarkItems
-          .where((bookmark) => bookmark.locator == currentLocator)
+          .where(
+            (bookmark) => EpubLocation.matchesLocator(
+              bookmark.locator,
+              currentLocation,
+              fallbackChapterIndex: activeChapterIndex,
+            ),
+          )
           .firstOrNull;
       if (existing != null) {
         await repository.remove(existing.id);

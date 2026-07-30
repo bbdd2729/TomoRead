@@ -253,10 +253,15 @@ class EpubWebView extends HookConsumerWidget {
         } else if (message['type'] == 'runtimeRelocate') {
           final href = message['href'];
           final ratio = message['ratio'];
+          final anchor = message['anchor'];
           final pageIndex = message['pageIndex'];
           final pageCount = message['pageCount'];
           if (href is String && ratio is num) {
-            onScrollPositionChanged(href, ratio.toDouble(), null);
+            onScrollPositionChanged(
+              href,
+              ratio.toDouble(),
+              anchor is String && anchor.isNotEmpty ? anchor : null,
+            );
           }
           if (pageIndex is num && pageCount is num) {
             onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
