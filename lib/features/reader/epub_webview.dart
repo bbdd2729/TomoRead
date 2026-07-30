@@ -72,9 +72,13 @@ class EpubWebView extends HookConsumerWidget {
         initialScrollRatio: initialScrollRatio,
         initialAnchor: initialAnchor,
         direction: direction,
+        requestedPage: requestedPage,
         restoreRevision: restoreRevision,
         onNavigateToHref: onNavigateToHref,
         onScrollPositionChanged: onScrollPositionChanged,
+        onPaginationChanged: onPaginationChanged,
+        onRequestPrevious: onRequestPrevious,
+        onRequestNext: onRequestNext,
         onToggleControls: onToggleControls,
       );
     }
@@ -221,8 +225,6 @@ class EpubWebView extends HookConsumerWidget {
           if (runtimeEntryPoint != null && !runtimeLoaded.value) {
             runtimeLoaded.value = true;
             unawaited(controller.loadUrl(runtimeEntryPoint));
-          } else if (runtimeLoaded.value) {
-            unawaited(navigateFoliateRuntime());
           }
         } else {
           runtimeLoaded.value = false;
@@ -298,6 +300,11 @@ class EpubWebView extends HookConsumerWidget {
           }
           if (pageIndex is num && pageCount is num) {
             onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
+          }
+        } else if (message['type'] == 'runtimeError') {
+          final runtimeError = message['message'];
+          if (runtimeError is String && runtimeError.isNotEmpty) {
+            initializationError.value = StateError(runtimeError);
           }
         } else if (message['type'] == 'readerNavigation') {
           switch (message['direction']) {

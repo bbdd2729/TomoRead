@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '6'
+const runtimeVersion = '7'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -12,6 +12,7 @@ let focusedAnnotationId
 let searchQuery = ''
 let pageTransition = 'slide'
 let turnLocked = false
+let currentSectionIndex = 0
 
 const postMessage = message => {
   if (window.chrome?.webview?.postMessage) {
@@ -242,6 +243,7 @@ const applySelectionListener = (doc, index) => {
 const emitRelocation = detail => {
   const section = getSections()[detail.index]
   if (!section || !paginator) return
+  currentSectionIndex = detail.index
   postMessage({
     type: 'runtimeRelocate',
     href: section.href,
@@ -293,7 +295,10 @@ const createPaginator = () => {
 }
 
 const open = async options => {
-  session ??= await loadManifest()
+  // Android WebView blocks fetch() from a file:// document. The host provides
+  // the already-parsed manifest there, while Windows keeps its virtual HTTPS
+  // origin and can load the generated manifest file directly.
+  session ??= options.session ?? await loadManifest()
   if (!paginator) {
     createPaginator()
     book = {
@@ -324,7 +329,7 @@ const goToPage = async pageIndex => {
   const fraction = pages <= 1 ? 0 : Math.max(0, Math.min(1, pageIndex / (pages - 1)))
   await runPageTransition(
     pageIndex < paginator.page ? 'previous' : 'next',
-    () => paginator.goTo({ index: paginator.primaryIndex, anchor: fraction }),
+    () => paginator.goTo({ index: currentSectionIndex, anchor: fraction }),
   )
 }
 

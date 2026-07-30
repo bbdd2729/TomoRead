@@ -12,6 +12,16 @@
         overflow: hidden;
       }
     </style>
+    <script>
+      const reportRuntimeError = event => {
+        const message = event.reason?.message || event.error?.message || event.message
+        if (!message) return
+        window.TomoRead?.postMessage(JSON.stringify({ type: 'runtimeError', message }))
+        window.chrome?.webview?.postMessage({ type: 'runtimeError', message })
+      }
+      window.addEventListener('error', reportRuntimeError)
+      window.addEventListener('unhandledrejection', reportRuntimeError)
+    </script>
   </head>
   <body>
     <main id="reader-stage" aria-label="EPUB reader"></main>

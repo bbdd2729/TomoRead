@@ -22,9 +22,13 @@ class AndroidEpubWebView extends HookConsumerWidget {
     required this.initialScrollRatio,
     required this.initialAnchor,
     required this.direction,
+    required this.requestedPage,
     required this.restoreRevision,
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
+    required this.onPaginationChanged,
+    required this.onRequestPrevious,
+    required this.onRequestNext,
     required this.onToggleControls,
   });
 
@@ -34,10 +38,14 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final double initialScrollRatio;
   final String? initialAnchor;
   final ReadingDirection direction;
+  final int? requestedPage;
   final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
   final void Function(String href, double ratio, String? anchor, String? cfi)
   onScrollPositionChanged;
+  final void Function(int pageIndex, int pageCount) onPaginationChanged;
+  final VoidCallback onRequestPrevious;
+  final VoidCallback onRequestNext;
   final VoidCallback onToggleControls;
 
   @override
@@ -46,19 +54,67 @@ class AndroidEpubWebView extends HookConsumerWidget {
       epubExtractedDirectoryProvider(bookId),
     );
     final readerSession = ref.watch(epubReaderSessionProvider(bookId));
-    final controller = useMemoized(_createController);
+    final epubManifest = ref.watch(readerManifestProvider(bookId));
     final error = useState<Object?>(null);
     final style = _styleScript(context, settings, direction);
-    final runtimeScript = _runtimeOpenScript(
-      context,
-      settings,
-      href,
-      initialScrollRatio,
-    );
+    final runtimeScript = epubManifest.value == null
+        ? null
+        : _runtimeOpenScript(
+            context,
+            settings,
+            href,
+            initialScrollRatio,
+            initialAnchor,
+            epubManifest.value!,
+          );
+    final runtimeScriptRef = useRef<String?>(runtimeScript);
+    runtimeScriptRef.value = runtimeScript;
+    final navigationHandlerRef = useRef<ValueChanged<String>?>(null);
+    navigationHandlerRef.value = onNavigateToHref;
+    final messageHandlerRef = useRef<void Function(String)?>(null);
+    messageHandlerRef.value = (rawMessage) =>
+        _handleRuntimeMessage(rawMessage, error);
+    final controller = useMemoized(() {
+      late final WebViewController webViewController;
+      webViewController = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageFinished: (_) {
+              final script = runtimeScriptRef.value;
+              if (script != null) {
+                unawaited(webViewController.runJavaScript(script));
+              }
+            },
+            onNavigationRequest: (request) {
+              final uri = Uri.tryParse(request.url);
+              if (uri != null && uri.scheme == 'file') {
+                final nextHref = uri.pathSegments.isEmpty
+                    ? null
+                    : uri.pathSegments.last;
+                if (nextHref != null &&
+                    nextHref != _pathWithoutFragment(href)) {
+                  navigationHandlerRef.value?.call(nextHref);
+                  return NavigationDecision.prevent;
+                }
+              }
+              return NavigationDecision.navigate;
+            },
+          ),
+        )
+        ..addJavaScriptChannel(
+          'TomoRead',
+          onMessageReceived: (message) {
+            messageHandlerRef.value?.call(message.message);
+          },
+        );
+      return webViewController;
+    });
 
     useEffect(
       () {
         final useRuntime = settings.layoutMode == ReaderLayoutMode.paginated;
+        if (useRuntime && runtimeScript == null) return null;
         final directory = useRuntime
             ? readerSession.value?.directoryPath
             : extractedDirectory.value;
@@ -73,9 +129,6 @@ class AndroidEpubWebView extends HookConsumerWidget {
           }
           try {
             await controller.loadFile(file.path);
-            if (useRuntime) {
-              await controller.runJavaScript(runtimeScript);
-            }
           } catch (exception) {
             error.value = exception;
           }
@@ -88,114 +141,115 @@ class AndroidEpubWebView extends HookConsumerWidget {
         controller,
         extractedDirectory.value,
         readerSession.value?.directoryPath,
+        epubManifest.value,
         href,
         settings.layoutMode,
       ],
     );
 
-    useEffect(() {
-      Future<void> applyStyleAndPosition() async {
-        try {
-          if (settings.layoutMode == ReaderLayoutMode.paginated) {
-            await controller.runJavaScript(runtimeScript);
-          } else {
-            await controller.runJavaScript(style);
-            await controller.runJavaScript(
-              _restoreScript(initialScrollRatio, initialAnchor),
-            );
+    useEffect(
+      () {
+        Future<void> applyStyleAndPosition() async {
+          try {
+            if (settings.layoutMode == ReaderLayoutMode.paginated) {
+              if (runtimeScript != null) {
+                await controller.runJavaScript(runtimeScript);
+              }
+            } else {
+              await controller.runJavaScript(style);
+              await controller.runJavaScript(
+                _restoreScript(initialScrollRatio, initialAnchor),
+              );
+            }
+          } catch (_) {
+            // The Android WebView may still be loading the next chapter.
           }
-        } catch (_) {
-          // The Android WebView may still be loading the next chapter.
         }
-      }
 
-      unawaited(applyStyleAndPosition());
+        unawaited(applyStyleAndPosition());
+        return null;
+      },
+      [controller, href, style, runtimeScript, initialAnchor, restoreRevision],
+    );
+
+    useEffect(() {
+      final page = requestedPage;
+      if (settings.layoutMode != ReaderLayoutMode.paginated || page == null) {
+        return null;
+      }
+      unawaited(controller.runJavaScript(_runtimeGoToPageScript(page)));
       return null;
-    }, [controller, href, style, initialAnchor, restoreRevision]);
+    }, [controller, requestedPage, settings.layoutMode]);
 
     if (extractedDirectory.hasError ||
         readerSession.hasError ||
+        (settings.layoutMode == ReaderLayoutMode.paginated &&
+            epubManifest.hasError) ||
         error.value != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            'Unable to start EPUB renderer: ${error.value ?? extractedDirectory.error ?? readerSession.error}',
+            'Unable to start EPUB renderer: ${error.value ?? extractedDirectory.error ?? readerSession.error ?? epubManifest.error}',
           ),
         ),
       );
     }
     if (extractedDirectory.isLoading ||
         (settings.layoutMode == ReaderLayoutMode.paginated &&
-            readerSession.isLoading)) {
+            (readerSession.isLoading || epubManifest.isLoading))) {
       return const Center(child: CircularProgressIndicator());
     }
     return WebViewWidget(controller: controller);
   }
 
-  WebViewController _createController() {
-    late final WebViewController controller;
-    controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onNavigationRequest: (request) {
-            final uri = Uri.tryParse(request.url);
-            if (uri != null && uri.scheme == 'file') {
-              final nextHref = uri.pathSegments.isEmpty
-                  ? null
-                  : uri.pathSegments.last;
-              if (nextHref != null && nextHref != _pathWithoutFragment(href)) {
-                onNavigateToHref(nextHref);
-                return NavigationDecision.prevent;
-              }
-            }
-            return NavigationDecision.navigate;
-          },
-        ),
-      )
-      ..addJavaScriptChannel(
-        'TomoRead',
-        onMessageReceived: (message) {
-          Object? runtimeMessage;
-          try {
-            runtimeMessage = jsonDecode(message.message);
-          } on FormatException {
-            // Legacy scroll and tap messages use a compact pipe format.
-          }
-          if (runtimeMessage is Map<String, dynamic> &&
-              runtimeMessage['type'] == 'runtimeRelocate') {
-            final href = runtimeMessage['href'];
-            final ratio = runtimeMessage['ratio'];
-            if (href is String && ratio is num) {
-              onScrollPositionChanged(
-                href,
-                ratio.toDouble(),
-                runtimeMessage['anchor'] as String?,
-                runtimeMessage['cfi'] as String?,
-              );
-            }
-            return;
-          }
-          if (runtimeMessage is Map<String, dynamic> &&
-              runtimeMessage['type'] == 'readerControls') {
-            onToggleControls();
-            return;
-          }
-          final parts = message.message.split('|');
-          switch (parts.first) {
-            case 'scroll':
-              if (parts.length < 2) return;
-              final ratio = double.tryParse(parts[1]);
-              if (ratio != null) {
-                onScrollPositionChanged(href, ratio, null, null);
-              }
-            case 'tap':
-              onToggleControls();
-          }
-        },
+  void _handleRuntimeMessage(String rawMessage, ValueNotifier<Object?> error) {
+    Object? runtimeMessage;
+    try {
+      runtimeMessage = jsonDecode(rawMessage);
+    } on FormatException {
+      // Legacy scroll and tap messages use a compact pipe format.
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'runtimeRelocate') {
+      final messageHref = runtimeMessage['href'];
+      final ratio = runtimeMessage['ratio'];
+      if (messageHref is String && ratio is num) {
+        onScrollPositionChanged(
+          messageHref,
+          ratio.toDouble(),
+          runtimeMessage['anchor'] as String?,
+          runtimeMessage['cfi'] as String?,
+        );
+      }
+      final pageIndex = runtimeMessage['pageIndex'];
+      final pageCount = runtimeMessage['pageCount'];
+      if (pageIndex is num && pageCount is num) {
+        onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
+      }
+      return;
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'runtimeError') {
+      error.value = StateError(
+        runtimeMessage['message'] ?? 'Unknown runtime error',
       );
-    return controller;
+      return;
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'readerControls') {
+      onToggleControls();
+      return;
+    }
+    final parts = rawMessage.split('|');
+    switch (parts.first) {
+      case 'scroll':
+        if (parts.length < 2) return;
+        final ratio = double.tryParse(parts[1]);
+        if (ratio != null) onScrollPositionChanged(href, ratio, null, null);
+      case 'tap':
+        onToggleControls();
+    }
   }
 
   String _pathWithoutFragment(String value) => value.split('#').first;
@@ -205,11 +259,15 @@ class AndroidEpubWebView extends HookConsumerWidget {
     ReadingSettings settings,
     String href,
     double ratio,
+    String? anchor,
+    EpubManifest manifest,
   ) {
     final scheme = Theme.of(context).colorScheme;
     final payload = jsonEncode({
       'href': href,
       'ratio': ratio.clamp(0, 1),
+      'anchor': anchor,
+      'session': {'manifest': manifest.toJson()},
       'settings': {
         'flow': 'paginated',
         'columnCount': settings.doubleColumn ? 2 : 1,
@@ -236,6 +294,12 @@ class AndroidEpubWebView extends HookConsumerWidget {
       open();
     })();''';
   }
+
+  String _runtimeGoToPageScript(int pageIndex) =>
+      '''(() => {
+    const runtime = window.TomoReadEpubRuntime;
+    if (runtime) void runtime.goToPage(${pageIndex.clamp(0, 100000)});
+  })();''';
 
   String _styleScript(
     BuildContext context,
