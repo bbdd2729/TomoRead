@@ -133,7 +133,15 @@ void main() {
 
     await tester.tap(find.byKey(const Key('reader-focus-mode')));
     await tester.pump();
-    expect(find.byKey(const Key('reader-footer')), findsNothing);
+    final footerOpacity = tester.widget<AnimatedOpacity>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('reader-footer')),
+            matching: find.byType(AnimatedOpacity),
+          )
+          .first,
+    );
+    expect(footerOpacity.opacity, 0);
   });
 
   testWidgets('opens mobile reader navigation sheets', (tester) async {

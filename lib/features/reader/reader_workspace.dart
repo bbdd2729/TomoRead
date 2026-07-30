@@ -289,7 +289,6 @@ class ReaderWorkspace extends HookConsumerWidget {
       return selectChapter(
         location.chapterIndex,
         scrollPosition: location.scrollRatio,
-        anchor: location.anchor,
       );
     }
 
@@ -511,33 +510,9 @@ class ReaderWorkspace extends HookConsumerWidget {
             },
           ),
         );
-        final readerBody = Column(
+        final readerBody = Stack(
           children: [
-            _ReaderChrome(
-              visible: controlsVisible.value,
-              child: _ReaderToolbar(
-                title: title,
-                tocVisible: tocVisible.value,
-                sidePanelVisible: sidePanelVisible.value,
-                mobileReaderControls: isMobile,
-                bookmarked: isBookmarked,
-                canCreateAnnotation:
-                    selectedText.value?.href == chapter.value?.href,
-                onExitReader: onExitReader,
-                onToggleToc: isMobile
-                    ? () => unawaited(openMobileToc())
-                    : toggleToc,
-                onToggleSidePanel: isMobile
-                    ? () => unawaited(openMobileSidePanel())
-                    : toggleSidePanel,
-                onHideControls: toggleControls,
-                onToggleBookmark: toggleBookmark,
-                onCreateAnnotation: createAnnotation,
-                onOpenBookSettings: openBookSettings,
-                onOpenSearch: openSearch,
-              ),
-            ),
-            Expanded(
+            Positioned.fill(
               child: isLoading
                   ? _ReaderCenterTapDetector(
                       key: const Key('reader-content'),
@@ -688,26 +663,62 @@ class ReaderWorkspace extends HookConsumerWidget {
                       ),
                     ),
             ),
-            _ReaderChrome(
-              visible: controlsVisible.value,
-              child: _ReaderFooter(
-                chapterIndex: activeChapterIndex,
-                chapterCount: totalChapters,
-                layoutMode: settings.layoutMode,
-                pageIndex: pageIndex.value,
-                pageCount: pageCount.value,
-                onPrevious:
-                    activeChapterIndex > 0 ||
-                        (isPaginated && pageIndex.value > 0)
-                    ? goToPrevious
-                    : null,
-                onNext:
-                    totalChapters > 0 &&
-                        (activeChapterIndex < totalChapters - 1 ||
-                            (isPaginated &&
-                                pageIndex.value < pageCount.value - 1))
-                    ? goToNext
-                    : null,
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _ReaderChrome(
+                visible: controlsVisible.value,
+                hiddenOffset: const Offset(0, -1),
+                child: _ReaderToolbar(
+                  title: title,
+                  tocVisible: tocVisible.value,
+                  sidePanelVisible: sidePanelVisible.value,
+                  mobileReaderControls: isMobile,
+                  bookmarked: isBookmarked,
+                  canCreateAnnotation:
+                      selectedText.value?.href == chapter.value?.href,
+                  onExitReader: onExitReader,
+                  onToggleToc: isMobile
+                      ? () => unawaited(openMobileToc())
+                      : toggleToc,
+                  onToggleSidePanel: isMobile
+                      ? () => unawaited(openMobileSidePanel())
+                      : toggleSidePanel,
+                  onHideControls: toggleControls,
+                  onToggleBookmark: toggleBookmark,
+                  onCreateAnnotation: createAnnotation,
+                  onOpenBookSettings: openBookSettings,
+                  onOpenSearch: openSearch,
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _ReaderChrome(
+                visible: controlsVisible.value,
+                hiddenOffset: const Offset(0, 1),
+                child: _ReaderFooter(
+                  chapterIndex: activeChapterIndex,
+                  chapterCount: totalChapters,
+                  layoutMode: settings.layoutMode,
+                  pageIndex: pageIndex.value,
+                  pageCount: pageCount.value,
+                  onPrevious:
+                      activeChapterIndex > 0 ||
+                          (isPaginated && pageIndex.value > 0)
+                      ? goToPrevious
+                      : null,
+                  onNext:
+                      totalChapters > 0 &&
+                          (activeChapterIndex < totalChapters - 1 ||
+                              (isPaginated &&
+                                  pageIndex.value < pageCount.value - 1))
+                      ? goToNext
+                      : null,
+                ),
               ),
             ),
           ],
@@ -1421,19 +1432,28 @@ class _ReaderArticle extends StatelessWidget {
 }
 
 class _ReaderChrome extends StatelessWidget {
-  const _ReaderChrome({required this.visible, required this.child});
+  const _ReaderChrome({
+    required this.visible,
+    required this.hiddenOffset,
+    required this.child,
+  });
 
   final bool visible;
+  final Offset hiddenOffset;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => AnimatedSize(
-    duration: const Duration(milliseconds: 180),
-    curve: Curves.easeOutCubic,
-    child: AnimatedOpacity(
-      duration: const Duration(milliseconds: 120),
-      opacity: visible ? 1 : 0,
-      child: visible ? child : const SizedBox.shrink(),
+  Widget build(BuildContext context) => IgnorePointer(
+    ignoring: !visible,
+    child: AnimatedSlide(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      offset: visible ? Offset.zero : hiddenOffset,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 120),
+        opacity: visible ? 1 : 0,
+        child: child,
+      ),
     ),
   );
 }

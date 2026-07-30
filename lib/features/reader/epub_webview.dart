@@ -272,23 +272,33 @@ class EpubWebView extends HookConsumerWidget {
     final margin = settings.pageMargin;
     final layoutCss = isPaginated
         ? '''
-html { height: 100%; overflow: hidden !important; }
-body {
-  height: 100vh !important;
-  max-width: none !important;
-  margin: 0 !important;
-  padding: ${margin}px !important;
-  column-width: calc(100vw - ${margin * 2}px) !important;
-  column-gap: ${margin * 2}px !important;
-  column-fill: auto !important;
+html {
+  height: 100%;
   overflow-x: auto !important;
   overflow-y: hidden !important;
   scroll-snap-type: x mandatory;
 }
+body {
+  height: 100vh !important;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: ${margin}px !important;
+  column-width: calc((100vw - ${margin * 3}px) / 2) !important;
+  column-gap: ${margin}px !important;
+  column-fill: auto !important;
+  overflow: visible !important;
+}
+@media (max-width: 720px) {
+  body {
+    column-width: calc(100vw - ${margin * 2}px) !important;
+  }
+}
 body > * { break-inside: avoid; }
 '''
         : '''
-html { overflow-y: auto; }
+html { overflow-x: hidden; overflow-y: auto; }
 body {
   max-width: 980px;
   margin: 0 auto;
@@ -570,7 +580,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
     const anchor = ${jsonEncode(anchor)};
     window.requestAnimationFrame(() => {
       window.setTimeout(() => {
-        if (anchor) {
+        if (anchor && clampedRatio == 0) {
           const target = document.getElementById(anchor);
           if (target) {
             target.scrollIntoView({ block: 'start', inline: 'start' });
@@ -583,9 +593,9 @@ a { color: ${_cssColor(colorScheme.primary)}; }
         const extent = paginated ? root.scrollWidth : root.scrollHeight;
         const range = Math.max(0, extent - viewportSize);
         if (paginated) {
-          root.scrollLeft = window.__tomoReadRtl
-            ? -range * clampedRatio
-            : range * clampedRatio;
+          const pageIndex = Math.round((range * clampedRatio) / viewportSize);
+          const pageOffset = Math.min(range, pageIndex * viewportSize);
+          root.scrollLeft = window.__tomoReadRtl ? -pageOffset : pageOffset;
         } else {
           root.scrollTop = range * clampedRatio;
         }
