@@ -146,69 +146,21 @@ class PdfReaderWorkspace extends HookConsumerWidget {
           }
         }
 
-        return Column(
+        Future<void> seekToProgress(double progress) async {
+          if (pageCount <= 0 || !viewerController.isReady) return;
+          final page =
+              (progress.clamp(0, 1) * (pageCount - 1))
+                  .round()
+                  .clamp(0, pageCount - 1)
+                  .toInt() +
+              1;
+          await viewerController.goToPage(pageNumber: page);
+          await savePage(page);
+        }
+
+        return Stack(
           children: [
-            _PdfReaderChrome(
-              visible: controlsVisible.value,
-              child: Material(
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        tooltip: '返回书库',
-                        onPressed: onExitReader,
-                        icon: const Icon(Icons.arrow_back),
-                      ),
-                      const Icon(Icons.picture_as_pdf_outlined),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(title, overflow: TextOverflow.ellipsis),
-                      ),
-                      IconButton(
-                        tooltip: isBookmarked ? '移除书签' : '添加书签',
-                        onPressed: toggleBookmark,
-                        icon: Icon(
-                          isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '查看书签',
-                        onPressed: bookmarks.isLoading ? null : openBookmarks,
-                        icon: const Icon(Icons.format_list_bulleted),
-                      ),
-                      const VerticalDivider(width: 20),
-                      IconButton(
-                        tooltip: '目录和页面导航',
-                        onPressed: pdfDocument.value == null
-                            ? null
-                            : openNavigation,
-                        icon: const Icon(Icons.menu_book_outlined),
-                      ),
-                      IconButton(
-                        tooltip: '搜索 PDF',
-                        onPressed: textSearcher.value == null
-                            ? null
-                            : openSearch,
-                        icon: const Icon(Icons.search),
-                      ),
-                      const VerticalDivider(width: 20),
-                      IconButton(
-                        key: const Key('pdf-reader-focus-mode'),
-                        tooltip: '隐藏阅读控制',
-                        onPressed: toggleControls,
-                        icon: const Icon(Icons.center_focus_strong_outlined),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
+            Positioned.fill(
               child: _PdfCenterTapDetector(
                 onTap: toggleControls,
                 child: PdfViewer.file(
@@ -233,28 +185,105 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                 ),
               ),
             ),
-            _PdfReaderChrome(
-              visible: controlsVisible.value,
-              child: Material(
-                key: const Key('pdf-reader-footer'),
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.description_outlined, size: 18),
-                      const SizedBox(width: 8),
-                      Text('第 $displayedPage / $pageCount 页'),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: LinearProgressIndicator(
-                          value: pageCount == 0 ? 0 : displayedPage / pageCount,
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _PdfReaderChrome(
+                visible: controlsVisible.value,
+                hiddenOffset: const Offset(0, -1),
+                child: Material(
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: '返回书库',
+                          onPressed: onExitReader,
+                          icon: const Icon(Icons.arrow_back),
                         ),
-                      ),
-                    ],
+                        const Icon(Icons.picture_as_pdf_outlined),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(title, overflow: TextOverflow.ellipsis),
+                        ),
+                        IconButton(
+                          tooltip: isBookmarked ? '移除书签' : '添加书签',
+                          onPressed: toggleBookmark,
+                          icon: Icon(
+                            isBookmarked
+                                ? Icons.bookmark
+                                : Icons.bookmark_border,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '查看书签',
+                          onPressed: bookmarks.isLoading ? null : openBookmarks,
+                          icon: const Icon(Icons.format_list_bulleted),
+                        ),
+                        const VerticalDivider(width: 20),
+                        IconButton(
+                          tooltip: '目录和页面导航',
+                          onPressed: pdfDocument.value == null
+                              ? null
+                              : openNavigation,
+                          icon: const Icon(Icons.menu_book_outlined),
+                        ),
+                        IconButton(
+                          tooltip: '搜索 PDF',
+                          onPressed: textSearcher.value == null
+                              ? null
+                              : openSearch,
+                          icon: const Icon(Icons.search),
+                        ),
+                        const VerticalDivider(width: 20),
+                        IconButton(
+                          key: const Key('pdf-reader-focus-mode'),
+                          tooltip: '隐藏阅读控制',
+                          onPressed: toggleControls,
+                          icon: const Icon(Icons.center_focus_strong_outlined),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _PdfReaderChrome(
+                visible: controlsVisible.value,
+                hiddenOffset: const Offset(0, 1),
+                child: Material(
+                  key: const Key('pdf-reader-footer'),
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.description_outlined, size: 18),
+                        const SizedBox(width: 8),
+                        Text('第 $displayedPage / $pageCount 页'),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _PdfReaderProgressSlider(
+                            progress: pageCount <= 1
+                                ? 0
+                                : (displayedPage - 1) / (pageCount - 1),
+                            onChanged: seekToProgress,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -267,21 +296,64 @@ class PdfReaderWorkspace extends HookConsumerWidget {
 }
 
 class _PdfReaderChrome extends StatelessWidget {
-  const _PdfReaderChrome({required this.visible, required this.child});
+  const _PdfReaderChrome({
+    required this.visible,
+    required this.hiddenOffset,
+    required this.child,
+  });
 
   final bool visible;
+  final Offset hiddenOffset;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => AnimatedSize(
-    duration: const Duration(milliseconds: 180),
-    curve: Curves.easeOutCubic,
-    child: AnimatedOpacity(
-      duration: const Duration(milliseconds: 120),
-      opacity: visible ? 1 : 0,
-      child: visible ? child : const SizedBox.shrink(),
+  Widget build(BuildContext context) => IgnorePointer(
+    ignoring: !visible,
+    child: AnimatedSlide(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      offset: visible ? Offset.zero : hiddenOffset,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 120),
+        opacity: visible ? 1 : 0,
+        child: child,
+      ),
     ),
   );
+}
+
+class _PdfReaderProgressSlider extends StatefulWidget {
+  const _PdfReaderProgressSlider({
+    required this.progress,
+    required this.onChanged,
+  });
+
+  final double progress;
+  final ValueChanged<double> onChanged;
+
+  @override
+  State<_PdfReaderProgressSlider> createState() =>
+      _PdfReaderProgressSliderState();
+}
+
+class _PdfReaderProgressSliderState extends State<_PdfReaderProgressSlider> {
+  double? _dragProgress;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = (_dragProgress ?? widget.progress).clamp(0, 1).toDouble();
+    return Slider(
+      key: const Key('pdf-reader-progress-slider'),
+      value: value,
+      label: '${(value * 100).round()}%',
+      semanticFormatterCallback: (next) => '${(next * 100).round()}%',
+      onChanged: (next) => setState(() => _dragProgress = next),
+      onChangeEnd: (next) {
+        setState(() => _dragProgress = null);
+        widget.onChanged(next);
+      },
+    );
+  }
 }
 
 class _PdfCenterTapDetector extends StatelessWidget {
