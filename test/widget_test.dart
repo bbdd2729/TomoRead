@@ -136,7 +136,7 @@ void main() {
     expect(find.byKey(const Key('reader-footer')), findsNothing);
   });
 
-  testWidgets('opens mobile reader navigation drawers', (tester) async {
+  testWidgets('opens mobile reader navigation sheets', (tester) async {
     configureMobile(tester);
     await tester.pumpWidget(
       ProviderScope(

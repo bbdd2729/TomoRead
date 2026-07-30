@@ -93,7 +93,6 @@ class ReaderWorkspace extends HookConsumerWidget {
     final requestedPage = useState<int?>(null);
     final focusedAnnotationId = useState<String?>(null);
     final annotationFocusRevision = useState(0);
-    final mobileScaffoldKey = useMemoized(GlobalKey<ScaffoldState>.new);
     final progressWriteTimer = useRef<Timer?>(null);
     final selectedText = useState<ReaderTextSelection?>(null);
     final override = readingOverride.value;
@@ -458,6 +457,61 @@ class ReaderWorkspace extends HookConsumerWidget {
                     sidePanelWidth.value +
                     8 +
                     (showToc ? tocPanelWidth.value + 8 : 0);
+        Future<void> openMobileToc() => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (sheetContext) => _MobileReaderTocDrawer(
+            title: title,
+            book: readerBook.value,
+            chapterCount: totalChapters,
+            toc: manifest.value?.toc ?? const [],
+            activeChapterIndex: activeChapterIndex,
+            onSelected: (item) {
+              final target = Uri.tryParse(item.href);
+              unawaited(
+                selectChapter(
+                  item.spineIndex,
+                  anchor: target?.fragment.isEmpty ?? true
+                      ? null
+                      : target!.fragment,
+                ),
+              );
+              Navigator.of(sheetContext).pop();
+            },
+          ),
+        );
+        Future<void> openMobileSidePanel() => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (sheetContext) => _MobileReaderSideDrawer(
+            showBookmarks: showBookmarks.value,
+            bookmarks: bookmarkItems,
+            annotations: annotations,
+            onPanelChanged: (value) => showBookmarks.value = value,
+            onSelectBookmark: (bookmark) async {
+              await selectBookmark(bookmark);
+              if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+            },
+            onRemoveBookmark: removeBookmark,
+            onEditBookmark: editBookmark,
+            onSelectAnnotation: (annotation) {
+              selectAnnotation(annotation);
+              Navigator.of(sheetContext).pop();
+            },
+            onEditAnnotation: editAnnotation,
+            onRemoveAnnotation: (annotation) async {
+              await ref
+                  .read(annotationRepositoryProvider)
+                  .remove(annotation.id);
+              ref.invalidate(annotationsForBookProvider(bookId));
+              if (focusedAnnotationId.value == annotation.id) {
+                focusedAnnotationId.value = null;
+              }
+            },
+          ),
+        );
         final readerBody = Column(
           children: [
             _ReaderChrome(
@@ -472,10 +526,10 @@ class ReaderWorkspace extends HookConsumerWidget {
                     selectedText.value?.href == chapter.value?.href,
                 onExitReader: onExitReader,
                 onToggleToc: isMobile
-                    ? () => mobileScaffoldKey.currentState?.openDrawer()
+                    ? () => unawaited(openMobileToc())
                     : toggleToc,
                 onToggleSidePanel: isMobile
-                    ? () => mobileScaffoldKey.currentState?.openEndDrawer()
+                    ? () => unawaited(openMobileSidePanel())
                     : toggleSidePanel,
                 onHideControls: toggleControls,
                 onToggleBookmark: toggleBookmark,
@@ -640,58 +694,7 @@ class ReaderWorkspace extends HookConsumerWidget {
             ),
           ],
         );
-        final content = isMobile
-            ? Scaffold(
-                key: mobileScaffoldKey,
-                drawer: _MobileReaderTocDrawer(
-                  title: title,
-                  book: readerBook.value,
-                  chapterCount: totalChapters,
-                  toc: manifest.value?.toc ?? const [],
-                  activeChapterIndex: activeChapterIndex,
-                  onSelected: (item) {
-                    final target = Uri.tryParse(item.href);
-                    unawaited(
-                      selectChapter(
-                        item.spineIndex,
-                        anchor: target?.fragment.isEmpty ?? true
-                            ? null
-                            : target!.fragment,
-                      ),
-                    );
-                    mobileScaffoldKey.currentState?.closeDrawer();
-                  },
-                ),
-                endDrawer: _MobileReaderSideDrawer(
-                  showBookmarks: showBookmarks.value,
-                  bookmarks: bookmarkItems,
-                  annotations: annotations,
-                  onPanelChanged: (value) => showBookmarks.value = value,
-                  onSelectBookmark: (bookmark) async {
-                    await selectBookmark(bookmark);
-                    mobileScaffoldKey.currentState?.closeEndDrawer();
-                  },
-                  onRemoveBookmark: removeBookmark,
-                  onEditBookmark: editBookmark,
-                  onSelectAnnotation: (annotation) {
-                    selectAnnotation(annotation);
-                    mobileScaffoldKey.currentState?.closeEndDrawer();
-                  },
-                  onEditAnnotation: editAnnotation,
-                  onRemoveAnnotation: (annotation) async {
-                    await ref
-                        .read(annotationRepositoryProvider)
-                        .remove(annotation.id);
-                    ref.invalidate(annotationsForBookProvider(bookId));
-                    if (focusedAnnotationId.value == annotation.id) {
-                      focusedAnnotationId.value = null;
-                    }
-                  },
-                ),
-                body: readerBody,
-              )
-            : readerBody;
-        return withReaderShortcuts(content);
+        return withReaderShortcuts(readerBody);
       },
     );
   }
@@ -1023,81 +1026,79 @@ class _MobileReaderTocDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final bookTitle = book?.title ?? title;
     final author = book?.author;
-    return Drawer(
-      child: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              key: const Key('reader-mobile-toc-header'),
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 64,
-                    height: 92,
-                    child: book == null
-                        ? const DecoratedBox(
-                            decoration: BoxDecoration(color: Colors.grey),
-                            child: Icon(Icons.menu_book_outlined),
-                          )
-                        : ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: BookCover(book: book!),
-                          ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          bookTitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium,
+    return _ReaderBottomSheet(
+      child: Column(
+        children: [
+          Padding(
+            key: const Key('reader-mobile-toc-header'),
+            padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 64,
+                  height: 92,
+                  child: book == null
+                      ? const DecoratedBox(
+                          decoration: BoxDecoration(color: Colors.grey),
+                          child: Icon(Icons.menu_book_outlined),
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: BookCover(book: book!),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          author == null || author.isEmpty ? '未知作者' : author,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '$chapterCount 章',
-                          style: Theme.of(context).textTheme.labelMedium,
-                        ),
-                      ],
-                    ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        bookTitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        author == null || author.isEmpty ? '未知作者' : author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '$chapterCount 章',
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    key: const Key('reader-mobile-toc-close'),
-                    tooltip: '关闭目录',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
+                ),
+                IconButton(
+                  key: const Key('reader-mobile-toc-close'),
+                  tooltip: '关闭目录',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
             ),
-            const Divider(height: 1),
-            Expanded(
-              child: toc.isEmpty
-                  ? const Center(child: Text('暂无可用目录。'))
-                  : ListView(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      children: [
-                        for (final item in toc)
-                          _MobileTocEntry(
-                            item: item,
-                            activeChapterIndex: activeChapterIndex,
-                            onSelected: onSelected,
-                          ),
-                      ],
-                    ),
-            ),
-          ],
-        ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: toc.isEmpty
+                ? const Center(child: Text('暂无可用目录。'))
+                : ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    children: [
+                      for (final item in toc)
+                        _MobileTocEntry(
+                          item: item,
+                          activeChapterIndex: activeChapterIndex,
+                          onSelected: onSelected,
+                        ),
+                    ],
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -1176,45 +1177,77 @@ class _MobileReaderSideDrawer extends StatelessWidget {
   final Future<void> Function(ReadingAnnotation annotation) onRemoveAnnotation;
 
   @override
-  Widget build(BuildContext context) => Drawer(
-    child: SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            key: const Key('reader-mobile-side-header'),
-            padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '书签与笔记',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+  Widget build(BuildContext context) => _ReaderBottomSheet(
+    child: Column(
+      children: [
+        Padding(
+          key: const Key('reader-mobile-side-header'),
+          padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '书签与笔记',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-                IconButton(
-                  tooltip: '关闭面板',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
+              ),
+              IconButton(
+                tooltip: '关闭面板',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+              ),
+            ],
           ),
-          const Divider(height: 1),
-          Expanded(
-            child: _ReaderSidePanel(
-              showBookmarks: showBookmarks,
-              bookmarks: bookmarks,
-              annotations: annotations,
-              onPanelChanged: onPanelChanged,
-              onSelectBookmark: onSelectBookmark,
-              onRemoveBookmark: onRemoveBookmark,
-              onEditBookmark: onEditBookmark,
-              onSelectAnnotation: onSelectAnnotation,
-              onEditAnnotation: onEditAnnotation,
-              onRemoveAnnotation: onRemoveAnnotation,
-            ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: _ReaderSidePanel(
+            showBookmarks: showBookmarks,
+            bookmarks: bookmarks,
+            annotations: annotations,
+            onPanelChanged: onPanelChanged,
+            onSelectBookmark: onSelectBookmark,
+            onRemoveBookmark: onRemoveBookmark,
+            onEditBookmark: onEditBookmark,
+            onSelectAnnotation: onSelectAnnotation,
+            onEditAnnotation: onEditAnnotation,
+            onRemoveAnnotation: onRemoveAnnotation,
           ),
-        ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _ReaderBottomSheet extends StatelessWidget {
+  const _ReaderBottomSheet({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => FractionallySizedBox(
+    heightFactor: .82,
+    alignment: Alignment.bottomCenter,
+    child: Material(
+      color: Theme.of(context).colorScheme.surface,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Expanded(child: child),
+          ],
+        ),
       ),
     ),
   );
