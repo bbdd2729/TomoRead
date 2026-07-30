@@ -89,7 +89,7 @@ void main() {
         await File(
           path.join(session.runtimeDirectoryPath, '.runtime-version'),
         ).readAsString(),
-        '4',
+        '5',
       );
     },
   );

@@ -91,6 +91,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final chapterIndex = useState(0);
     final scrollRatio = useState(0.0);
     final activeAnchor = useState<String?>(null);
+    final activeCfi = useState<String?>(null);
     final restoreRevision = useState(0);
     final pageIndex = useState(0);
     final pageCount = useState(1);
@@ -115,6 +116,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       chapterIndex: activeChapterIndex,
       scrollRatio: scrollRatio.value,
       anchor: activeAnchor.value,
+      cfi: activeCfi.value,
     );
     final currentLocator = currentLocation.toLocator();
     final chapterTitle =
@@ -145,6 +147,7 @@ class ReaderWorkspace extends HookConsumerWidget {
         chapterIndex.value = location.chapterIndex;
         scrollRatio.value = location.scrollRatio;
         activeAnchor.value = location.anchor;
+        activeCfi.value = location.cfi;
         restoreRevision.value += 1;
       }
       return null;
@@ -167,6 +170,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       required int index,
       required double chapterRatio,
       String? anchor,
+      String? cfi,
     }) {
       progressWriteTimer.value?.cancel();
       progressWriteTimer.value = Timer(
@@ -182,6 +186,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                   chapterIndex: index,
                   scrollRatio: chapterRatio,
                   anchor: anchor,
+                  cfi: cfi,
                 ).toLocator(),
               );
           if (context.mounted) ref.invalidate(libraryBooksProvider);
@@ -193,6 +198,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       int index, {
       double scrollPosition = 0,
       String? anchor,
+      String? cfi,
     }) async {
       if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
       final revision = runtimeController.beginNavigation();
@@ -200,6 +206,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       chapterIndex.value = index;
       scrollRatio.value = scrollPosition.clamp(0, 1).toDouble();
       activeAnchor.value = anchor;
+      activeCfi.value = cfi;
       restoreRevision.value += 1;
       requestedPage.value = null;
       try {
@@ -217,6 +224,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                 chapterIndex: index,
                 scrollRatio: scrollRatio.value,
                 anchor: anchor,
+                cfi: cfi,
               ).toLocator(),
             );
         if (runtimeController.isCurrent(revision)) {
@@ -316,6 +324,8 @@ class ReaderWorkspace extends HookConsumerWidget {
       return selectChapter(
         location.chapterIndex,
         scrollPosition: location.scrollRatio,
+        anchor: location.anchor,
+        cfi: location.cfi,
       );
     }
 
@@ -595,20 +605,23 @@ class ReaderWorkspace extends HookConsumerWidget {
                                   annotationFocusRevision.value,
                               restoreRevision: restoreRevision.value,
                               onNavigateToHref: navigateToHref,
-                              onScrollPositionChanged: (href, ratio, anchor) {
-                                runtimeController.reportRelocation();
-                                if (href != chapter.value?.href) return;
-                                final clampedRatio = ratio
-                                    .clamp(0, 1)
-                                    .toDouble();
-                                scrollRatio.value = clampedRatio;
-                                activeAnchor.value = anchor;
-                                scheduleProgressWrite(
-                                  index: activeChapterIndex,
-                                  chapterRatio: clampedRatio,
-                                  anchor: anchor,
-                                );
-                              },
+                              onScrollPositionChanged:
+                                  (href, ratio, anchor, cfi) {
+                                    runtimeController.reportRelocation();
+                                    if (href != chapter.value?.href) return;
+                                    final clampedRatio = ratio
+                                        .clamp(0, 1)
+                                        .toDouble();
+                                    scrollRatio.value = clampedRatio;
+                                    activeAnchor.value = anchor;
+                                    activeCfi.value = cfi;
+                                    scheduleProgressWrite(
+                                      index: activeChapterIndex,
+                                      chapterRatio: clampedRatio,
+                                      anchor: anchor,
+                                      cfi: cfi,
+                                    );
+                                  },
                               onPaginationChanged: (index, count) {
                                 pageIndex.value = index;
                                 pageCount.value = count;
@@ -1377,7 +1390,7 @@ class _ReaderArticle extends StatelessWidget {
   final String? focusedAnnotationId;
   final int annotationFocusRevision;
   final ValueChanged<String> onNavigateToHref;
-  final void Function(String href, double ratio, String? anchor)
+  final void Function(String href, double ratio, String? anchor, String? cfi)
   onScrollPositionChanged;
   final void Function(int pageIndex, int pageCount) onPaginationChanged;
   final VoidCallback onRequestPrevious;

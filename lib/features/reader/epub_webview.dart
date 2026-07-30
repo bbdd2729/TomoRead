@@ -52,7 +52,7 @@ class EpubWebView extends HookConsumerWidget {
   final int? requestedPage;
   final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
-  final void Function(String href, double ratio, String? anchor)
+  final void Function(String href, double ratio, String? anchor, String? cfi)
   onScrollPositionChanged;
   final void Function(int pageIndex, int pageCount) onPaginationChanged;
   final VoidCallback onRequestPrevious;
@@ -254,6 +254,7 @@ class EpubWebView extends HookConsumerWidget {
               messageHref,
               ratio.toDouble(),
               anchor is String && anchor.isNotEmpty ? anchor : null,
+              null,
             );
           }
         } else if (message['type'] == 'pageChanged') {
@@ -266,6 +267,7 @@ class EpubWebView extends HookConsumerWidget {
           final href = message['href'];
           final ratio = message['ratio'];
           final anchor = message['anchor'];
+          final cfi = message['cfi'];
           final pageIndex = message['pageIndex'];
           final pageCount = message['pageCount'];
           if (href is String && ratio is num) {
@@ -273,6 +275,7 @@ class EpubWebView extends HookConsumerWidget {
               href,
               ratio.toDouble(),
               anchor is String && anchor.isNotEmpty ? anchor : null,
+              cfi is String && cfi.isNotEmpty ? cfi : null,
             );
           }
           if (pageIndex is num && pageCount is num) {
@@ -289,6 +292,7 @@ class EpubWebView extends HookConsumerWidget {
           final text = message['text'];
           final startOffset = message['startOffset'];
           final endOffset = message['endOffset'];
+          final cfi = message['cfi'];
           if (messageHref is String &&
               text is String &&
               startOffset is num &&
@@ -299,6 +303,7 @@ class EpubWebView extends HookConsumerWidget {
                 text: text,
                 startOffset: startOffset.toInt(),
                 endOffset: endOffset.toInt(),
+                cfi: cfi is String && cfi.isNotEmpty ? cfi : null,
               ),
             );
           }

@@ -36,12 +36,13 @@ class EpubReaderSessionService {
        _runtimeAssetLoader = runtimeAssetLoader ?? rootBundle.loadString;
 
   static const _runtimeDirectoryName = '.tomoread-reader';
-  static const _runtimeVersion = '4';
+  static const _runtimeVersion = '5';
 
   static const _runtimeAssets = {
     'index.html': 'assets/epub_reader_runtime/index.html',
     'tomoread-reader.js': 'assets/epub_reader_runtime/tomoread-reader.js',
     'foliate-paginator.js': 'assets/epub_reader_runtime/foliate-paginator.js',
+    'epubcfi.js': 'assets/epub_reader_runtime/epubcfi.js',
     'licenses/foliate-js.MIT.txt':
         'assets/epub_reader_runtime/licenses/foliate-js.MIT.txt',
   };

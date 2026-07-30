@@ -17,7 +17,7 @@ void main() {
     expect(restored.chapterIndex, 4);
     expect(restored.scrollRatio, closeTo(0.375, 0.00001));
     expect(restored.anchor, 'section:two');
-    expect(location.toLocator(), 'epub:v2|4|0.37500|section%3Atwo');
+    expect(location.toLocator(), 'epub:v3|4|0.37500|section%3Atwo|');
   });
 
   test('reads legacy progress and chapter bookmark locators', () {

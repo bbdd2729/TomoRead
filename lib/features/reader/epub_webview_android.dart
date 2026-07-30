@@ -35,7 +35,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final ReadingDirection direction;
   final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
-  final void Function(String href, double ratio, String? anchor)
+  final void Function(String href, double ratio, String? anchor, String? cfi)
   onScrollPositionChanged;
   final VoidCallback onToggleControls;
 
@@ -129,7 +129,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
             case 'scroll':
               if (parts.length < 2) return;
               final ratio = double.tryParse(parts[1]);
-              if (ratio != null) onScrollPositionChanged(href, ratio, null);
+              if (ratio != null) {
+                onScrollPositionChanged(href, ratio, null, null);
+              }
             case 'tap':
               onToggleControls();
           }

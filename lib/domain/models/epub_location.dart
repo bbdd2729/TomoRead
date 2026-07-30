@@ -3,15 +3,18 @@ class EpubLocation {
     required this.chapterIndex,
     required this.scrollRatio,
     this.anchor,
+    this.cfi,
   });
 
   final int chapterIndex;
   final double scrollRatio;
   final String? anchor;
+  final String? cfi;
 
   String toLocator() {
     final encodedAnchor = anchor == null ? '' : Uri.encodeComponent(anchor!);
-    return 'epub:v2|$chapterIndex|${scrollRatio.clamp(0, 1).toStringAsFixed(5)}|$encodedAnchor';
+    final encodedCfi = cfi == null ? '' : Uri.encodeComponent(cfi!);
+    return 'epub:v3|$chapterIndex|${scrollRatio.clamp(0, 1).toStringAsFixed(5)}|$encodedAnchor|$encodedCfi';
   }
 
   static bool matchesLocator(
@@ -24,6 +27,9 @@ class EpubLocation {
       fallbackChapterIndex: fallbackChapterIndex,
     );
     if (candidate.chapterIndex != location.chapterIndex) return false;
+    if (candidate.cfi != null && location.cfi != null) {
+      return candidate.cfi == location.cfi;
+    }
     if (candidate.anchor != null && location.anchor != null) {
       return candidate.anchor == location.anchor;
     }
@@ -34,6 +40,24 @@ class EpubLocation {
     String? locator, {
     required int fallbackChapterIndex,
   }) {
+    if (locator != null && locator.startsWith('epub:v3|')) {
+      final parts = locator.substring('epub:v3|'.length).split('|');
+      final chapterIndex = int.tryParse(parts.first) ?? fallbackChapterIndex;
+      final scrollRatio = parts.length > 1
+          ? (double.tryParse(parts[1]) ?? 0).clamp(0, 1).toDouble()
+          : 0.0;
+      return EpubLocation(
+        chapterIndex: chapterIndex,
+        scrollRatio: scrollRatio,
+        anchor: parts.length > 2 && parts[2].isNotEmpty
+            ? Uri.decodeComponent(parts[2])
+            : null,
+        cfi: parts.length > 3 && parts[3].isNotEmpty
+            ? Uri.decodeComponent(parts[3])
+            : null,
+      );
+    }
+
     if (locator != null && locator.startsWith('epub:v2|')) {
       final parts = locator.substring('epub:v2|'.length).split('|');
       final chapterIndex = int.tryParse(parts.first) ?? fallbackChapterIndex;

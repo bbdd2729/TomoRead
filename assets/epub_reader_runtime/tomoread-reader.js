@@ -1,6 +1,7 @@
 import './foliate-paginator.js'
+import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '4'
+const runtimeVersion = '5'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -100,6 +101,22 @@ const nearestAnchor = range => {
   return element?.closest?.('[id]')?.id ?? null
 }
 
+const cfiFor = range => {
+  try {
+    return range ? CFI.fromRange(range) : null
+  } catch {
+    return null
+  }
+}
+
+const rangeForCfi = (doc, cfi) => {
+  try {
+    return CFI.toRange(doc, CFI.parse(cfi))
+  } catch {
+    return null
+  }
+}
+
 const rangeForOffsets = (doc, startOffset, endOffset) => {
   const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
   let node
@@ -146,9 +163,14 @@ const applyAnnotations = (doc, index) => {
   let focusedRange
   for (const annotation of annotations) {
     if (annotation.href !== href) continue
-    const [start, end] = annotation.locator.split(':').map(Number)
-    if (!Number.isFinite(start) || !Number.isFinite(end)) continue
-    const range = rangeForOffsets(doc, start, end)
+    const range = annotation.locator.startsWith('cfi:')
+      ? rangeForCfi(doc, annotation.loc.slice(4))
+      : (() => {
+          const [start, end] = annotation.locator.split(':').map(Number)
+          return Number.isFinite(start) && Number.isFinite(end)
+            ? rangeForOffsets(doc, start, end)
+            : null
+        })()
     if (!range) continue
     groups.get(annotation.color)?.add(range)
     if (annotation.id === focusedAnnotationId) focusedRange = range
@@ -179,6 +201,7 @@ const applySelectionListener = (doc, index) => {
         text,
         startOffset: before.toString().length,
         endOffset: before.toString().length + range.toString().length,
+        cfi: cfiFor(range),
       })
     }, 80)
   })
@@ -193,6 +216,7 @@ const emitRelocation = detail => {
     chapterIndex: detail.index,
     ratio: Number.isFinite(detail.fraction) ? detail.fraction : 0,
     anchor: nearestAnchor(detail.range),
+    cfi: cfiFor(detail.range),
     pageIndex: Math.max(0, paginator.page || 0),
     pageCount: Math.max(1, paginator.pages || 1),
   })
