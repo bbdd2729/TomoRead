@@ -374,6 +374,38 @@ void main() {
     expect(find.byKey(const Key('book-detail-cover')), findsOneWidget);
   });
 
+  testWidgets('edits book metadata from the details page', (tester) async {
+    configureDesktop(tester);
+    final book = LibraryBook(
+      id: 'editable-book',
+      fileHash: 'editable-book',
+      title: 'Original title',
+      author: 'Original author',
+      filePath: 'C:/books/editable.epub',
+      progress: 0,
+      importedAt: DateTime(2026),
+      format: 'epub',
+      chapterCount: 2,
+      direction: ReadingDirection.ltr,
+    );
+    await pumpShell(tester, books: [book]);
+
+    await tester.tap(find.byKey(const Key('book-editable-book')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('book-detail-edit')));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('book-detail-title-input')),
+      'Updated title',
+    );
+    await tester.tap(find.byKey(const Key('book-detail-save')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Updated title'), findsWidgets);
+    expect(find.byKey(const Key('book-detail-favorite')), findsOneWidget);
+  });
+
   testWidgets('removes a book after confirmation', (tester) async {
     configureDesktop(tester);
     final book = LibraryBook(
@@ -459,6 +491,46 @@ class _FakeBookRepository extends BookRepository {
   @override
   Future<void> deleteBook(String bookId) async {
     _books.removeWhere((book) => book.id == bookId);
+  }
+
+  @override
+  Future<void> updateMetadata({
+    required String bookId,
+    required String title,
+    required String author,
+    required String? description,
+    required String? category,
+    required List<String> tags,
+  }) async {
+    final index = _books.indexWhere((book) => book.id == bookId);
+    if (index < 0) return;
+    _books[index] = _books[index].copyWith(
+      title: title,
+      author: author,
+      description: description ?? '',
+      category: category ?? '',
+      tags: tags,
+      clearDescription: description == null,
+      clearCategory: category == null,
+    );
+  }
+
+  @override
+  Future<void> setFavorite(String bookId, bool isFavorite) async {
+    final index = _books.indexWhere((book) => book.id == bookId);
+    if (index < 0) return;
+    _books[index] = _books[index].copyWith(isFavorite: isFavorite);
+  }
+
+  @override
+  Future<void> resetReadingPosition(String bookId) async {
+    final index = _books.indexWhere((book) => book.id == bookId);
+    if (index < 0) return;
+    _books[index] = _books[index].copyWith(
+      progress: 0,
+      chapterIndex: 0,
+      clearLocator: true,
+    );
   }
 }
 

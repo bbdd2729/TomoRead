@@ -16,6 +16,9 @@ class LibraryBook {
     this.locator,
     this.coverPath,
     this.description,
+    this.category,
+    this.tags = const [],
+    this.isFavorite = false,
   });
 
   final String id;
@@ -25,6 +28,9 @@ class LibraryBook {
   final String filePath;
   final String? coverPath;
   final String? description;
+  final String? category;
+  final List<String> tags;
+  final bool isFavorite;
   final double progress;
   final DateTime importedAt;
   final String format;
@@ -32,6 +38,40 @@ class LibraryBook {
   final int chapterIndex;
   final String? locator;
   final ReadingDirection direction;
+
+  LibraryBook copyWith({
+    String? title,
+    String? author,
+    String? coverPath,
+    String? description,
+    String? category,
+    String? locator,
+    List<String>? tags,
+    bool? isFavorite,
+    double? progress,
+    int? chapterIndex,
+    bool clearDescription = false,
+    bool clearCategory = false,
+    bool clearLocator = false,
+  }) => LibraryBook(
+    id: id,
+    fileHash: fileHash,
+    title: title ?? this.title,
+    author: author ?? this.author,
+    filePath: filePath,
+    progress: progress ?? this.progress,
+    importedAt: importedAt,
+    format: format,
+    chapterCount: chapterCount,
+    chapterIndex: chapterIndex ?? this.chapterIndex,
+    locator: clearLocator ? null : locator ?? this.locator,
+    coverPath: coverPath ?? this.coverPath,
+    description: clearDescription ? null : description ?? this.description,
+    category: clearCategory ? null : category ?? this.category,
+    tags: tags ?? this.tags,
+    isFavorite: isFavorite ?? this.isFavorite,
+    direction: direction,
+  );
 }
 
 class ImportedBook {

@@ -6,9 +6,11 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class AppDatabase {
-  AppDatabase({DatabaseFactory? databaseFactory, Future<String> Function()? pathProvider})
-    : _databaseFactory = databaseFactory ?? _platformDatabaseFactory,
-      _pathProvider = pathProvider ?? _defaultPath;
+  AppDatabase({
+    DatabaseFactory? databaseFactory,
+    Future<String> Function()? pathProvider,
+  }) : _databaseFactory = databaseFactory ?? _platformDatabaseFactory,
+       _pathProvider = pathProvider ?? _defaultPath;
 
   AppDatabase.inMemory()
     : _databaseFactory = databaseFactoryFfi,
@@ -32,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 4,
+        version: 5,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -44,6 +46,9 @@ class AppDatabase {
           }
           if (oldVersion < 4) {
             await _upgradeToVersion4(database);
+          }
+          if (oldVersion < 5) {
+            await _upgradeToVersion5(database);
           }
         },
       ),
@@ -81,10 +86,14 @@ class AppDatabase {
               chapter_count INTEGER NOT NULL DEFAULT 0,
               epub_version TEXT,
               read_direction TEXT NOT NULL DEFAULT 'ltr',
+              category TEXT,
+              tags_json TEXT NOT NULL DEFAULT '[]',
+              is_favorite INTEGER NOT NULL DEFAULT 0,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
             )
           ''');
+    await _createBooksIndexes(database);
     await database.execute('''
             CREATE TABLE book_reading_overrides (
               book_id TEXT PRIMARY KEY,
@@ -108,7 +117,9 @@ class AppDatabase {
               UNIQUE(book_id, locator)
             )
           ''');
-    await database.execute('CREATE INDEX bookmarks_book_id ON bookmarks(book_id)');
+    await database.execute(
+      'CREATE INDEX bookmarks_book_id ON bookmarks(book_id)',
+    );
     await database.execute('''
             CREATE TABLE book_manifests (
               book_id TEXT PRIMARY KEY,
@@ -124,11 +135,19 @@ class AppDatabase {
     await database.execute('ALTER TABLE books ADD COLUMN file_hash TEXT');
     await database.execute('ALTER TABLE books ADD COLUMN cover_path TEXT');
     await database.execute('ALTER TABLE books ADD COLUMN description TEXT');
-    await database.execute('ALTER TABLE books ADD COLUMN chapter_index INTEGER NOT NULL DEFAULT 0');
-    await database.execute('ALTER TABLE books ADD COLUMN chapter_count INTEGER NOT NULL DEFAULT 0');
+    await database.execute(
+      'ALTER TABLE books ADD COLUMN chapter_index INTEGER NOT NULL DEFAULT 0',
+    );
+    await database.execute(
+      'ALTER TABLE books ADD COLUMN chapter_count INTEGER NOT NULL DEFAULT 0',
+    );
     await database.execute('ALTER TABLE books ADD COLUMN epub_version TEXT');
-    await database.execute("ALTER TABLE books ADD COLUMN read_direction TEXT NOT NULL DEFAULT 'ltr'");
-    await database.execute('CREATE UNIQUE INDEX books_file_hash ON books(file_hash)');
+    await database.execute(
+      "ALTER TABLE books ADD COLUMN read_direction TEXT NOT NULL DEFAULT 'ltr'",
+    );
+    await database.execute(
+      'CREATE UNIQUE INDEX books_file_hash ON books(file_hash)',
+    );
     await database.execute('''
       CREATE TABLE book_manifests (
         book_id TEXT PRIMARY KEY,
@@ -139,11 +158,32 @@ class AppDatabase {
     ''');
   }
 
-  Future<void> _upgradeToVersion3(Database database) => _createAnnotationsTable(database);
+  Future<void> _upgradeToVersion3(Database database) =>
+      _createAnnotationsTable(database);
 
   Future<void> _upgradeToVersion4(Database database) => database.execute(
     "ALTER TABLE book_reading_overrides ADD COLUMN layout_mode TEXT NOT NULL DEFAULT 'scroll'",
   );
+
+  Future<void> _upgradeToVersion5(Database database) async {
+    await database.execute('ALTER TABLE books ADD COLUMN category TEXT');
+    await database.execute(
+      "ALTER TABLE books ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'",
+    );
+    await database.execute(
+      'ALTER TABLE books ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0',
+    );
+    await _createBooksIndexes(database);
+  }
+
+  Future<void> _createBooksIndexes(Database database) async {
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS books_category ON books(category)',
+    );
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS books_is_favorite ON books(is_favorite)',
+    );
+  }
 
   Future<void> _createAnnotationsTable(Database database) async {
     await database.execute('''
@@ -159,7 +199,9 @@ class AppDatabase {
         FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
       )
     ''');
-    await database.execute('CREATE INDEX reading_annotations_book_id ON reading_annotations(book_id)');
+    await database.execute(
+      'CREATE INDEX reading_annotations_book_id ON reading_annotations(book_id)',
+    );
   }
 
   static Future<String> _defaultPath() async {
