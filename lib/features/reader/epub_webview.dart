@@ -272,34 +272,49 @@ class EpubWebView extends HookConsumerWidget {
     final margin = settings.pageMargin;
     final layoutCss = isPaginated
         ? '''
-html {
-  height: 100%;
+html, body {
+  height: 100% !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+body {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+#tomoread-pagination-viewport {
+  width: 100% !important;
+  height: 100% !important;
   overflow-x: auto !important;
   overflow-y: hidden !important;
   scroll-snap-type: x mandatory;
+  scrollbar-width: none;
 }
-body {
-  height: 100vh !important;
-  width: 100vw !important;
-  min-width: 100vw !important;
-  max-width: none !important;
-  margin: 0 !important;
+#tomoread-pagination-viewport::-webkit-scrollbar { display: none; }
+#tomoread-pagination-content {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  height: 100% !important;
   padding: ${margin}px !important;
   column-width: calc((100vw - ${margin * 3}px) / 2) !important;
   column-gap: ${margin}px !important;
   column-fill: auto !important;
-  overflow: visible !important;
 }
 @media (max-width: 720px) {
-  body {
+  #tomoread-pagination-content {
     column-width: calc(100vw - ${margin * 2}px) !important;
   }
 }
-body > * { break-inside: avoid; }
+#tomoread-pagination-content > * { break-inside: avoid; }
 '''
         : '''
-html { overflow-x: hidden; overflow-y: auto; }
-body {
+html, body { height: 100% !important; width: 100% !important; overflow: hidden !important; }
+body { margin: 0 !important; padding: 0 !important; }
+#tomoread-pagination-viewport { width: 100%; height: 100%; overflow-x: hidden; overflow-y: auto; }
+#tomoread-pagination-content {
+  box-sizing: border-box;
   max-width: 980px;
   margin: 0 auto;
   padding: ${margin}px;
@@ -331,6 +346,22 @@ a { color: ${_cssColor(colorScheme.primary)}; }
       style.textContent = ${jsonEncode(css)};
       window.__tomoReadPaginated = $isPaginated;
       window.__tomoReadRtl = ${direction == ReadingDirection.rtl};
+      window.__tomoReadEnsureLayoutRoots = () => {
+        let viewport = document.getElementById('tomoread-pagination-viewport');
+        let content = document.getElementById('tomoread-pagination-content');
+        if (viewport && content) return { viewport, content };
+        viewport = document.createElement('div');
+        viewport.id = 'tomoread-pagination-viewport';
+        content = document.createElement('div');
+        content.id = 'tomoread-pagination-content';
+        const children = Array.from(document.body.childNodes);
+        for (const child of children) content.appendChild(child);
+        viewport.appendChild(content);
+        document.body.appendChild(viewport);
+        return { viewport, content };
+      };
+      const layoutRoots = window.__tomoReadEnsureLayoutRoots();
+      window.__tomoReadScrollRoot = () => layoutRoots.viewport;
       if (!window.__tomoReadScrollListener) {
         let scheduled = false;
         const reportProgress = () => {
@@ -338,9 +369,9 @@ a { color: ${_cssColor(colorScheme.primary)}; }
           scheduled = true;
           window.setTimeout(() => {
             scheduled = false;
-            const root = document.scrollingElement || document.documentElement;
+            const root = window.__tomoReadScrollRoot?.() || document.scrollingElement || document.documentElement;
             const paginated = window.__tomoReadPaginated === true;
-            const viewportSize = paginated ? window.innerWidth : window.innerHeight;
+            const viewportSize = paginated ? root.clientWidth : root.clientHeight;
             const extent = paginated ? root.scrollWidth : root.scrollHeight;
             const offset = paginated ? Math.abs(root.scrollLeft) : root.scrollTop;
             const range = Math.max(0, extent - viewportSize);
@@ -375,14 +406,14 @@ a { color: ${_cssColor(colorScheme.primary)}; }
             }
           }, 200);
         };
-        window.addEventListener('scroll', reportProgress, { passive: true });
+        (window.__tomoReadScrollRoot?.() || window).addEventListener('scroll', reportProgress, { passive: true });
         window.__tomoReadReportProgress = reportProgress;
         window.__tomoReadScrollListener = true;
       }
       window.__tomoReadGoToPage = (requestedPage) => {
-        const root = document.scrollingElement || document.documentElement;
+        const root = window.__tomoReadScrollRoot?.() || document.scrollingElement || document.documentElement;
         if (window.__tomoReadPaginated !== true) return;
-        const viewportSize = window.innerWidth;
+        const viewportSize = root.clientWidth;
         const pageCount = Math.max(1, Math.ceil(root.scrollWidth / viewportSize));
         const pageIndex = Math.min(pageCount - 1, Math.max(0, requestedPage));
         root.scrollLeft = window.__tomoReadRtl ? -pageIndex * viewportSize : pageIndex * viewportSize;
@@ -446,11 +477,11 @@ a { color: ${_cssColor(colorScheme.primary)}; }
           if (window.__tomoReadPaginated !== true) return;
           window.clearTimeout(resizeTimer);
           resizeTimer = window.setTimeout(() => {
-            const root = document.scrollingElement || document.documentElement;
+            const root = window.__tomoReadScrollRoot?.() || document.scrollingElement || document.documentElement;
             const ratio = Number.isFinite(window.__tomoReadLastRatio)
               ? window.__tomoReadLastRatio
               : 0;
-            const range = Math.max(0, root.scrollWidth - window.innerWidth);
+            const range = Math.max(0, root.scrollWidth - root.clientWidth);
             root.scrollLeft = window.__tomoReadRtl ? -range * ratio : range * ratio;
             window.__tomoReadReportProgress?.();
           }, 80);
@@ -560,11 +591,11 @@ a { color: ${_cssColor(colorScheme.primary)}; }
         window.requestAnimationFrame(() => {
           const rect = focusedRange.getBoundingClientRect();
           if (window.__tomoReadPaginated === true) {
-            const scrollRoot = document.scrollingElement || document.documentElement;
+            const scrollRoot = window.__tomoReadScrollRoot?.() || document.scrollingElement || document.documentElement;
             const offset = Math.abs(scrollRoot.scrollLeft) + rect.left;
-            window.__tomoReadGoToPage?.(Math.max(0, Math.round(offset / window.innerWidth)));
+            window.__tomoReadGoToPage?.(Math.max(0, Math.round(offset / scrollRoot.clientWidth)));
           } else {
-            const scrollRoot = document.scrollingElement || document.documentElement;
+            const scrollRoot = window.__tomoReadScrollRoot?.() || document.scrollingElement || document.documentElement;
             scrollRoot.scrollTop += rect.top - 24;
             window.__tomoReadReportProgress?.();
           }
@@ -575,7 +606,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
 
   String _restoreScrollScript(double ratio, String? anchor) =>
       '''(() => {
-    const root = document.scrollingElement || document.documentElement;
+    const root = window.__tomoReadScrollRoot?.() || document.scrollingElement || document.documentElement;
     const clampedRatio = ${ratio.clamp(0, 1)};
     const anchor = ${jsonEncode(anchor)};
     window.requestAnimationFrame(() => {
@@ -589,7 +620,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
           }
         }
         const paginated = window.__tomoReadPaginated === true;
-        const viewportSize = paginated ? window.innerWidth : window.innerHeight;
+        const viewportSize = paginated ? root.clientWidth : root.clientHeight;
         const extent = paginated ? root.scrollWidth : root.scrollHeight;
         const range = Math.max(0, extent - viewportSize);
         if (paginated) {
