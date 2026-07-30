@@ -535,17 +535,19 @@ class ReaderWorkspace extends HookConsumerWidget {
         final readerBody = Stack(
           children: [
             Positioned.fill(
-              child: isLoading
-                  ? _ReaderCenterTapDetector(
-                      key: const Key('reader-content'),
-                      onTap: toggleControls,
-                      child: const Center(child: CircularProgressIndicator()),
-                    )
-                  : Material(
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: _ReaderArticle(
+              child: Material(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: isLoading
+                          ? _ReaderCenterTapDetector(
+                              key: const Key('reader-content'),
+                              onTap: toggleControls,
+                              child: const Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          : _ReaderArticle(
                               settings: settings,
                               chapter: chapter.value,
                               error: chapter.error,
@@ -591,99 +593,96 @@ class ReaderWorkspace extends HookConsumerWidget {
                               },
                               onToggleControls: toggleControls,
                             ),
-                          ),
-                          if (showToc)
-                            Positioned(
-                              left: 8,
-                              top: 8,
-                              bottom: 8,
-                              width: tocPanelWidth.value + 8,
-                              child: ResizablePane(
-                                width: tocPanelWidth.value,
-                                minWidth: 240,
-                                maxWidth: 480,
-                                defaultWidth: 280,
-                                onWidthChanged: (value) =>
-                                    tocPanelWidth.value = value,
-                                onWidthChangeEnd: (value) => ref
-                                    .read(appSettingsProvider.notifier)
-                                    .updateAppearance(
-                                      appearance.copyWith(
-                                        readerTocWidth: value,
-                                      ),
-                                    ),
-                                child: _ReaderOverlaySurface(
-                                  child: _ReaderTocPanel(
-                                    toc: manifest.value?.toc ?? const [],
-                                    activeChapterIndex: activeChapterIndex,
-                                    onSelected: (item) {
-                                      final target = Uri.tryParse(item.href);
-                                      unawaited(
-                                        selectChapter(
-                                          item.spineIndex,
-                                          anchor:
-                                              target?.fragment.isEmpty ?? true
-                                              ? null
-                                              : target!.fragment,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (showSidePanel)
-                            Positioned(
-                              right: 8,
-                              top: 8,
-                              bottom: 8,
-                              width: sidePanelWidth.value + 8,
-                              child: ResizablePane(
-                                edge: ResizablePaneEdge.leading,
-                                width: sidePanelWidth.value,
-                                minWidth: 280,
-                                maxWidth: 520,
-                                defaultWidth: 320,
-                                onWidthChanged: (value) =>
-                                    sidePanelWidth.value = value,
-                                onWidthChangeEnd: (value) => ref
-                                    .read(appSettingsProvider.notifier)
-                                    .updateAppearance(
-                                      appearance.copyWith(
-                                        readerSidePanelWidth: value,
-                                      ),
-                                    ),
-                                child: _ReaderOverlaySurface(
-                                  child: _ReaderSidePanel(
-                                    showBookmarks: showBookmarks.value,
-                                    bookmarks: bookmarkItems,
-                                    annotations: annotations,
-                                    onPanelChanged: (value) =>
-                                        showBookmarks.value = value,
-                                    onSelectBookmark: selectBookmark,
-                                    onRemoveBookmark: removeBookmark,
-                                    onEditBookmark: editBookmark,
-                                    onSelectAnnotation: selectAnnotation,
-                                    onEditAnnotation: editAnnotation,
-                                    onRemoveAnnotation: (annotation) async {
-                                      await ref
-                                          .read(annotationRepositoryProvider)
-                                          .remove(annotation.id);
-                                      ref.invalidate(
-                                        annotationsForBookProvider(bookId),
-                                      );
-                                      if (focusedAnnotationId.value ==
-                                          annotation.id) {
-                                        focusedAnnotationId.value = null;
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
                     ),
+                    if (showToc)
+                      Positioned(
+                        left: 8,
+                        top: 8,
+                        bottom: 8,
+                        width: tocPanelWidth.value + 8,
+                        child: ResizablePane(
+                          width: tocPanelWidth.value,
+                          minWidth: 240,
+                          maxWidth: 480,
+                          defaultWidth: 280,
+                          onWidthChanged: (value) =>
+                              tocPanelWidth.value = value,
+                          onWidthChangeEnd: (value) => ref
+                              .read(appSettingsProvider.notifier)
+                              .updateAppearance(
+                                appearance.copyWith(readerTocWidth: value),
+                              ),
+                          child: _ReaderOverlaySurface(
+                            child: _ReaderTocPanel(
+                              toc: manifest.value?.toc ?? const [],
+                              activeChapterIndex: activeChapterIndex,
+                              onSelected: (item) {
+                                final target = Uri.tryParse(item.href);
+                                unawaited(
+                                  selectChapter(
+                                    item.spineIndex,
+                                    anchor: target?.fragment.isEmpty ?? true
+                                        ? null
+                                        : target!.fragment,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (showSidePanel)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        bottom: 8,
+                        width: sidePanelWidth.value + 8,
+                        child: ResizablePane(
+                          edge: ResizablePaneEdge.leading,
+                          width: sidePanelWidth.value,
+                          minWidth: 280,
+                          maxWidth: 520,
+                          defaultWidth: 320,
+                          onWidthChanged: (value) =>
+                              sidePanelWidth.value = value,
+                          onWidthChangeEnd: (value) => ref
+                              .read(appSettingsProvider.notifier)
+                              .updateAppearance(
+                                appearance.copyWith(
+                                  readerSidePanelWidth: value,
+                                ),
+                              ),
+                          child: _ReaderOverlaySurface(
+                            child: _ReaderSidePanel(
+                              showBookmarks: showBookmarks.value,
+                              bookmarks: bookmarkItems,
+                              annotations: annotations,
+                              onPanelChanged: (value) =>
+                                  showBookmarks.value = value,
+                              onSelectBookmark: selectBookmark,
+                              onRemoveBookmark: removeBookmark,
+                              onEditBookmark: editBookmark,
+                              onSelectAnnotation: selectAnnotation,
+                              onEditAnnotation: editAnnotation,
+                              onRemoveAnnotation: (annotation) async {
+                                await ref
+                                    .read(annotationRepositoryProvider)
+                                    .remove(annotation.id);
+                                ref.invalidate(
+                                  annotationsForBookProvider(bookId),
+                                );
+                                if (focusedAnnotationId.value ==
+                                    annotation.id) {
+                                  focusedAnnotationId.value = null;
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
             Positioned(
               top: 0,
