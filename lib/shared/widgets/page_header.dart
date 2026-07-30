@@ -26,7 +26,7 @@ class PageHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(context).textTheme.headlineMedium),
+              Text(title, style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 6),
               Text(subtitle, style: Theme.of(context).textTheme.bodyLarge),
             ],
