@@ -227,11 +227,34 @@ class AppShell extends HookConsumerWidget {
                 onReadingSettingsChanged: onReadingSettingsChanged,
                 onOpenBookDetails: openBookDetails,
               );
+              final animatedContent = isReading
+                  ? content
+                  : AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      reverseDuration: const Duration(milliseconds: 120),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(.01, 0),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      ),
+                      child: KeyedSubtree(
+                        key: ValueKey(activeTab.id),
+                        child: content,
+                      ),
+                    );
 
               return Scaffold(
                 appBar: isReading
                     ? null
                     : AppBar(
+                        toolbarHeight: 52,
                         title: const Text('TomoRead'),
                         actions: [
                           if (isDesktop)
@@ -256,7 +279,7 @@ class AppShell extends HookConsumerWidget {
                           const SizedBox(width: 8),
                         ],
                         bottom: PreferredSize(
-                          preferredSize: const Size.fromHeight(48),
+                          preferredSize: const Size.fromHeight(40),
                           child: _WorkspaceTabBar(
                             tabs: tabs.value,
                             activeTabId: activeTabId.value,
@@ -306,10 +329,10 @@ class AppShell extends HookConsumerWidget {
                                 onAddBook: onImportBooks,
                               ),
                             ),
-                          Expanded(child: content),
+                          Expanded(child: animatedContent),
                         ],
                       )
-                    : content,
+                    : animatedContent,
               );
             },
           ),
@@ -402,20 +425,20 @@ class _WorkspaceTabBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      color: Theme.of(context).colorScheme.surface,
       child: SizedBox(
-        height: 48,
+        height: 40,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           itemCount: tabs.length,
-          separatorBuilder: (context, index) => const SizedBox(width: 6),
+          separatorBuilder: (context, index) => const SizedBox(width: 4),
           itemBuilder: (context, index) {
             final tab = tabs[index];
             final active = tab.id == activeTabId;
             return Material(
               color: active
-                  ? Theme.of(context).colorScheme.secondaryContainer
+                  ? Theme.of(context).colorScheme.surfaceContainerLow
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
@@ -426,8 +449,8 @@ class _WorkspaceTabBar extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(_destinationIcon(tab.destination), size: 18),
-                      const SizedBox(width: 8),
+                      Icon(_destinationIcon(tab.destination), size: 16),
+                      const SizedBox(width: 7),
                       ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 160),
                         child: Text(tab.title, overflow: TextOverflow.ellipsis),
@@ -436,6 +459,10 @@ class _WorkspaceTabBar extends StatelessWidget {
                         const SizedBox(width: 4),
                         IconButton(
                           visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 32,
+                            height: 32,
+                          ),
                           tooltip: '关闭 ${tab.title}',
                           onPressed: () => onClosed(tab),
                           icon: const Icon(Icons.close, size: 18),

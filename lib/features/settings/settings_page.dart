@@ -41,7 +41,7 @@ class SettingsPage extends HookWidget {
         final compact = constraints.maxWidth < 840;
         if (compact) {
           return ListView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
             children: [
               const PageHeader(title: '设置', subtitle: '调整应用外观和默认阅读偏好。'),
               const SizedBox(height: 24),
@@ -71,9 +71,9 @@ class SettingsPage extends HookWidget {
         return Row(
           children: [
             SizedBox(
-              width: 220,
+              width: 232,
               child: Material(
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                color: Theme.of(context).colorScheme.surface,
                 child: _SettingsNavigation(
                   selected: section.value,
                   onSelected: (value) => section.value = value,
@@ -83,13 +83,13 @@ class SettingsPage extends HookWidget {
             const VerticalDivider(width: 1),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.all(28),
+                padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
                 children: [
                   PageHeader(
                     title: _sectionTitle(section.value),
                     subtitle: _sectionSubtitle(section.value),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 720),
                     child: sectionContent,
@@ -112,7 +112,7 @@ class _SettingsNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(12, 20, 12, 12),
+    padding: const EdgeInsets.fromLTRB(12, 24, 12, 12),
     children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -148,13 +148,40 @@ class _NavigationItem extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    selected: selected,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    leading: Icon(icon),
-    title: Text(label),
-    onTap: onTap,
-  );
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        border: Border(
+          left: BorderSide(
+            color: selected ? colorScheme.primary : Colors.transparent,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Material(
+        color: selected ? colorScheme.surfaceContainerLow : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        child: ListTile(
+          selected: false,
+          leading: Icon(icon, color: selected ? colorScheme.primary : null),
+          title: Text(
+            label,
+            style: selected
+                ? TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  )
+                : null,
+          ),
+          onTap: onTap,
+        ),
+      ),
+    );
+  }
 }
 
 class _AppearanceSettings extends StatelessWidget {
