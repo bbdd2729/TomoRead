@@ -64,4 +64,14 @@ class BookmarkRepository {
       whereArgs: [bookmarkId],
     );
   }
+
+  Future<void> updateLabel(String bookmarkId, String? label) async {
+    final database = await _database.database;
+    await database.update(
+      'bookmarks',
+      {'label': label},
+      where: 'id = ?',
+      whereArgs: [bookmarkId],
+    );
+  }
 }

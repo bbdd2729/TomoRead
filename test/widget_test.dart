@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tomoread/app/appearance.dart';
 import 'package:tomoread/app/providers.dart';
@@ -130,7 +131,9 @@ void main() {
     await tester.pump();
     expect(find.byIcon(Icons.menu_open), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('reader-focus-mode')));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyM);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
     expect(find.byKey(const Key('reader-footer')), findsNothing);
   });

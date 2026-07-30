@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -21,6 +22,22 @@ import 'epub_webview.dart';
 import 'reader_search_dialog.dart';
 
 enum _MobileReaderToolbarAction { search, settings, focus }
+
+class _ReaderPreviousIntent extends Intent {
+  const _ReaderPreviousIntent();
+}
+
+class _ReaderNextIntent extends Intent {
+  const _ReaderNextIntent();
+}
+
+class _ReaderSearchIntent extends Intent {
+  const _ReaderSearchIntent();
+}
+
+class _ReaderFocusIntent extends Intent {
+  const _ReaderFocusIntent();
+}
 
 class ReaderWorkspace extends HookConsumerWidget {
   const ReaderWorkspace({
@@ -286,6 +303,18 @@ class ReaderWorkspace extends HookConsumerWidget {
       ref.invalidate(bookmarksForBookProvider(bookId));
     }
 
+    Future<void> editBookmark(Bookmark bookmark) async {
+      final label = await showDialog<String?>(
+        context: context,
+        builder: (context) => _BookmarkLabelDialog(bookmark: bookmark),
+      );
+      if (!context.mounted || label == null) return;
+      await ref
+          .read(bookmarkRepositoryProvider)
+          .updateLabel(bookmark.id, label.trim().isEmpty ? null : label.trim());
+      ref.invalidate(bookmarksForBookProvider(bookId));
+    }
+
     void selectAnnotation(ReadingAnnotation annotation) {
       final nextIndex = manifest.value?.spine.indexWhere(
         (item) => item.href == annotation.href,
@@ -370,6 +399,50 @@ class ReaderWorkspace extends HookConsumerWidget {
             ),
       );
     }
+
+    Widget withReaderShortcuts(Widget child) => Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
+            _ReaderPreviousIntent(),
+        SingleActivator(LogicalKeyboardKey.pageUp): _ReaderPreviousIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowRight, alt: true):
+            _ReaderNextIntent(),
+        SingleActivator(LogicalKeyboardKey.pageDown): _ReaderNextIntent(),
+        SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            _ReaderSearchIntent(),
+        SingleActivator(LogicalKeyboardKey.keyM, control: true):
+            _ReaderFocusIntent(),
+      },
+      child: Actions(
+        actions: {
+          _ReaderPreviousIntent: CallbackAction<_ReaderPreviousIntent>(
+            onInvoke: (_) {
+              goToPrevious();
+              return null;
+            },
+          ),
+          _ReaderNextIntent: CallbackAction<_ReaderNextIntent>(
+            onInvoke: (_) {
+              goToNext();
+              return null;
+            },
+          ),
+          _ReaderSearchIntent: CallbackAction<_ReaderSearchIntent>(
+            onInvoke: (_) {
+              unawaited(openSearch());
+              return null;
+            },
+          ),
+          _ReaderFocusIntent: CallbackAction<_ReaderFocusIntent>(
+            onInvoke: (_) {
+              focusMode.value = !focusMode.value;
+              return null;
+            },
+          ),
+        },
+        child: Focus(autofocus: true, child: child),
+      ),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -516,6 +589,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                                     showBookmarks.value = value,
                                 onSelectBookmark: selectBookmark,
                                 onRemoveBookmark: removeBookmark,
+                                onEditBookmark: editBookmark,
                                 onSelectAnnotation: selectAnnotation,
                                 onEditAnnotation: editAnnotation,
                                 onRemoveAnnotation: (annotation) async {
@@ -558,55 +632,58 @@ class ReaderWorkspace extends HookConsumerWidget {
               ),
           ],
         );
-        if (!isMobile) return readerBody;
-        return Scaffold(
-          key: mobileScaffoldKey,
-          drawer: _MobileReaderTocDrawer(
-            title: title,
-            book: readerBook.value,
-            chapterCount: totalChapters,
-            toc: manifest.value?.toc ?? const [],
-            activeChapterIndex: activeChapterIndex,
-            onSelected: (item) {
-              final target = Uri.tryParse(item.href);
-              unawaited(
-                selectChapter(
-                  item.spineIndex,
-                  anchor: target?.fragment.isEmpty ?? true
-                      ? null
-                      : target!.fragment,
+        final content = isMobile
+            ? Scaffold(
+                key: mobileScaffoldKey,
+                drawer: _MobileReaderTocDrawer(
+                  title: title,
+                  book: readerBook.value,
+                  chapterCount: totalChapters,
+                  toc: manifest.value?.toc ?? const [],
+                  activeChapterIndex: activeChapterIndex,
+                  onSelected: (item) {
+                    final target = Uri.tryParse(item.href);
+                    unawaited(
+                      selectChapter(
+                        item.spineIndex,
+                        anchor: target?.fragment.isEmpty ?? true
+                            ? null
+                            : target!.fragment,
+                      ),
+                    );
+                    mobileScaffoldKey.currentState?.closeDrawer();
+                  },
                 ),
-              );
-              mobileScaffoldKey.currentState?.closeDrawer();
-            },
-          ),
-          endDrawer: _MobileReaderSideDrawer(
-            showBookmarks: showBookmarks.value,
-            bookmarks: bookmarkItems,
-            annotations: annotations,
-            onPanelChanged: (value) => showBookmarks.value = value,
-            onSelectBookmark: (bookmark) async {
-              await selectBookmark(bookmark);
-              mobileScaffoldKey.currentState?.closeEndDrawer();
-            },
-            onRemoveBookmark: removeBookmark,
-            onSelectAnnotation: (annotation) {
-              selectAnnotation(annotation);
-              mobileScaffoldKey.currentState?.closeEndDrawer();
-            },
-            onEditAnnotation: editAnnotation,
-            onRemoveAnnotation: (annotation) async {
-              await ref
-                  .read(annotationRepositoryProvider)
-                  .remove(annotation.id);
-              ref.invalidate(annotationsForBookProvider(bookId));
-              if (focusedAnnotationId.value == annotation.id) {
-                focusedAnnotationId.value = null;
-              }
-            },
-          ),
-          body: readerBody,
-        );
+                endDrawer: _MobileReaderSideDrawer(
+                  showBookmarks: showBookmarks.value,
+                  bookmarks: bookmarkItems,
+                  annotations: annotations,
+                  onPanelChanged: (value) => showBookmarks.value = value,
+                  onSelectBookmark: (bookmark) async {
+                    await selectBookmark(bookmark);
+                    mobileScaffoldKey.currentState?.closeEndDrawer();
+                  },
+                  onRemoveBookmark: removeBookmark,
+                  onEditBookmark: editBookmark,
+                  onSelectAnnotation: (annotation) {
+                    selectAnnotation(annotation);
+                    mobileScaffoldKey.currentState?.closeEndDrawer();
+                  },
+                  onEditAnnotation: editAnnotation,
+                  onRemoveAnnotation: (annotation) async {
+                    await ref
+                        .read(annotationRepositoryProvider)
+                        .remove(annotation.id);
+                    ref.invalidate(annotationsForBookProvider(bookId));
+                    if (focusedAnnotationId.value == annotation.id) {
+                      focusedAnnotationId.value = null;
+                    }
+                  },
+                ),
+                body: readerBody,
+              )
+            : readerBody;
+        return withReaderShortcuts(content);
       },
     );
   }
@@ -778,8 +855,24 @@ class _ReaderTocPanel extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final query = useState('');
+    final scrollController = useScrollController();
+    final activeItemKey = useMemoized(GlobalKey.new);
     final hasMatches = _hasMatchingItem(toc, query.value);
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final targetContext = activeItemKey.currentContext;
+        if (targetContext != null) {
+          Scrollable.ensureVisible(
+            targetContext,
+            duration: const Duration(milliseconds: 180),
+            alignment: 0.3,
+          );
+        }
+      });
+      return null;
+    }, [activeChapterIndex, query.value]);
     return ListView(
+      controller: scrollController,
       padding: const EdgeInsets.all(16),
       children: [
         Text('目录', style: Theme.of(context).textTheme.titleLarge),
@@ -809,7 +902,7 @@ class _ReaderTocPanel extends HookWidget {
             child: Center(child: Text('没有匹配的章节。')),
           )
         else
-          ..._buildTocItems(toc, 0, query.value),
+          ..._buildTocItems(toc, activeItemKey, 0, query.value),
       ],
     );
   }
@@ -826,6 +919,7 @@ class _ReaderTocPanel extends HookWidget {
 
   List<Widget> _buildTocItems(
     List<EpubTocItem> items, [
+    GlobalKey? activeItemKey,
     int depth = 0,
     String query = '',
   ]) {
@@ -835,6 +929,9 @@ class _ReaderTocPanel extends HookWidget {
         if (normalizedQuery.isEmpty ||
             item.title.toLowerCase().contains(normalizedQuery))
           ListTile(
+            key: item.spineIndex == activeChapterIndex && item.children.isEmpty
+                ? activeItemKey
+                : null,
             contentPadding: EdgeInsets.only(left: depth * 16.0),
             enabled: item.spineIndex >= 0,
             selected: item.spineIndex == activeChapterIndex,
@@ -845,7 +942,7 @@ class _ReaderTocPanel extends HookWidget {
             ),
             onTap: item.spineIndex < 0 ? null : () => onSelected(item),
           ),
-        ..._buildTocItems(item.children, depth + 1, query),
+        ..._buildTocItems(item.children, activeItemKey, depth + 1, query),
       ],
     ];
   }
@@ -978,6 +1075,7 @@ class _MobileTocEntry extends StatelessWidget {
       );
     }
     return ExpansionTile(
+      key: PageStorageKey('${item.href}-$activeChapterIndex'),
       tilePadding: padding,
       initiallyExpanded: _containsActiveChapter(item),
       title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -1006,6 +1104,7 @@ class _MobileReaderSideDrawer extends StatelessWidget {
     required this.onPanelChanged,
     required this.onSelectBookmark,
     required this.onRemoveBookmark,
+    required this.onEditBookmark,
     required this.onSelectAnnotation,
     required this.onEditAnnotation,
     required this.onRemoveAnnotation,
@@ -1017,6 +1116,7 @@ class _MobileReaderSideDrawer extends StatelessWidget {
   final ValueChanged<bool> onPanelChanged;
   final Future<void> Function(Bookmark bookmark) onSelectBookmark;
   final Future<void> Function(Bookmark bookmark) onRemoveBookmark;
+  final Future<void> Function(Bookmark bookmark) onEditBookmark;
   final ValueChanged<ReadingAnnotation> onSelectAnnotation;
   final Future<void> Function(ReadingAnnotation annotation) onEditAnnotation;
   final Future<void> Function(ReadingAnnotation annotation) onRemoveAnnotation;
@@ -1054,6 +1154,7 @@ class _MobileReaderSideDrawer extends StatelessWidget {
               onPanelChanged: onPanelChanged,
               onSelectBookmark: onSelectBookmark,
               onRemoveBookmark: onRemoveBookmark,
+              onEditBookmark: onEditBookmark,
               onSelectAnnotation: onSelectAnnotation,
               onEditAnnotation: onEditAnnotation,
               onRemoveAnnotation: onRemoveAnnotation,
@@ -1237,6 +1338,7 @@ class _ReaderSidePanel extends StatelessWidget {
     required this.onPanelChanged,
     required this.onSelectBookmark,
     required this.onRemoveBookmark,
+    required this.onEditBookmark,
     required this.onSelectAnnotation,
     required this.onEditAnnotation,
     required this.onRemoveAnnotation,
@@ -1248,6 +1350,7 @@ class _ReaderSidePanel extends StatelessWidget {
   final ValueChanged<bool> onPanelChanged;
   final Future<void> Function(Bookmark bookmark) onSelectBookmark;
   final Future<void> Function(Bookmark bookmark) onRemoveBookmark;
+  final Future<void> Function(Bookmark bookmark) onEditBookmark;
   final ValueChanged<ReadingAnnotation> onSelectAnnotation;
   final Future<void> Function(ReadingAnnotation annotation) onEditAnnotation;
   final Future<void> Function(ReadingAnnotation annotation) onRemoveAnnotation;
@@ -1295,10 +1398,20 @@ class _ReaderSidePanel extends StatelessWidget {
                         '保存于 ${bookmark.createdAt.hour.toString().padLeft(2, '0')}:${bookmark.createdAt.minute.toString().padLeft(2, '0')}',
                       ),
                       onTap: () => onSelectBookmark(bookmark),
-                      trailing: IconButton(
-                        tooltip: '删除书签',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () => onRemoveBookmark(bookmark),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: '编辑书签',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () => onEditBookmark(bookmark),
+                          ),
+                          IconButton(
+                            tooltip: '删除书签',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => onRemoveBookmark(bookmark),
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -1362,6 +1475,43 @@ class _ReaderSidePanel extends StatelessWidget {
     AnnotationColor.blue => Colors.lightBlue,
     AnnotationColor.pink => Colors.pink,
   };
+}
+
+class _BookmarkLabelDialog extends HookWidget {
+  const _BookmarkLabelDialog({required this.bookmark});
+
+  final Bookmark bookmark;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = useTextEditingController(text: bookmark.label ?? '');
+    return AlertDialog(
+      title: const Text('编辑书签'),
+      content: SizedBox(
+        width: 360,
+        child: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 80,
+          decoration: InputDecoration(
+            labelText: '书签名称',
+            hintText: bookmark.chapterTitle,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, controller.text),
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
 }
 
 class _AnnotationDraft {
