@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:tomoread/data/services/epub_extraction_service.dart';
@@ -10,6 +11,7 @@ import 'package:tomoread/domain/models/epub_manifest.dart';
 import 'package:tomoread/domain/models/library_book.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late Directory root;
 
   setUp(() async {
@@ -93,6 +95,14 @@ void main() {
       );
     },
   );
+
+  test('bundles the Foliate runtime license asset', () async {
+    final license = await rootBundle.loadString(
+      'assets/epub_reader_runtime/licenses/foliate-js.MIT.txt',
+    );
+
+    expect(license, contains('MIT License'));
+  });
 }
 
 LibraryBook _book(String filePath) => LibraryBook(

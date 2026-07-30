@@ -91,6 +91,7 @@ flutter:
 
   assets:
     - assets/epub_reader_runtime/
+    - assets/epub_reader_runtime/licenses/foliate-js.MIT.txt
 
   # To add assets to your application, add an assets section, like this:
   # assets:
