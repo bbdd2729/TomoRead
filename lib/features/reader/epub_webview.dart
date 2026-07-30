@@ -430,6 +430,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
             direction,
           });
         };
+        window.__tomoReadRequestNavigation = requestNavigation;
         const isEditableTarget = (target) => target instanceof HTMLInputElement ||
           target instanceof HTMLTextAreaElement || target?.isContentEditable;
         window.addEventListener('keydown', (event) => {
@@ -521,8 +522,16 @@ a { color: ${_cssColor(colorScheme.primary)}; }
           if (window.getSelection?.()?.toString().trim()) return;
           const x = event.clientX / window.innerWidth;
           const y = event.clientY / window.innerHeight;
-          if (x < .25 || x > .75 || y < .25 || y > .75) return;
-          window.chrome?.webview?.postMessage({ type: 'readerControls' });
+          if (x >= .25 && x <= .75 && y >= .25 && y <= .75) {
+            window.chrome?.webview?.postMessage({ type: 'readerControls' });
+            return;
+          }
+          if (window.__tomoReadPaginated !== true) return;
+          if (x < .25) {
+            window.__tomoReadRequestNavigation?.('previous');
+          } else if (x > .75) {
+            window.__tomoReadRequestNavigation?.('next');
+          }
         });
         window.__tomoReadControlsListener = true;
       }

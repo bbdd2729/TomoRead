@@ -470,13 +470,17 @@ class ReaderWorkspace extends HookConsumerWidget {
             tocVisible.value &&
             !isMobile &&
             constraints.maxWidth >= tocPanelWidth.value + 160;
+        final canShowBothPanels =
+            constraints.maxWidth >=
+            tocPanelWidth.value + sidePanelWidth.value + 320;
         final showSidePanel =
             controlsVisible.value &&
             sidePanelVisible.value &&
             !isMobile &&
-            constraints.maxWidth >=
-                sidePanelWidth.value +
-                    (showToc ? tocPanelWidth.value + 160 : 160);
+            constraints.maxWidth >= sidePanelWidth.value + 160 &&
+            (!showToc || canShowBothPanels);
+        final panelTopInset = controlsVisible.value ? 64.0 : 8.0;
+        final panelBottomInset = controlsVisible.value ? 72.0 : 8.0;
         Future<void> openMobileToc() => showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
@@ -597,8 +601,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                     if (showToc)
                       Positioned(
                         left: 8,
-                        top: 8,
-                        bottom: 8,
+                        top: panelTopInset,
+                        bottom: panelBottomInset,
                         width: tocPanelWidth.value + 8,
                         child: ResizablePane(
                           width: tocPanelWidth.value,
@@ -634,8 +638,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                     if (showSidePanel)
                       Positioned(
                         right: 8,
-                        top: 8,
-                        bottom: 8,
+                        top: panelTopInset,
+                        bottom: panelBottomInset,
                         width: sidePanelWidth.value + 8,
                         child: ResizablePane(
                           edge: ResizablePaneEdge.leading,
@@ -1982,6 +1986,8 @@ class _ReaderProgressSliderState extends State<_ReaderProgressSlider> {
     return Slider(
       key: const Key('reader-progress-slider'),
       value: value,
+      label: '${(value * 100).round()}%',
+      semanticFormatterCallback: (next) => '${(next * 100).round()}%',
       onChanged: (next) => setState(() => _dragProgress = next),
       onChangeEnd: (next) {
         setState(() => _dragProgress = null);
