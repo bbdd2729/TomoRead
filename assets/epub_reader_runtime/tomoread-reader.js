@@ -1,11 +1,13 @@
 import './foliate-paginator.js'
 
-const runtimeVersion = '2'
+const runtimeVersion = '3'
 const stage = document.getElementById('reader-stage')
 
 let session
 let book
 let paginator
+let annotations = []
+let focusedAnnotationId
 
 const postMessage = message => {
   if (window.chrome?.webview?.postMessage) {
@@ -70,6 +72,90 @@ const nearestAnchor = range => {
   return element?.closest?.('[id]')?.id ?? null
 }
 
+const rangeForOffsets = (doc, startOffset, endOffset) => {
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+  let node
+  let offset = 0
+  let start
+  let end
+  while (node = walker.nextNode()) {
+    const length = node.textContent.length
+    if (!start && startOffset <= offset + length) {
+      start = [node, Math.max(0, startOffset - offset)]
+    }
+    if (!end && endOffset <= offset + length) {
+      end = [node, Math.max(0, endOffset - offset)]
+      break
+    }
+    offset += length
+  }
+  if (!start || !end) return null
+  const range = doc.createRange()
+  range.setStart(...start)
+  range.setEnd(...end)
+  return range
+}
+
+const applyAnnotations = (doc, index) => {
+  const highlights = doc.defaultView.CSS?.highlights
+  const Highlight = doc.defaultView.Highlight
+  if (!highlights || !Highlight) return
+  const styleId = 'tomoread-runtime-annotations'
+  let style = doc.getElementById(styleId)
+  if (!style) {
+    style = doc.createElement('style')
+    style.id = styleId
+    doc.head.append(style)
+  }
+  style.textContent = `
+    ::highlight(tomoread-yellow) { background: #f7d15499; }
+    ::highlight(tomoread-green) { background: #80c78399; }
+    ::highlight(tomoread-blue) { background: #7db8f299; }
+    ::highlight(tomoread-pink) { background: #ec91b699; }
+  `
+  const groups = new Map(['yellow', 'green', 'blue', 'pink'].map(color => [color, new Highlight()]))
+  const href = getSections()[index]?.href
+  let focusedRange
+  for (const annotation of annotations) {
+    if (annotation.href !== href) continue
+    const [start, end] = annotation.locator.split(':').map(Number)
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue
+    const range = rangeForOffsets(doc, start, end)
+    if (!range) continue
+    groups.get(annotation.color)?.add(range)
+    if (annotation.id === focusedAnnotationId) focusedRange = range
+  }
+  for (const [color, ranges] of groups) highlights.set(`tomoread-${color}`, ranges)
+  if (focusedRange) window.setTimeout(() => void paginator?.scrollToAnchor(focusedRange), 0)
+}
+
+const applySelectionListener = (doc, index) => {
+  let pending = false
+  doc.addEventListener('selectionchange', () => {
+    if (pending) return
+    pending = true
+    window.setTimeout(() => {
+      pending = false
+      const selection = doc.getSelection()
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
+      const range = selection.getRangeAt(0)
+      if (!doc.body.contains(range.commonAncestorContainer)) return
+      const text = selection.toString().replace(/\s+/g, ' ').trim()
+      if (!text) return
+      const before = range.cloneRange()
+      before.selectNodeContents(doc.body)
+      before.setEnd(range.startContainer, range.startOffset)
+      postMessage({
+        type: 'textSelection',
+        href: getSections()[index]?.href,
+        text,
+        startOffset: before.toString().length,
+        endOffset: before.toString().length + range.toString().length,
+      })
+    }, 80)
+  })
+}
+
 const emitRelocation = detail => {
   const section = getSections()[detail.index]
   if (!section || !paginator) return
@@ -84,7 +170,9 @@ const emitRelocation = detail => {
   })
 }
 
-const attachDocumentInteractions = ({ detail: { doc } }) => {
+const attachDocumentInteractions = ({ detail: { doc, index } }) => {
+  applyAnnotations(doc, index)
+  applySelectionListener(doc, index)
   doc.addEventListener('click', event => {
     const link = event.target.closest?.('a[href]')
     if (link) {
@@ -152,12 +240,21 @@ const goToPage = async pageIndex => {
   await paginator.goTo({ index: paginator.primaryIndex, anchor: fraction })
 }
 
+const setAnnotations = (nextAnnotations, nextFocusedAnnotationId) => {
+  annotations = nextAnnotations ?? []
+  focusedAnnotationId = nextFocusedAnnotationId
+  for (const { doc, index } of paginator?.getContents?.() ?? []) {
+    applyAnnotations(doc, index)
+  }
+}
+
 window.TomoReadEpubRuntime = Object.freeze({
   runtimeVersion,
   loadManifest,
   open,
   goToHref,
   goToPage,
+  setAnnotations,
   setSettings: applySettings,
   postMessage,
 })

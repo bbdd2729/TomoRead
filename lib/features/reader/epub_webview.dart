@@ -88,6 +88,10 @@ class EpubWebView extends HookConsumerWidget {
       focusedAnnotationId,
       annotationFocusRevision,
     );
+    final runtimeAnnotationScript = _runtimeAnnotationScript(
+      annotations,
+      focusedAnnotationId,
+    );
     final useFoliateRuntime = settings.layoutMode == ReaderLayoutMode.paginated;
     final resourceDirectory = readerSession.value?.directoryPath;
     final runtimeEntryPoint = readerSession.value?.virtualEntryPointUrl(
@@ -117,6 +121,14 @@ class EpubWebView extends HookConsumerWidget {
         await controller.executeScript(annotationScript);
       } catch (_) {
         // The document can change while the WebView is navigating.
+      }
+    }
+
+    Future<void> applyFoliateAnnotations() async {
+      try {
+        await controller.executeScript(runtimeAnnotationScript);
+      } catch (_) {
+        // An adjacent chapter can finish loading while its annotations update.
       }
     }
 
@@ -307,12 +319,24 @@ class EpubWebView extends HookConsumerWidget {
       return null;
     }, [initialized.value, styleScript, useFoliateRuntime]);
 
-    useEffect(() {
-      if (initialized.value && !useFoliateRuntime) {
-        unawaited(applyAnnotations());
-      }
-      return null;
-    }, [initialized.value, annotationScript, useFoliateRuntime]);
+    useEffect(
+      () {
+        if (initialized.value) {
+          if (useFoliateRuntime) {
+            unawaited(applyFoliateAnnotations());
+          } else {
+            unawaited(applyAnnotations());
+          }
+        }
+        return null;
+      },
+      [
+        initialized.value,
+        annotationScript,
+        runtimeAnnotationScript,
+        useFoliateRuntime,
+      ],
+    );
 
     useEffect(
       () {
@@ -789,6 +813,25 @@ a { color: ${_cssColor(colorScheme.primary)}; }
 
   String _runtimeGoToPageScript(int pageIndex) =>
       _runtimeCall('runtime.goToPage(${pageIndex.clamp(0, 100000)})');
+
+  String _runtimeAnnotationScript(
+    List<ReadingAnnotation> annotations,
+    String? focusedAnnotationId,
+  ) {
+    final values = annotations
+        .map(
+          (annotation) => {
+            'id': annotation.id,
+            'href': annotation.href,
+            'locator': annotation.locator,
+            'color': annotation.color.name,
+          },
+        )
+        .toList();
+    return _runtimeCall(
+      'runtime.setAnnotations(${jsonEncode(values)}, ${jsonEncode(focusedAnnotationId)})',
+    );
+  }
 
   String _runtimeCall(String invocation) =>
       '''(() => {
