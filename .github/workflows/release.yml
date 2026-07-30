@@ -26,6 +26,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   FLUTTER_VERSION: 3.44.8
 
@@ -165,12 +169,15 @@ jobs:
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
       BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
+      GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.parallel=true
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v6
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v5
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
