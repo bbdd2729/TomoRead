@@ -35,6 +35,7 @@ class EpubWebView extends HookConsumerWidget {
     required this.onRequestPrevious,
     required this.onRequestNext,
     required this.onTextSelectionChanged,
+    required this.onToggleControls,
   });
 
   static const _hostName = 'reader.tomoread';
@@ -57,6 +58,7 @@ class EpubWebView extends HookConsumerWidget {
   final VoidCallback onRequestPrevious;
   final VoidCallback onRequestNext;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
+  final VoidCallback onToggleControls;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -71,6 +73,7 @@ class EpubWebView extends HookConsumerWidget {
         restoreRevision: restoreRevision,
         onNavigateToHref: onNavigateToHref,
         onScrollPositionChanged: onScrollPositionChanged,
+        onToggleControls: onToggleControls,
       );
     }
     final extractedDirectory = ref.watch(
@@ -208,6 +211,8 @@ class EpubWebView extends HookConsumerWidget {
               ),
             );
           }
+        } else if (message['type'] == 'readerControls') {
+          onToggleControls();
         }
       });
       return subscription.cancel;
@@ -464,6 +469,18 @@ a { color: ${_cssColor(colorScheme.primary)}; }
         };
         document.addEventListener('selectionchange', reportSelection);
         window.__tomoReadSelectionListener = true;
+      }
+      if (!window.__tomoReadControlsListener) {
+        window.addEventListener('click', (event) => {
+          const target = event.target;
+          if (target?.closest?.('a, button, input, textarea, select')) return;
+          if (window.getSelection?.()?.toString().trim()) return;
+          const x = event.clientX / window.innerWidth;
+          const y = event.clientY / window.innerHeight;
+          if (x < .25 || x > .75 || y < .25 || y > .75) return;
+          window.chrome?.webview?.postMessage({ type: 'readerControls' });
+        });
+        window.__tomoReadControlsListener = true;
       }
     })();''';
   }

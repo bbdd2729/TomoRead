@@ -23,6 +23,8 @@ import 'reader_search_dialog.dart';
 
 enum _MobileReaderToolbarAction { search, settings, focus }
 
+void _noopReaderAction() {}
+
 class _ReaderPreviousIntent extends Intent {
   const _ReaderPreviousIntent();
 }
@@ -45,11 +47,15 @@ class ReaderWorkspace extends HookConsumerWidget {
     required this.bookId,
     required this.title,
     required this.readingSettings,
+    this.onExitReader = _noopReaderAction,
+    this.initialControlsVisible = false,
   });
 
   final String bookId;
   final String title;
   final ReadingSettings readingSettings;
+  final VoidCallback onExitReader;
+  final bool initialControlsVisible;
 
   static double _overallProgress(
     int chapterIndex,
@@ -72,9 +78,9 @@ class ReaderWorkspace extends HookConsumerWidget {
     final appearance =
         ref.watch(appSettingsProvider).value?.appearance ??
         const AppAppearance();
-    final tocVisible = useState(appearance.readerTocVisible);
-    final sidePanelVisible = useState(appearance.readerSidePanelVisible);
-    final focusMode = useState(false);
+    final tocVisible = useState(false);
+    final sidePanelVisible = useState(false);
+    final controlsVisible = useState(initialControlsVisible);
     final tocPanelWidth = useState(appearance.readerTocWidth);
     final sidePanelWidth = useState(appearance.readerSidePanelWidth);
     final showBookmarks = useState(false);
@@ -115,21 +121,11 @@ class ReaderWorkspace extends HookConsumerWidget {
       (bookmark) => bookmark.locator == currentLocator,
     );
 
-    useEffect(
-      () {
-        tocPanelWidth.value = appearance.readerTocWidth;
-        sidePanelWidth.value = appearance.readerSidePanelWidth;
-        tocVisible.value = appearance.readerTocVisible;
-        sidePanelVisible.value = appearance.readerSidePanelVisible;
-        return null;
-      },
-      [
-        appearance.readerTocWidth,
-        appearance.readerSidePanelWidth,
-        appearance.readerTocVisible,
-        appearance.readerSidePanelVisible,
-      ],
-    );
+    useEffect(() {
+      tocPanelWidth.value = appearance.readerTocWidth;
+      sidePanelWidth.value = appearance.readerSidePanelWidth;
+      return null;
+    }, [appearance.readerTocWidth, appearance.readerSidePanelWidth]);
 
     useEffect(() {
       final savedIndex = readerBook.value?.chapterIndex;
@@ -400,6 +396,8 @@ class ReaderWorkspace extends HookConsumerWidget {
       );
     }
 
+    void toggleControls() => controlsVisible.value = !controlsVisible.value;
+
     Widget withReaderShortcuts(Widget child) => Shortcuts(
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
@@ -435,7 +433,7 @@ class ReaderWorkspace extends HookConsumerWidget {
           ),
           _ReaderFocusIntent: CallbackAction<_ReaderFocusIntent>(
             onInvoke: (_) {
-              focusMode.value = !focusMode.value;
+              toggleControls();
               return null;
             },
           ),
@@ -449,11 +447,11 @@ class ReaderWorkspace extends HookConsumerWidget {
         const contentMinWidth = 440.0;
         final isMobile = constraints.maxWidth < 840;
         final showToc =
-            !focusMode.value &&
+            controlsVisible.value &&
             tocVisible.value &&
             constraints.maxWidth >= contentMinWidth + tocPanelWidth.value + 8;
         final showSidePanel =
-            !focusMode.value &&
+            controlsVisible.value &&
             sidePanelVisible.value &&
             constraints.maxWidth >=
                 contentMinWidth +
@@ -462,30 +460,37 @@ class ReaderWorkspace extends HookConsumerWidget {
                     (showToc ? tocPanelWidth.value + 8 : 0);
         final readerBody = Column(
           children: [
-            _ReaderToolbar(
-              title: title,
-              tocVisible: tocVisible.value,
-              sidePanelVisible: sidePanelVisible.value,
-              mobileReaderControls: isMobile,
-              focusMode: focusMode.value,
-              bookmarked: isBookmarked,
-              canCreateAnnotation:
-                  selectedText.value?.href == chapter.value?.href,
-              onToggleToc: isMobile
-                  ? () => mobileScaffoldKey.currentState?.openDrawer()
-                  : toggleToc,
-              onToggleSidePanel: isMobile
-                  ? () => mobileScaffoldKey.currentState?.openEndDrawer()
-                  : toggleSidePanel,
-              onToggleFocusMode: () => focusMode.value = !focusMode.value,
-              onToggleBookmark: toggleBookmark,
-              onCreateAnnotation: createAnnotation,
-              onOpenBookSettings: openBookSettings,
-              onOpenSearch: openSearch,
+            _ReaderChrome(
+              visible: controlsVisible.value,
+              child: _ReaderToolbar(
+                title: title,
+                tocVisible: tocVisible.value,
+                sidePanelVisible: sidePanelVisible.value,
+                mobileReaderControls: isMobile,
+                bookmarked: isBookmarked,
+                canCreateAnnotation:
+                    selectedText.value?.href == chapter.value?.href,
+                onExitReader: onExitReader,
+                onToggleToc: isMobile
+                    ? () => mobileScaffoldKey.currentState?.openDrawer()
+                    : toggleToc,
+                onToggleSidePanel: isMobile
+                    ? () => mobileScaffoldKey.currentState?.openEndDrawer()
+                    : toggleSidePanel,
+                onHideControls: toggleControls,
+                onToggleBookmark: toggleBookmark,
+                onCreateAnnotation: createAnnotation,
+                onOpenBookSettings: openBookSettings,
+                onOpenSearch: openSearch,
+              ),
             ),
             Expanded(
               child: isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? _ReaderCenterTapDetector(
+                      key: const Key('reader-content'),
+                      onTap: toggleControls,
+                      child: const Center(child: CircularProgressIndicator()),
+                    )
                   : Material(
                       child: Row(
                         children: [
@@ -563,6 +568,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                                   selectedText.value = selection;
                                 }
                               },
+                              onToggleControls: toggleControls,
                             ),
                           ),
                           if (showSidePanel)
@@ -610,8 +616,9 @@ class ReaderWorkspace extends HookConsumerWidget {
                       ),
                     ),
             ),
-            if (!focusMode.value)
-              _ReaderFooter(
+            _ReaderChrome(
+              visible: controlsVisible.value,
+              child: _ReaderFooter(
                 chapterIndex: activeChapterIndex,
                 chapterCount: totalChapters,
                 layoutMode: settings.layoutMode,
@@ -630,6 +637,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                     ? goToNext
                     : null,
               ),
+            ),
           ],
         );
         final content = isMobile
@@ -695,12 +703,12 @@ class _ReaderToolbar extends StatelessWidget {
     required this.tocVisible,
     required this.sidePanelVisible,
     required this.mobileReaderControls,
-    required this.focusMode,
     required this.bookmarked,
     required this.canCreateAnnotation,
     required this.onToggleToc,
     required this.onToggleSidePanel,
-    required this.onToggleFocusMode,
+    required this.onExitReader,
+    required this.onHideControls,
     required this.onToggleBookmark,
     required this.onCreateAnnotation,
     required this.onOpenBookSettings,
@@ -711,12 +719,12 @@ class _ReaderToolbar extends StatelessWidget {
   final bool tocVisible;
   final bool sidePanelVisible;
   final bool mobileReaderControls;
-  final bool focusMode;
   final bool bookmarked;
   final bool canCreateAnnotation;
   final VoidCallback onToggleToc;
   final VoidCallback onToggleSidePanel;
-  final VoidCallback onToggleFocusMode;
+  final VoidCallback onExitReader;
+  final VoidCallback onHideControls;
   final VoidCallback onToggleBookmark;
   final VoidCallback onCreateAnnotation;
   final VoidCallback onOpenBookSettings;
@@ -730,6 +738,11 @@ class _ReaderToolbar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
+            IconButton(
+              tooltip: '返回书库',
+              onPressed: onExitReader,
+              icon: const Icon(Icons.arrow_back),
+            ),
             IconButton(
               tooltip: mobileReaderControls
                   ? '打开目录'
@@ -787,14 +800,10 @@ class _ReaderToolbar extends StatelessWidget {
               ),
             if (!mobileReaderControls)
               IconButton(
-                tooltip: focusMode ? '退出专注模式' : '进入专注模式',
+                tooltip: '隐藏阅读控制',
                 key: const Key('reader-focus-mode'),
-                onPressed: onToggleFocusMode,
-                icon: Icon(
-                  focusMode
-                      ? Icons.center_focus_strong_outlined
-                      : Icons.center_focus_weak_outlined,
-                ),
+                onPressed: onHideControls,
+                icon: const Icon(Icons.center_focus_strong_outlined),
               ),
             if (mobileReaderControls)
               PopupMenuButton<_MobileReaderToolbarAction>(
@@ -803,7 +812,7 @@ class _ReaderToolbar extends StatelessWidget {
                 onSelected: (action) => switch (action) {
                   _MobileReaderToolbarAction.search => onOpenSearch(),
                   _MobileReaderToolbarAction.settings => onOpenBookSettings(),
-                  _MobileReaderToolbarAction.focus => onToggleFocusMode(),
+                  _MobileReaderToolbarAction.focus => onHideControls(),
                 },
                 itemBuilder: (context) => [
                   const PopupMenuItem(
@@ -823,12 +832,8 @@ class _ReaderToolbar extends StatelessWidget {
                   PopupMenuItem(
                     value: _MobileReaderToolbarAction.focus,
                     child: ListTile(
-                      leading: Icon(
-                        focusMode
-                            ? Icons.center_focus_strong_outlined
-                            : Icons.center_focus_weak_outlined,
-                      ),
-                      title: Text(focusMode ? '退出专注模式' : '进入专注模式'),
+                      leading: Icon(Icons.center_focus_strong_outlined),
+                      title: Text('隐藏阅读控制'),
                     ),
                   ),
                 ],
@@ -1186,6 +1191,7 @@ class _ReaderArticle extends StatelessWidget {
     required this.onRequestPrevious,
     required this.onRequestNext,
     required this.onTextSelectionChanged,
+    required this.onToggleControls,
   });
 
   final ReadingSettings settings;
@@ -1207,14 +1213,19 @@ class _ReaderArticle extends StatelessWidget {
   final VoidCallback onRequestPrevious;
   final VoidCallback onRequestNext;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
+  final VoidCallback onToggleControls;
 
   @override
   Widget build(BuildContext context) {
     if (chapter == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(error == null ? '正在加载章节…' : '无法加载章节：$error'),
+      return _ReaderCenterTapDetector(
+        key: const Key('reader-content'),
+        onTap: onToggleControls,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(error == null ? '正在加载章节…' : '无法加载章节：$error'),
+          ),
         ),
       );
     }
@@ -1237,6 +1248,7 @@ class _ReaderArticle extends StatelessWidget {
         onRequestPrevious: onRequestPrevious,
         onRequestNext: onRequestNext,
         onTextSelectionChanged: onTextSelectionChanged,
+        onToggleControls: onToggleControls,
       );
     }
     final blocks = chapter!.blocks;
@@ -1244,62 +1256,115 @@ class _ReaderArticle extends StatelessWidget {
     final bodyBlocks = titleBlock == null
         ? blocks
         : blocks.where((block) => !identical(block, titleBlock)).toList();
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 980),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            settings.pageMargin,
-            36,
-            settings.pageMargin,
-            48,
-          ),
-          children: [
-            Text(
-              '第 ${chapter!.index + 1} 章',
-              style: Theme.of(context).textTheme.labelLarge,
+    return _ReaderCenterTapDetector(
+      onTap: onToggleControls,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 980),
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              settings.pageMargin,
+              36,
+              settings.pageMargin,
+              48,
             ),
-            const SizedBox(height: 8),
-            Text(
-              chapter!.title,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontFamily: settings.font.fontFamily,
+            children: [
+              Text(
+                '第 ${chapter!.index + 1} 章',
+                style: Theme.of(context).textTheme.labelLarge,
               ),
-            ),
-            const SizedBox(height: 28),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final canUseDoubleColumn =
-                    settings.doubleColumn && constraints.maxWidth >= 760;
-                if (!canUseDoubleColumn) {
-                  return _ArticleColumn(blocks: bodyBlocks, settings: settings);
-                }
-                final splitAt = (bodyBlocks.length / 2).ceil();
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _ArticleColumn(
-                        blocks: bodyBlocks.take(splitAt).toList(),
-                        settings: settings,
+              const SizedBox(height: 8),
+              Text(
+                chapter!.title,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontFamily: settings.font.fontFamily,
+                ),
+              ),
+              const SizedBox(height: 28),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final canUseDoubleColumn =
+                      settings.doubleColumn && constraints.maxWidth >= 760;
+                  if (!canUseDoubleColumn) {
+                    return _ArticleColumn(
+                      blocks: bodyBlocks,
+                      settings: settings,
+                    );
+                  }
+                  final splitAt = (bodyBlocks.length / 2).ceil();
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _ArticleColumn(
+                          blocks: bodyBlocks.take(splitAt).toList(),
+                          settings: settings,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 48),
-                    Expanded(
-                      child: _ArticleColumn(
-                        blocks: bodyBlocks.skip(splitAt).toList(),
-                        settings: settings,
+                      const SizedBox(width: 48),
+                      Expanded(
+                        child: _ArticleColumn(
+                          blocks: bodyBlocks.skip(splitAt).toList(),
+                          settings: settings,
+                        ),
                       ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+class _ReaderChrome extends StatelessWidget {
+  const _ReaderChrome({required this.visible, required this.child});
+
+  final bool visible;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedSize(
+    duration: const Duration(milliseconds: 180),
+    curve: Curves.easeOutCubic,
+    child: AnimatedOpacity(
+      duration: const Duration(milliseconds: 120),
+      opacity: visible ? 1 : 0,
+      child: visible ? child : const SizedBox.shrink(),
+    ),
+  );
+}
+
+class _ReaderCenterTapDetector extends StatelessWidget {
+  const _ReaderCenterTapDetector({
+    super.key,
+    required this.onTap,
+    required this.child,
+  });
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    behavior: HitTestBehavior.translucent,
+    onPointerUp: (event) {
+      final box = context.findRenderObject() as RenderBox?;
+      if (box == null) return;
+      final size = box.size;
+      final position = event.localPosition;
+      final inCenter =
+          position.dx >= size.width * .25 &&
+          position.dx <= size.width * .75 &&
+          position.dy >= size.height * .25 &&
+          position.dy <= size.height * .75;
+      if (inCenter) onTap();
+    },
+    child: child,
+  );
 }
 
 class _ArticleColumn extends StatelessWidget {

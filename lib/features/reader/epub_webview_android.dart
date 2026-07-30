@@ -24,6 +24,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     required this.restoreRevision,
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
+    required this.onToggleControls,
   });
 
   final String bookId;
@@ -36,6 +37,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final ValueChanged<String> onNavigateToHref;
   final void Function(String href, double ratio, String? anchor)
   onScrollPositionChanged;
+  final VoidCallback onToggleControls;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -86,7 +88,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('Unable to start EPUB renderer: ${error.value ?? extractedDirectory.error}'),
+          child: Text(
+            'Unable to start EPUB renderer: ${error.value ?? extractedDirectory.error}',
+          ),
         ),
       );
     }
@@ -121,9 +125,14 @@ class AndroidEpubWebView extends HookConsumerWidget {
         'TomoRead',
         onMessageReceived: (message) {
           final parts = message.message.split('|');
-          if (parts.length < 2 || parts.first != 'scroll') return;
-          final ratio = double.tryParse(parts[1]);
-          if (ratio != null) onScrollPositionChanged(href, ratio, null);
+          switch (parts.first) {
+            case 'scroll':
+              if (parts.length < 2) return;
+              final ratio = double.tryParse(parts[1]);
+              if (ratio != null) onScrollPositionChanged(href, ratio, null);
+            case 'tap':
+              onToggleControls();
+          }
         },
       );
     return controller;
@@ -137,8 +146,10 @@ class AndroidEpubWebView extends HookConsumerWidget {
     ReadingDirection readingDirection,
   ) {
     final scheme = Theme.of(context).colorScheme;
-    final background = '#${scheme.surface.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
-    final foreground = '#${scheme.onSurface.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
+    final background =
+        '#${scheme.surface.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
+    final foreground =
+        '#${scheme.onSurface.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
     final direction = readingDirection == ReadingDirection.rtl ? 'rtl' : 'ltr';
     return '''(() => {
       document.documentElement.style.background = '$background';
@@ -158,12 +169,27 @@ class AndroidEpubWebView extends HookConsumerWidget {
         }, {passive:true});
         window.__tomoReadProgress = true;
       }
+      if (!window.__tomoReadControlsListener) {
+        window.addEventListener('click', (event) => {
+          const target = event.target;
+          if (target?.closest?.('a, button, input, textarea, select')) return;
+          if (window.getSelection?.()?.toString().trim()) return;
+          const x = event.clientX / window.innerWidth;
+          const y = event.clientY / window.innerHeight;
+          if (x >= .25 && x <= .75 && y >= .25 && y <= .75) {
+            TomoRead.postMessage('tap');
+          }
+        });
+        window.__tomoReadControlsListener = true;
+      }
     })();''';
   }
 
   String _restoreScript(double ratio, String? anchor) {
     final clamped = ratio.clamp(0, 1);
-    final encodedAnchor = anchor == null ? 'null' : "'${anchor.replaceAll("'", "\\'")}'";
+    final encodedAnchor = anchor == null
+        ? 'null'
+        : "'${anchor.replaceAll("'", "\\'")}'";
     return '''(() => { const anchor = $encodedAnchor; const root = document.scrollingElement || document.documentElement; const target = anchor && document.getElementById(anchor); if (target) { target.scrollIntoView(); } else { root.scrollTop = Math.max(0, root.scrollHeight - window.innerHeight) * $clamped; } })();''';
   }
 }

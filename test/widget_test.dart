@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tomoread/app/appearance.dart';
 import 'package:tomoread/app/providers.dart';
@@ -95,7 +94,7 @@ void main() {
     );
   });
 
-  testWidgets('adds a bookmark and collapses the reader toc', (tester) async {
+  testWidgets('adds a bookmark and toggles the reader toc', (tester) async {
     configureDesktop(tester);
     await tester.pumpWidget(
       ProviderScope(
@@ -116,6 +115,7 @@ void main() {
             bookId: 'book-a',
             title: 'Test book',
             readingSettings: const ReadingSettings(),
+            initialControlsVisible: true,
           ),
         ),
       ),
@@ -129,11 +129,9 @@ void main() {
 
     await tester.tap(find.byKey(const Key('reader-toc')));
     await tester.pump();
-    expect(find.byIcon(Icons.menu_open), findsOneWidget);
+    expect(find.byIcon(Icons.format_list_bulleted), findsOneWidget);
 
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyM);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tap(find.byKey(const Key('reader-focus-mode')));
     await tester.pump();
     expect(find.byKey(const Key('reader-footer')), findsNothing);
   });
@@ -159,6 +157,7 @@ void main() {
             bookId: 'book-a',
             title: 'Test book',
             readingSettings: ReadingSettings(),
+            initialControlsVisible: true,
           ),
         ),
       ),
@@ -232,6 +231,7 @@ void main() {
             bookId: 'book-a',
             title: 'Test book',
             readingSettings: ReadingSettings(),
+            initialControlsVisible: true,
           ),
         ),
       ),

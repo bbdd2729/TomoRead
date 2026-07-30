@@ -195,12 +195,14 @@ class AppShell extends HookConsumerWidget {
         actions: {
           _OpenLibrarySearchIntent: CallbackAction<_OpenLibrarySearchIntent>(
             onInvoke: (_) {
+              if (activeTab.destination == AppDestination.reader) return null;
               openLibrarySearch();
               return null;
             },
           ),
           _ToggleNavigationIntent: CallbackAction<_ToggleNavigationIntent>(
             onInvoke: (_) {
+              if (activeTab.destination == AppDestination.reader) return null;
               toggleNavigation();
               return null;
             },
@@ -212,6 +214,7 @@ class AppShell extends HookConsumerWidget {
             builder: (context, constraints) {
               final isDesktop = constraints.maxWidth >= _desktopBreakpoint;
               final activeDestination = activeTab.destination;
+              final isReading = activeDestination == AppDestination.reader;
               final content = _WorkspaceContent(
                 destination: activeDestination,
                 appearance: appearance,
@@ -219,53 +222,58 @@ class AppShell extends HookConsumerWidget {
                 readerBookId: activeTab.bookId,
                 readerFormat: activeTab.bookFormat,
                 readerTitle: activeTab.title,
+                onExitReader: () => closeTab(activeTab),
                 onAppearanceChanged: onAppearanceChanged,
                 onReadingSettingsChanged: onReadingSettingsChanged,
                 onOpenBookDetails: openBookDetails,
               );
 
               return Scaffold(
-                appBar: AppBar(
-                  title: const Text('TomoRead'),
-                  actions: [
-                    if (isDesktop)
-                      IconButton(
-                        key: const Key('desktop-navigation-toggle'),
-                        tooltip: navigationCollapsed.value
-                            ? 'Show navigation'
-                            : 'Hide navigation',
-                        onPressed: toggleNavigation,
-                        icon: Icon(
-                          navigationCollapsed.value
-                              ? Icons.keyboard_double_arrow_right
-                              : Icons.keyboard_double_arrow_left,
+                appBar: isReading
+                    ? null
+                    : AppBar(
+                        title: const Text('TomoRead'),
+                        actions: [
+                          if (isDesktop)
+                            IconButton(
+                              key: const Key('desktop-navigation-toggle'),
+                              tooltip: navigationCollapsed.value
+                                  ? 'Show navigation'
+                                  : 'Hide navigation',
+                              onPressed: toggleNavigation,
+                              icon: Icon(
+                                navigationCollapsed.value
+                                    ? Icons.keyboard_double_arrow_right
+                                    : Icons.keyboard_double_arrow_left,
+                              ),
+                            ),
+                          IconButton(
+                            tooltip: '搜索',
+                            key: const Key('global-search'),
+                            onPressed: openLibrarySearch,
+                            icon: const Icon(Icons.search),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        bottom: PreferredSize(
+                          preferredSize: const Size.fromHeight(48),
+                          child: _WorkspaceTabBar(
+                            tabs: tabs.value,
+                            activeTabId: activeTabId.value,
+                            onSelected: (tab) => activeTabId.value = tab.id,
+                            onClosed: closeTab,
+                          ),
                         ),
                       ),
-                    IconButton(
-                      tooltip: '搜索',
-                      key: const Key('global-search'),
-                      onPressed: openLibrarySearch,
-                      icon: const Icon(Icons.search),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  bottom: PreferredSize(
-                    preferredSize: const Size.fromHeight(48),
-                    child: _WorkspaceTabBar(
-                      tabs: tabs.value,
-                      activeTabId: activeTabId.value,
-                      onSelected: (tab) => activeTabId.value = tab.id,
-                      onClosed: closeTab,
-                    ),
-                  ),
-                ),
-                drawer: isDesktop
+                drawer: isReading || isDesktop
                     ? null
                     : _AppNavigationDrawer(
                         selected: activeDestination,
                         onSelected: openDestination,
                       ),
-                body: isDesktop
+                body: isReading
+                    ? content
+                    : isDesktop
                     ? Row(
                         children: [
                           if (navigationCollapsed.value)
@@ -327,6 +335,7 @@ class _WorkspaceContent extends StatelessWidget {
     required this.readerBookId,
     required this.readerFormat,
     required this.readerTitle,
+    required this.onExitReader,
     required this.onAppearanceChanged,
     required this.onReadingSettingsChanged,
     required this.onOpenBookDetails,
@@ -338,6 +347,7 @@ class _WorkspaceContent extends StatelessWidget {
   final String? readerBookId;
   final String? readerFormat;
   final String readerTitle;
+  final VoidCallback onExitReader;
   final ValueChanged<AppAppearance> onAppearanceChanged;
   final ValueChanged<ReadingSettings> onReadingSettingsChanged;
   final ValueChanged<LibraryBook> onOpenBookDetails;
@@ -354,11 +364,13 @@ class _WorkspaceContent extends StatelessWidget {
                 key: ValueKey(readerBookId),
                 bookId: readerBookId ?? '',
                 title: readerTitle,
+                onExitReader: onExitReader,
               )
             : ReaderWorkspace(
                 bookId: readerBookId ?? 'demo-reading-art',
                 title: readerTitle,
                 readingSettings: readingSettings,
+                onExitReader: onExitReader,
               ),
       AppDestination.chat => const ChatPage(),
       AppDestination.notes => const NotesPage(),
