@@ -22,6 +22,7 @@ class EpubWebView extends HookConsumerWidget {
     required this.href,
     required this.settings,
     required this.annotations,
+    required this.searchQuery,
     required this.focusedAnnotationId,
     required this.annotationFocusRevision,
     required this.initialScrollRatio,
@@ -44,6 +45,7 @@ class EpubWebView extends HookConsumerWidget {
   final String href;
   final ReadingSettings settings;
   final List<ReadingAnnotation> annotations;
+  final String? searchQuery;
   final String? focusedAnnotationId;
   final int annotationFocusRevision;
   final double initialScrollRatio;
@@ -92,6 +94,7 @@ class EpubWebView extends HookConsumerWidget {
       annotations,
       focusedAnnotationId,
     );
+    final runtimeSearchScript = _runtimeSearchScript(searchQuery);
     final useFoliateRuntime = settings.layoutMode == ReaderLayoutMode.paginated;
     final resourceDirectory = readerSession.value?.directoryPath;
     final runtimeEntryPoint = readerSession.value?.virtualEntryPointUrl(
@@ -129,6 +132,14 @@ class EpubWebView extends HookConsumerWidget {
         await controller.executeScript(runtimeAnnotationScript);
       } catch (_) {
         // An adjacent chapter can finish loading while its annotations update.
+      }
+    }
+
+    Future<void> applyFoliateSearch() async {
+      try {
+        await controller.executeScript(runtimeSearchScript);
+      } catch (_) {
+        // The active iframe can change while search highlights are updated.
       }
     }
 
@@ -227,6 +238,13 @@ class EpubWebView extends HookConsumerWidget {
         useFoliateRuntime,
       ],
     );
+
+    useEffect(() {
+      if (initialized.value && useFoliateRuntime) {
+        unawaited(applyFoliateSearch());
+      }
+      return null;
+    }, [initialized.value, runtimeSearchScript, useFoliateRuntime]);
 
     useEffect(() {
       if (useFoliateRuntime) return null;
@@ -837,6 +855,9 @@ a { color: ${_cssColor(colorScheme.primary)}; }
       'runtime.setAnnotations(${jsonEncode(values)}, ${jsonEncode(focusedAnnotationId)})',
     );
   }
+
+  String _runtimeSearchScript(String? query) =>
+      _runtimeCall('runtime.setSearchQuery(${jsonEncode(query)})');
 
   String _runtimeCall(String invocation) =>
       '''(() => {

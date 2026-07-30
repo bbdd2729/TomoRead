@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '5'
+const runtimeVersion = '6'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -9,6 +9,7 @@ let book
 let paginator
 let annotations = []
 let focusedAnnotationId
+let searchQuery = ''
 let pageTransition = 'slide'
 let turnLocked = false
 
@@ -179,6 +180,37 @@ const applyAnnotations = (doc, index) => {
   if (focusedRange) window.setTimeout(() => void paginator?.scrollToAnchor(focusedRange), 0)
 }
 
+const applySearchHighlights = doc => {
+  const highlights = doc.defaultView.CSS?.highlights
+  const Highlight = doc.defaultView.Highlight
+  if (!highlights || !Highlight) return
+  const ranges = new Highlight()
+  const query = searchQuery.toLocaleLowerCase()
+  if (query) {
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+    let node
+    while (node = walker.nextNode()) {
+      const text = node.textContent.toLocaleLowerCase()
+      let offset = text.indexOf(query)
+      while (offset >= 0) {
+        const range = doc.createRange()
+        range.setStart(node, offset)
+        range.setEnd(node, offset + query.length)
+        ranges.add(range)
+        offset = text.indexOf(query, offset + query.length)
+      }
+    }
+  }
+  highlights.set('tomoread-search', ranges)
+  let style = doc.getElementById('tomoread-runtime-search')
+  if (!style) {
+    style = doc.createElement('style')
+    style.id = 'tomoread-runtime-search'
+    doc.head.append(style)
+  }
+  style.textContent = '::highlight(tomoread-search) { background: #ffb74d99; }'
+}
+
 const applySelectionListener = (doc, index) => {
   let pending = false
   doc.addEventListener('selectionchange', () => {
@@ -224,6 +256,7 @@ const emitRelocation = detail => {
 
 const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   applyAnnotations(doc, index)
+  applySearchHighlights(doc)
   applySelectionListener(doc, index)
   doc.addEventListener('click', event => {
     const link = event.target.closest?.('a[href]')
@@ -303,6 +336,11 @@ const setAnnotations = (nextAnnotations, nextFocusedAnnotationId) => {
   }
 }
 
+const setSearchQuery = nextQuery => {
+  searchQuery = String(nextQuery ?? '').trim()
+  for (const { doc } of paginator?.getContents?.() ?? []) applySearchHighlights(doc)
+}
+
 window.TomoReadEpubRuntime = Object.freeze({
   runtimeVersion,
   loadManifest,
@@ -311,6 +349,7 @@ window.TomoReadEpubRuntime = Object.freeze({
   goToPage,
   turn,
   setAnnotations,
+  setSearchQuery,
   setSettings: applySettings,
   postMessage,
 })

@@ -100,6 +100,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final annotationFocusRevision = useState(0);
     final progressWriteTimer = useRef<Timer?>(null);
     final selectedText = useState<ReaderTextSelection?>(null);
+    final searchQuery = useState<String?>(null);
     final override = readingOverride.value;
     final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
     final annotations = annotationsState.value ?? const <ReadingAnnotation>[];
@@ -304,15 +305,16 @@ class ReaderWorkspace extends HookConsumerWidget {
       final book = readerBook.value;
       final currentManifest = manifest.value;
       if (book == null || currentManifest == null) return;
-      final result = await showDialog<EpubSearchResult>(
+      final selection = await showDialog<ReaderSearchSelection>(
         context: context,
         builder: (context) =>
             ReaderSearchDialog(book: book, manifest: currentManifest),
       );
-      if (result == null || !context.mounted) return;
+      if (selection == null || !context.mounted) return;
+      searchQuery.value = selection.query;
       await selectChapter(
-        result.chapterIndex,
-        scrollPosition: result.chapterRatio,
+        selection.result.chapterIndex,
+        scrollPosition: selection.result.chapterRatio,
       );
     }
 
@@ -600,6 +602,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                                   ReadingDirection.ltr,
                               requestedPage: requestedPage.value,
                               annotations: annotations,
+                              searchQuery: searchQuery.value,
                               focusedAnnotationId: focusedAnnotationId.value,
                               annotationFocusRevision:
                                   annotationFocusRevision.value,
@@ -1366,6 +1369,7 @@ class _ReaderArticle extends StatelessWidget {
     required this.requestedPage,
     required this.restoreRevision,
     required this.annotations,
+    required this.searchQuery,
     required this.focusedAnnotationId,
     required this.annotationFocusRevision,
     required this.onNavigateToHref,
@@ -1387,6 +1391,7 @@ class _ReaderArticle extends StatelessWidget {
   final int? requestedPage;
   final int restoreRevision;
   final List<ReadingAnnotation> annotations;
+  final String? searchQuery;
   final String? focusedAnnotationId;
   final int annotationFocusRevision;
   final ValueChanged<String> onNavigateToHref;
@@ -1423,6 +1428,7 @@ class _ReaderArticle extends StatelessWidget {
         requestedPage: requestedPage,
         restoreRevision: restoreRevision,
         annotations: annotations,
+        searchQuery: searchQuery,
         focusedAnnotationId: focusedAnnotationId,
         annotationFocusRevision: annotationFocusRevision,
         onNavigateToHref: onNavigateToHref,

@@ -7,6 +7,13 @@ import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/library_book.dart';
 import '../../domain/models/reader_chapter.dart';
 
+class ReaderSearchSelection {
+  const ReaderSearchSelection({required this.result, required this.query});
+
+  final EpubSearchResult result;
+  final String query;
+}
+
 class ReaderSearchDialog extends HookConsumerWidget {
   const ReaderSearchDialog({
     super.key,
@@ -78,7 +85,13 @@ class ReaderSearchDialog extends HookConsumerWidget {
                           contentPadding: EdgeInsets.zero,
                           title: Text(result.chapterTitle),
                           subtitle: Text(result.excerpt, maxLines: 3),
-                          onTap: () => Navigator.pop(context, result),
+                          onTap: () => Navigator.pop(
+                            context,
+                            ReaderSearchSelection(
+                              result: result,
+                              query: queryController.text.trim(),
+                            ),
+                          ),
                         );
                       },
                     ),
