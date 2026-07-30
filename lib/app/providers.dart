@@ -11,6 +11,7 @@ import '../data/services/book_import_service.dart';
 import '../data/services/book_storage_service.dart';
 import '../data/services/epub_content_service.dart';
 import '../data/services/epub_extraction_service.dart';
+import '../data/services/epub_reader_session_service.dart';
 import '../domain/models/bookmark.dart';
 import '../domain/models/epub_manifest.dart';
 import '../domain/models/library_book.dart';
@@ -55,6 +56,12 @@ final epubContentServiceProvider = Provider<EpubContentService>(
 
 final epubExtractionServiceProvider = Provider<EpubExtractionService>(
   (ref) => const EpubExtractionService(),
+);
+
+final epubReaderSessionServiceProvider = Provider<EpubReaderSessionService>(
+  (ref) => EpubReaderSessionService(
+    extractionService: ref.watch(epubExtractionServiceProvider),
+  ),
 );
 
 final appSettingsProvider =
@@ -179,4 +186,18 @@ final epubExtractedDirectoryProvider = FutureProvider.autoDispose
         throw const EpubExtractionException('书籍不存在');
       }
       return ref.read(epubExtractionServiceProvider).ensureExtracted(book);
+    });
+
+final epubReaderSessionProvider = FutureProvider.autoDispose
+    .family<EpubReaderSession, String>((ref, bookId) async {
+      final book = await ref.watch(readerBookProvider(bookId).future);
+      final manifest = await ref.watch(readerManifestProvider(bookId).future);
+      if (book == null || manifest == null) {
+        throw const EpubExtractionException(
+          'Book or EPUB manifest does not exist.',
+        );
+      }
+      return ref
+          .read(epubReaderSessionServiceProvider)
+          .prepare(book: book, manifest: manifest);
     });
