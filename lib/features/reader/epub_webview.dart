@@ -286,12 +286,11 @@ body {
 #tomoread-pagination-viewport {
   width: 100% !important;
   height: 100% !important;
-  overflow-x: auto !important;
+  /* Match Foliate's paginator: the column strip is navigated in code, never
+     exposed as a user-scrollable horizontal document. */
+  overflow-x: hidden !important;
   overflow-y: hidden !important;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
 }
-#tomoread-pagination-viewport::-webkit-scrollbar { display: none; }
 #tomoread-pagination-content {
   box-sizing: border-box !important;
   /* Keep the column container one-page wide. The viewport shows two of its
