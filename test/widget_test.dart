@@ -122,6 +122,8 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.byKey(const Key('reader-progress-slider')), findsOneWidget);
+
     await tester.tap(find.byKey(const Key('reader-bookmark')));
     await tester.pump();
     await tester.pump();

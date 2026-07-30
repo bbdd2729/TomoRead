@@ -372,6 +372,28 @@ class ReaderWorkspace extends HookConsumerWidget {
       }
     }
 
+    void seekToOverallProgress(double value) {
+      if (totalChapters == 0) return;
+      final target = value.clamp(0, 1).toDouble();
+      final scaled = target * totalChapters;
+      final targetChapter = target >= 1
+          ? totalChapters - 1
+          : scaled.floor().clamp(0, totalChapters - 1).toInt();
+      final targetRatio = target >= 1 ? 1.0 : scaled - targetChapter;
+
+      if (isPaginated && targetChapter == activeChapterIndex) {
+        final targetPage = pageCount.value <= 1
+            ? 0
+            : (targetRatio * (pageCount.value - 1))
+                  .round()
+                  .clamp(0, pageCount.value - 1)
+                  .toInt();
+        requestedPage.value = targetPage;
+        return;
+      }
+      unawaited(selectChapter(targetChapter, scrollPosition: targetRatio));
+    }
+
     void toggleToc() {
       final visible = !tocVisible.value;
       tocVisible.value = visible;
@@ -704,8 +726,14 @@ class ReaderWorkspace extends HookConsumerWidget {
                   chapterIndex: activeChapterIndex,
                   chapterCount: totalChapters,
                   layoutMode: settings.layoutMode,
+                  chapterProgress: isPaginated
+                      ? (pageCount.value <= 1
+                            ? 0.0
+                            : pageIndex.value / (pageCount.value - 1))
+                      : scrollRatio.value,
                   pageIndex: pageIndex.value,
                   pageCount: pageCount.value,
+                  onSeekProgress: seekToOverallProgress,
                   onPrevious:
                       activeChapterIndex > 0 ||
                           (isPaginated && pageIndex.value > 0)
@@ -1866,8 +1894,10 @@ class _ReaderFooter extends StatelessWidget {
     required this.chapterIndex,
     required this.chapterCount,
     required this.layoutMode,
+    required this.chapterProgress,
     required this.pageIndex,
     required this.pageCount,
+    required this.onSeekProgress,
     required this.onPrevious,
     required this.onNext,
   });
@@ -1875,19 +1905,18 @@ class _ReaderFooter extends StatelessWidget {
   final int chapterIndex;
   final int chapterCount;
   final ReaderLayoutMode layoutMode;
+  final double chapterProgress;
   final int pageIndex;
   final int pageCount;
+  final ValueChanged<double> onSeekProgress;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
   @override
   Widget build(BuildContext context) {
-    final chapterProgress = layoutMode == ReaderLayoutMode.paginated
-        ? (pageIndex + 1) / pageCount
-        : 1.0;
     final progress = chapterCount == 0
         ? 0.0
-        : (chapterIndex + chapterProgress) / chapterCount;
+        : (chapterIndex + chapterProgress.clamp(0, 1)) / chapterCount;
     return Material(
       key: const Key('reader-footer'),
       color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -1903,7 +1932,12 @@ class _ReaderFooter extends StatelessWidget {
               icon: const Icon(Icons.chevron_left),
             ),
             const SizedBox(width: 8),
-            Expanded(child: LinearProgressIndicator(value: progress)),
+            Expanded(
+              child: _ReaderProgressSlider(
+                progress: progress,
+                onChanged: onSeekProgress,
+              ),
+            ),
             const SizedBox(width: 12),
             Text(
               chapterCount == 0
@@ -1923,6 +1957,37 @@ class _ReaderFooter extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ReaderProgressSlider extends StatefulWidget {
+  const _ReaderProgressSlider({
+    required this.progress,
+    required this.onChanged,
+  });
+
+  final double progress;
+  final ValueChanged<double> onChanged;
+
+  @override
+  State<_ReaderProgressSlider> createState() => _ReaderProgressSliderState();
+}
+
+class _ReaderProgressSliderState extends State<_ReaderProgressSlider> {
+  double? _dragProgress;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = (_dragProgress ?? widget.progress).clamp(0, 1).toDouble();
+    return Slider(
+      key: const Key('reader-progress-slider'),
+      value: value,
+      onChanged: (next) => setState(() => _dragProgress = next),
+      onChangeEnd: (next) {
+        setState(() => _dragProgress = null);
+        widget.onChanged(next);
+      },
     );
   }
 }
