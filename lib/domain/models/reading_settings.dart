@@ -9,6 +9,17 @@ extension ReaderLayoutModeLabel on ReaderLayoutMode {
   };
 }
 
+enum ReaderPageTransition { slide, cover, fade, none }
+
+extension ReaderPageTransitionLabel on ReaderPageTransition {
+  String get label => switch (this) {
+    ReaderPageTransition.slide => '滑动',
+    ReaderPageTransition.cover => '覆盖',
+    ReaderPageTransition.fade => '淡入',
+    ReaderPageTransition.none => '无动画',
+  };
+}
+
 class ReadingSettings {
   const ReadingSettings({
     this.font = FontChoice.system,
@@ -17,6 +28,7 @@ class ReadingSettings {
     this.pageMargin = 32,
     this.doubleColumn = true,
     this.layoutMode = ReaderLayoutMode.scroll,
+    this.pageTransition = ReaderPageTransition.slide,
   });
 
   final FontChoice font;
@@ -25,6 +37,7 @@ class ReadingSettings {
   final double pageMargin;
   final bool doubleColumn;
   final ReaderLayoutMode layoutMode;
+  final ReaderPageTransition pageTransition;
 
   ReadingSettings copyWith({
     FontChoice? font,
@@ -33,6 +46,7 @@ class ReadingSettings {
     double? pageMargin,
     bool? doubleColumn,
     ReaderLayoutMode? layoutMode,
+    ReaderPageTransition? pageTransition,
   }) {
     return ReadingSettings(
       font: font ?? this.font,
@@ -41,6 +55,7 @@ class ReadingSettings {
       pageMargin: pageMargin ?? this.pageMargin,
       doubleColumn: doubleColumn ?? this.doubleColumn,
       layoutMode: layoutMode ?? this.layoutMode,
+      pageTransition: pageTransition ?? this.pageTransition,
     );
   }
 }

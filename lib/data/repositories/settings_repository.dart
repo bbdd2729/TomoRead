@@ -139,6 +139,9 @@ class SettingsRepository {
       layoutMode: ReaderLayoutMode.values.byName(
         value['layout_mode'] as String? ?? ReaderLayoutMode.scroll.name,
       ),
+      pageTransition: ReaderPageTransition.values.byName(
+        value['page_transition'] as String? ?? ReaderPageTransition.slide.name,
+      ),
     );
   }
 
@@ -149,5 +152,6 @@ class SettingsRepository {
     'page_margin': settings.pageMargin,
     'double_column': settings.doubleColumn ? 1 : 0,
     'layout_mode': settings.layoutMode.name,
+    'page_transition': settings.pageTransition.name,
   };
 }

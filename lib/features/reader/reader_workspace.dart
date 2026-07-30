@@ -19,6 +19,7 @@ import '../../domain/models/reading_settings.dart';
 import '../../shared/widgets/resizable_pane.dart';
 import '../../shared/widgets/book_cover.dart';
 import 'epub_webview.dart';
+import 'reader_runtime_controller.dart';
 import 'reader_search_dialog.dart';
 
 enum _MobileReaderToolbarAction { search, settings, focus }
@@ -71,6 +72,9 @@ class ReaderWorkspace extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final readingOverride = ref.watch(bookReadingOverrideProvider(bookId));
+    final runtimeController = ref.read(
+      readerRuntimeControllerProvider.notifier,
+    );
     final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
     final readerBook = ref.watch(readerBookProvider(bookId));
     final manifest = ref.watch(readerManifestProvider(bookId));
@@ -191,25 +195,37 @@ class ReaderWorkspace extends HookConsumerWidget {
       String? anchor,
     }) async {
       if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
+      final revision = runtimeController.beginNavigation();
       progressWriteTimer.value?.cancel();
       chapterIndex.value = index;
       scrollRatio.value = scrollPosition.clamp(0, 1).toDouble();
       activeAnchor.value = anchor;
       restoreRevision.value += 1;
       requestedPage.value = null;
-      await ref
-          .read(bookRepositoryProvider)
-          .updateReadingPosition(
-            bookId: bookId,
-            chapterIndex: index,
-            progress: _overallProgress(index, scrollRatio.value, totalChapters),
-            locator: EpubLocation(
+      try {
+        await ref
+            .read(bookRepositoryProvider)
+            .updateReadingPosition(
+              bookId: bookId,
               chapterIndex: index,
-              scrollRatio: scrollRatio.value,
-              anchor: anchor,
-            ).toLocator(),
-          );
-      ref.invalidate(libraryBooksProvider);
+              progress: _overallProgress(
+                index,
+                scrollRatio.value,
+                totalChapters,
+              ),
+              locator: EpubLocation(
+                chapterIndex: index,
+                scrollRatio: scrollRatio.value,
+                anchor: anchor,
+              ).toLocator(),
+            );
+        if (runtimeController.isCurrent(revision)) {
+          ref.invalidate(libraryBooksProvider);
+          runtimeController.completeNavigation(revision);
+        }
+      } catch (error) {
+        runtimeController.reportFailure(revision, error);
+      }
     }
 
     Future<void> toggleBookmark() async {
@@ -580,6 +596,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                               restoreRevision: restoreRevision.value,
                               onNavigateToHref: navigateToHref,
                               onScrollPositionChanged: (href, ratio, anchor) {
+                                runtimeController.reportRelocation();
                                 if (href != chapter.value?.href) return;
                                 final clampedRatio = ratio
                                     .clamp(0, 1)
@@ -2079,6 +2096,29 @@ class _BookReadingSettingsDialog extends HookWidget {
                 onSelectionChanged: (selection) {
                   settings.value = settings.value.copyWith(
                     layoutMode: selection.first,
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              SegmentedButton<ReaderPageTransition>(
+                segments: [
+                  for (final transition in ReaderPageTransition.values)
+                    ButtonSegment(
+                      value: transition,
+                      icon: Icon(switch (transition) {
+                        ReaderPageTransition.slide => Icons.swipe,
+                        ReaderPageTransition.cover => Icons.layers_outlined,
+                        ReaderPageTransition.fade => Icons.opacity,
+                        ReaderPageTransition.none =>
+                          Icons.do_not_disturb_alt_outlined,
+                      }),
+                      label: Text(transition.label),
+                    ),
+                ],
+                selected: {settings.value.pageTransition},
+                onSelectionChanged: (selection) {
+                  settings.value = settings.value.copyWith(
+                    pageTransition: selection.first,
                   );
                 },
               ),

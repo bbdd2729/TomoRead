@@ -860,6 +860,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
       'fontFamily': settings.font.fontFamily,
       'fontSize': settings.fontSize,
       'lineHeight': settings.lineHeight,
+      'pageTransition': settings.pageTransition.name,
       'foreground': _cssColor(scheme.onSurface),
       'background': _cssColor(scheme.surface),
       'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr',

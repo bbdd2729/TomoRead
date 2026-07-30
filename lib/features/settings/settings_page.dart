@@ -344,6 +344,26 @@ class _ReadingDefaultsSettings extends StatelessWidget {
         onSelectionChanged: (selection) =>
             onChanged(settings.copyWith(layoutMode: selection.first)),
       ),
+      const SizedBox(height: 24),
+      const _SettingsHeading('分页动画'),
+      SegmentedButton<ReaderPageTransition>(
+        segments: [
+          for (final transition in ReaderPageTransition.values)
+            ButtonSegment(
+              value: transition,
+              icon: Icon(switch (transition) {
+                ReaderPageTransition.slide => Icons.swipe,
+                ReaderPageTransition.cover => Icons.layers_outlined,
+                ReaderPageTransition.fade => Icons.opacity,
+                ReaderPageTransition.none => Icons.do_not_disturb_alt_outlined,
+              }),
+              label: Text(transition.label),
+            ),
+        ],
+        selected: {settings.pageTransition},
+        onSelectionChanged: (selection) =>
+            onChanged(settings.copyWith(pageTransition: selection.first)),
+      ),
       const SizedBox(height: 16),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,

@@ -1,6 +1,6 @@
 import './foliate-paginator.js'
 
-const runtimeVersion = '3'
+const runtimeVersion = '4'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -8,6 +8,8 @@ let book
 let paginator
 let annotations = []
 let focusedAnnotationId
+let pageTransition = 'slide'
+let turnLocked = false
 
 const postMessage = message => {
   if (window.chrome?.webview?.postMessage) {
@@ -36,11 +38,12 @@ const findSection = href => {
 
 const applySettings = settings => {
   if (!paginator) return
+  pageTransition = settings.pageTransition ?? 'slide'
   paginator.setAttribute('flow', settings.flow ?? 'paginated')
   paginator.setAttribute('max-column-count', String(settings.columnCount ?? 1))
   paginator.setAttribute('max-inline-size', `${settings.maxInlineSize ?? 760}px`)
   paginator.setAttribute('margin', `${settings.margin ?? 32}px`)
-  paginator.setAttribute('animated', '')
+  paginator.toggleAttribute('animated', pageTransition !== 'none')
   paginator.setStyles(`
     html {
       color: ${settings.foreground};
@@ -59,6 +62,31 @@ const applySettings = settings => {
     img, svg, video { max-width: 100%; height: auto; }
   `)
 }
+
+const runPageTransition = async (direction, operation) => {
+  if (turnLocked) return
+  turnLocked = true
+  const sign = direction === 'previous' ? -1 : 1
+  const animation = pageTransition === 'fade'
+    ? paginator.animate([{ opacity: 1 }, { opacity: .28 }, { opacity: 1 }], { duration: 220, easing: 'ease-out' })
+    : pageTransition === 'cover'
+      ? paginator.animate([
+        { transform: `translateX(${sign * 4}%)`, opacity: .72 },
+        { transform: 'translateX(0)', opacity: 1 },
+      ], { duration: 220, easing: 'cubic-bezier(.2,.75,.2,1)' })
+      : null
+  try {
+    await operation()
+    await animation?.finished
+  } finally {
+    turnLocked = false
+  }
+}
+
+const turn = direction => runPageTransition(
+  direction,
+  () => direction === 'previous' ? paginator.prev() : paginator.next(),
+)
 
 const anchorFor = (fragment, fraction) => {
   if (!fragment) return fraction ?? 0
@@ -187,9 +215,9 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     if (doc.getSelection()?.toString().trim()) return
     const ratio = event.clientX / doc.defaultView.innerWidth
     if (ratio <= 0.25) {
-      void paginator.prev()
+      void turn('previous')
     } else if (ratio >= 0.75) {
-      void paginator.next()
+      void turn('next')
     } else {
       postMessage({ type: 'readerControls' })
     }
@@ -237,7 +265,10 @@ const goToPage = async pageIndex => {
   if (!paginator) return
   const pages = Math.max(1, paginator.pages || 1)
   const fraction = pages <= 1 ? 0 : Math.max(0, Math.min(1, pageIndex / (pages - 1)))
-  await paginator.goTo({ index: paginator.primaryIndex, anchor: fraction })
+  await runPageTransition(
+    pageIndex < paginator.page ? 'previous' : 'next',
+    () => paginator.goTo({ index: paginator.primaryIndex, anchor: fraction }),
+  )
 }
 
 const setAnnotations = (nextAnnotations, nextFocusedAnnotationId) => {
@@ -254,6 +285,7 @@ window.TomoReadEpubRuntime = Object.freeze({
   open,
   goToHref,
   goToPage,
+  turn,
   setAnnotations,
   setSettings: applySettings,
   postMessage,
