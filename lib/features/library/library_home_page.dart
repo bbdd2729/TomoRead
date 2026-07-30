@@ -9,9 +9,14 @@ import '../../shared/widgets/book_cover.dart';
 import '../../shared/widgets/page_header.dart';
 
 class LibraryHomePage extends HookConsumerWidget {
-  const LibraryHomePage({super.key, required this.onOpenBookDetails});
+  const LibraryHomePage({
+    super.key,
+    required this.onOpenBookDetails,
+    required this.onOpenReader,
+  });
 
   final ValueChanged<LibraryBook> onOpenBookDetails;
+  final ValueChanged<LibraryBook> onOpenReader;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -270,7 +275,7 @@ class LibraryHomePage extends HookConsumerWidget {
                   else ...[
                     _ContinueReadingCard(
                       book: visibleBooks.first,
-                      onOpenReader: () => onOpenBookDetails(visibleBooks.first),
+                      onOpenReader: () => onOpenReader(visibleBooks.first),
                     ),
                     const SizedBox(height: 24),
                     Row(

@@ -241,6 +241,7 @@ class AppShell extends HookConsumerWidget {
                 onAppearanceChanged: onAppearanceChanged,
                 onReadingSettingsChanged: onReadingSettingsChanged,
                 onOpenBookDetails: openBookDetails,
+                onOpenReader: openReader,
               );
               final animatedContent = isReading
                   ? content
@@ -377,6 +378,7 @@ class _WorkspaceContent extends StatelessWidget {
     required this.onAppearanceChanged,
     required this.onReadingSettingsChanged,
     required this.onOpenBookDetails,
+    required this.onOpenReader,
   });
 
   final AppDestination destination;
@@ -389,12 +391,14 @@ class _WorkspaceContent extends StatelessWidget {
   final ValueChanged<AppAppearance> onAppearanceChanged;
   final ValueChanged<ReadingSettings> onReadingSettingsChanged;
   final ValueChanged<LibraryBook> onOpenBookDetails;
+  final ValueChanged<LibraryBook> onOpenReader;
 
   @override
   Widget build(BuildContext context) {
     return switch (destination) {
       AppDestination.library => LibraryHomePage(
         onOpenBookDetails: onOpenBookDetails,
+        onOpenReader: onOpenReader,
       ),
       AppDestination.reader =>
         readerFormat == 'pdf'
