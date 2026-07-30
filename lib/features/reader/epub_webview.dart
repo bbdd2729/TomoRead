@@ -295,8 +295,8 @@ body {
   box-sizing: border-box !important;
   /* Keep the column container one-page wide. The viewport shows two of its
      overflow columns at once, so EPUB width rules never span both pages. */
-  width: calc((100vw + ${margin}px) / 2) !important;
-  min-width: calc((100vw + ${margin}px) / 2) !important;
+  width: calc((100vw + ${margin * 2}px) / 2) !important;
+  min-width: calc((100vw + ${margin * 2}px) / 2) !important;
   height: 100% !important;
   padding: ${margin}px !important;
   column-count: 1 !important;
