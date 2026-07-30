@@ -21,7 +21,13 @@ class LibraryHomePage extends HookConsumerWidget {
     final formatFilter = useState(_LibraryFormatFilter.all);
     final sort = useState(_LibrarySort.recent);
     final viewMode = useState(_LibraryViewMode.grid);
+    final categoryFilter = useState(_allCategories);
+    final tagFilter = useState<String?>(null);
+    final favoritesOnly = useState(false);
+    final selectionMode = useState(false);
+    final selectedBookIds = useState(<String>{});
     final removingBookId = useState<String?>(null);
+    final isBatchOperating = useState(false);
 
     Future<void> importBooks() async {
       if (isImporting.value) return;
@@ -95,6 +101,96 @@ class LibraryHomePage extends HookConsumerWidget {
       }
     }
 
+    Future<void> toggleFavorite(LibraryBook book) async {
+      await ref
+          .read(bookRepositoryProvider)
+          .setFavorite(book.id, !book.isFavorite);
+      ref.invalidate(libraryBooksProvider);
+    }
+
+    void toggleSelection(String bookId) {
+      final next = {...selectedBookIds.value};
+      if (!next.add(bookId)) next.remove(bookId);
+      selectedBookIds.value = next;
+    }
+
+    void cancelSelection() {
+      selectionMode.value = false;
+      selectedBookIds.value = <String>{};
+    }
+
+    Future<void> updateSelectedFavorite(List<LibraryBook> items) async {
+      final selected = selectedBookIds.value;
+      if (selected.isEmpty || isBatchOperating.value) return;
+      final selectedBooks = items.where((book) => selected.contains(book.id));
+      final targetValue = selectedBooks.any((book) => !book.isFavorite);
+      isBatchOperating.value = true;
+      try {
+        await ref
+            .read(bookRepositoryProvider)
+            .setFavoriteForBooks(selected, targetValue);
+        ref.invalidate(libraryBooksProvider);
+      } finally {
+        if (context.mounted) isBatchOperating.value = false;
+      }
+    }
+
+    Future<void> updateSelectedCategory(List<LibraryBook> items) async {
+      final selected = selectedBookIds.value;
+      if (selected.isEmpty || isBatchOperating.value) return;
+      final update = await showDialog<_CategoryUpdate>(
+        context: context,
+        builder: (context) =>
+            _CategoryDialog(categories: _categoriesFor(items)),
+      );
+      if (!context.mounted || update == null) return;
+      isBatchOperating.value = true;
+      try {
+        await ref
+            .read(bookRepositoryProvider)
+            .setCategoryForBooks(selected, update.category);
+        ref.invalidate(libraryBooksProvider);
+      } finally {
+        if (context.mounted) isBatchOperating.value = false;
+      }
+    }
+
+    Future<void> removeSelectedBooks(List<LibraryBook> items) async {
+      final selected = selectedBookIds.value;
+      if (selected.isEmpty || isBatchOperating.value) return;
+      final selectedBooks = items
+          .where((book) => selected.contains(book.id))
+          .toList();
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('删除书籍'),
+          content: Text('将删除选中的 ${selectedBooks.length} 本书及其本地文件。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+      isBatchOperating.value = true;
+      try {
+        for (final book in selectedBooks) {
+          await ref.read(bookStorageServiceProvider).removeBook(book);
+        }
+        ref.invalidate(libraryBooksProvider);
+        cancelSelection();
+      } finally {
+        if (context.mounted) isBatchOperating.value = false;
+      }
+    }
+
     return books.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => _LibraryFailure(
@@ -107,6 +203,9 @@ class LibraryHomePage extends HookConsumerWidget {
           query: searchQuery.value,
           formatFilter: formatFilter.value,
           sort: sort.value,
+          category: categoryFilter.value,
+          tag: tagFilter.value,
+          favoritesOnly: favoritesOnly.value,
         );
         return ListView(
           padding: const EdgeInsets.all(24),
@@ -130,8 +229,29 @@ class LibraryHomePage extends HookConsumerWidget {
                 onFormatChanged: (value) => formatFilter.value = value,
                 onSortChanged: (value) => sort.value = value,
                 onViewModeChanged: (value) => viewMode.value = value,
+                categories: _categoriesFor(items),
+                tags: _tagsFor(items),
+                category: categoryFilter.value,
+                tag: tagFilter.value,
+                favoritesOnly: favoritesOnly.value,
+                onCategoryChanged: (value) => categoryFilter.value = value,
+                onTagChanged: (value) => tagFilter.value = value,
+                onFavoritesChanged: (value) => favoritesOnly.value = value,
               ),
               const SizedBox(height: 24),
+              if (selectionMode.value)
+                _SelectionToolbar(
+                  selectedCount: selectedBookIds.value.length,
+                  isWorking: isBatchOperating.value,
+                  allSelectedAreFavorite: items
+                      .where((book) => selectedBookIds.value.contains(book.id))
+                      .every((book) => book.isFavorite),
+                  onCancel: cancelSelection,
+                  onToggleFavorite: () => updateSelectedFavorite(items),
+                  onChangeCategory: () => updateSelectedCategory(items),
+                  onDelete: () => removeSelectedBooks(items),
+                ),
+              if (selectionMode.value) const SizedBox(height: 16),
               if (visibleBooks.isEmpty)
                 const _NoMatchingBooks()
               else ...[
@@ -168,10 +288,22 @@ class LibraryHomePage extends HookConsumerWidget {
                     itemCount: visibleBooks.length,
                     itemBuilder: (context, index) => _BookCard(
                       book: visibleBooks[index],
-                      onTap: () => onOpenBookDetails(visibleBooks[index]),
+                      onTap: () => selectionMode.value
+                          ? toggleSelection(visibleBooks[index].id)
+                          : onOpenBookDetails(visibleBooks[index]),
+                      onLongPress: () {
+                        selectionMode.value = true;
+                        toggleSelection(visibleBooks[index].id);
+                      },
+                      isSelected: selectedBookIds.value.contains(
+                        visibleBooks[index].id,
+                      ),
+                      selectionMode: selectionMode.value,
                       isRemoving:
                           removingBookId.value == visibleBooks[index].id,
                       onDelete: () => removeBook(visibleBooks[index]),
+                      onToggleFavorite: () =>
+                          toggleFavorite(visibleBooks[index]),
                     ),
                   )
                 else
@@ -182,10 +314,22 @@ class LibraryHomePage extends HookConsumerWidget {
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) => _BookListItem(
                       book: visibleBooks[index],
-                      onTap: () => onOpenBookDetails(visibleBooks[index]),
+                      onTap: () => selectionMode.value
+                          ? toggleSelection(visibleBooks[index].id)
+                          : onOpenBookDetails(visibleBooks[index]),
+                      onLongPress: () {
+                        selectionMode.value = true;
+                        toggleSelection(visibleBooks[index].id);
+                      },
+                      isSelected: selectedBookIds.value.contains(
+                        visibleBooks[index].id,
+                      ),
+                      selectionMode: selectionMode.value,
                       isRemoving:
                           removingBookId.value == visibleBooks[index].id,
                       onDelete: () => removeBook(visibleBooks[index]),
+                      onToggleFavorite: () =>
+                          toggleFavorite(visibleBooks[index]),
                     ),
                   ),
               ],
@@ -224,6 +368,9 @@ List<LibraryBook> _filterAndSortBooks(
   required String query,
   required _LibraryFormatFilter formatFilter,
   required _LibrarySort sort,
+  required String category,
+  required String? tag,
+  required bool favoritesOnly,
 }) {
   final normalizedQuery = query.trim().toLowerCase();
   final filtered = books.where((book) {
@@ -232,8 +379,19 @@ List<LibraryBook> _filterAndSortBooks(
       _LibraryFormatFilter.epub => book.format == 'epub',
       _LibraryFormatFilter.pdf => book.format == 'pdf',
     };
-    final searchableText = '${book.title} ${book.author}'.toLowerCase();
+    final matchesCategory =
+        category == _allCategories ||
+        (category == _uncategorized
+            ? book.category?.isEmpty ?? true
+            : book.category == category);
+    final matchesTag = tag == null || book.tags.contains(tag);
+    final searchableText =
+        '${book.title} ${book.author} ${book.category ?? ''} ${book.tags.join(' ')}'
+            .toLowerCase();
     return matchesFormat &&
+        matchesCategory &&
+        matchesTag &&
+        (!favoritesOnly || book.isFavorite) &&
         (normalizedQuery.isEmpty || searchableText.contains(normalizedQuery));
   }).toList();
   filtered.sort(switch (sort) {
@@ -250,6 +408,25 @@ List<LibraryBook> _filterAndSortBooks(
   return filtered;
 }
 
+const _allCategories = '__all_categories__';
+const _uncategorized = '__uncategorized__';
+
+List<String> _categoriesFor(List<LibraryBook> books) {
+  final categories =
+      books
+          .map((book) => book.category?.trim() ?? '')
+          .where((category) => category.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+  return categories;
+}
+
+List<String> _tagsFor(List<LibraryBook> books) {
+  final tags = books.expand((book) => book.tags).toSet().toList()..sort();
+  return tags;
+}
+
 class _LibraryControls extends StatelessWidget {
   const _LibraryControls({
     required this.formatFilter,
@@ -259,6 +436,14 @@ class _LibraryControls extends StatelessWidget {
     required this.onFormatChanged,
     required this.onSortChanged,
     required this.onViewModeChanged,
+    required this.categories,
+    required this.tags,
+    required this.category,
+    required this.tag,
+    required this.favoritesOnly,
+    required this.onCategoryChanged,
+    required this.onTagChanged,
+    required this.onFavoritesChanged,
   });
 
   final _LibraryFormatFilter formatFilter;
@@ -268,6 +453,14 @@ class _LibraryControls extends StatelessWidget {
   final ValueChanged<_LibraryFormatFilter> onFormatChanged;
   final ValueChanged<_LibrarySort> onSortChanged;
   final ValueChanged<_LibraryViewMode> onViewModeChanged;
+  final List<String> categories;
+  final List<String> tags;
+  final String category;
+  final String? tag;
+  final bool favoritesOnly;
+  final ValueChanged<String> onCategoryChanged;
+  final ValueChanged<String?> onTagChanged;
+  final ValueChanged<bool> onFavoritesChanged;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -275,71 +468,261 @@ class _LibraryControls extends StatelessWidget {
       final searchWidth = constraints.maxWidth < 520
           ? constraints.maxWidth
           : 320.0;
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: searchWidth,
-            child: TextField(
-              key: const Key('library-search'),
-              onChanged: onQueryChanged,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: '搜索书名或作者',
-                border: OutlineInputBorder(),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: searchWidth,
+                child: TextField(
+                  key: const Key('library-search'),
+                  onChanged: onQueryChanged,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: '搜索书名或作者',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
               ),
-            ),
-          ),
-          SegmentedButton<_LibraryFormatFilter>(
-            segments: [
-              for (final filter in _LibraryFormatFilter.values)
-                ButtonSegment(value: filter, label: Text(filter.label)),
+              SegmentedButton<_LibraryFormatFilter>(
+                segments: [
+                  for (final filter in _LibraryFormatFilter.values)
+                    ButtonSegment(value: filter, label: Text(filter.label)),
+                ],
+                selected: {formatFilter},
+                onSelectionChanged: (selection) =>
+                    onFormatChanged(selection.first),
+              ),
+              SizedBox(
+                width: 152,
+                child: DropdownButtonFormField<_LibrarySort>(
+                  initialValue: sort,
+                  decoration: const InputDecoration(
+                    labelText: '排序',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final option in _LibrarySort.values)
+                      DropdownMenuItem(
+                        value: option,
+                        child: Text(option.label),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) onSortChanged(value);
+                  },
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey(category),
+                  initialValue: category,
+                  decoration: const InputDecoration(
+                    labelText: '分类',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: _allCategories,
+                      child: Text('全部分类'),
+                    ),
+                    const DropdownMenuItem(
+                      value: _uncategorized,
+                      child: Text('未分类'),
+                    ),
+                    for (final item in categories)
+                      DropdownMenuItem(value: item, child: Text(item)),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) onCategoryChanged(value);
+                  },
+                ),
+              ),
+              FilterChip(
+                selected: favoritesOnly,
+                onSelected: onFavoritesChanged,
+                avatar: Icon(
+                  favoritesOnly ? Icons.favorite : Icons.favorite_border,
+                  size: 18,
+                ),
+                label: const Text('收藏'),
+              ),
+              Tooltip(
+                message: '切换书库视图',
+                child: SegmentedButton<_LibraryViewMode>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: _LibraryViewMode.grid,
+                      icon: Icon(Icons.grid_view_outlined),
+                    ),
+                    ButtonSegment(
+                      value: _LibraryViewMode.list,
+                      icon: Icon(Icons.view_list_outlined),
+                    ),
+                  ],
+                  selected: {viewMode},
+                  onSelectionChanged: (selection) =>
+                      onViewModeChanged(selection.first),
+                ),
+              ),
             ],
-            selected: {formatFilter},
-            onSelectionChanged: (selection) => onFormatChanged(selection.first),
           ),
-          SizedBox(
-            width: 152,
-            child: DropdownButtonFormField<_LibrarySort>(
-              initialValue: sort,
-              decoration: const InputDecoration(
-                labelText: '排序',
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                for (final option in _LibrarySort.values)
-                  DropdownMenuItem(value: option, child: Text(option.label)),
+          if (tags.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final item in tags)
+                  ChoiceChip(
+                    selected: tag == item,
+                    onSelected: (selected) =>
+                        onTagChanged(selected ? item : null),
+                    label: Text(item),
+                  ),
               ],
-              onChanged: (value) {
-                if (value != null) onSortChanged(value);
-              },
             ),
-          ),
-          Tooltip(
-            message: '切换书库视图',
-            child: SegmentedButton<_LibraryViewMode>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(
-                  value: _LibraryViewMode.grid,
-                  icon: Icon(Icons.grid_view_outlined),
-                ),
-                ButtonSegment(
-                  value: _LibraryViewMode.list,
-                  icon: Icon(Icons.view_list_outlined),
-                ),
-              ],
-              selected: {viewMode},
-              onSelectionChanged: (selection) =>
-                  onViewModeChanged(selection.first),
-            ),
-          ),
+          ],
         ],
       );
     },
   );
+}
+
+class _SelectionToolbar extends StatelessWidget {
+  const _SelectionToolbar({
+    required this.selectedCount,
+    required this.isWorking,
+    required this.allSelectedAreFavorite,
+    required this.onCancel,
+    required this.onToggleFavorite,
+    required this.onChangeCategory,
+    required this.onDelete,
+  });
+
+  final int selectedCount;
+  final bool isWorking;
+  final bool allSelectedAreFavorite;
+  final VoidCallback onCancel;
+  final VoidCallback onToggleFavorite;
+  final VoidCallback onChangeCategory;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    key: const Key('library-selection-toolbar'),
+    color: Theme.of(context).colorScheme.secondaryContainer,
+    borderRadius: BorderRadius.circular(8),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: '退出多选',
+            onPressed: isWorking ? null : onCancel,
+            icon: const Icon(Icons.close),
+          ),
+          Expanded(child: Text('已选择 $selectedCount 本书')),
+          IconButton(
+            tooltip: allSelectedAreFavorite ? '取消收藏' : '收藏书籍',
+            onPressed: isWorking || selectedCount == 0
+                ? null
+                : onToggleFavorite,
+            icon: Icon(
+              allSelectedAreFavorite ? Icons.favorite : Icons.favorite_border,
+            ),
+          ),
+          IconButton(
+            tooltip: '设置分类',
+            onPressed: isWorking || selectedCount == 0
+                ? null
+                : onChangeCategory,
+            icon: const Icon(Icons.folder_outlined),
+          ),
+          IconButton(
+            tooltip: '删除书籍',
+            onPressed: isWorking || selectedCount == 0 ? null : onDelete,
+            icon: const Icon(Icons.delete_outline),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _CategoryUpdate {
+  const _CategoryUpdate(this.category);
+
+  final String? category;
+}
+
+class _CategoryDialog extends HookWidget {
+  const _CategoryDialog({required this.categories});
+
+  final List<String> categories;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = useTextEditingController();
+    return AlertDialog(
+      title: const Text('设置分类'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: '分类名称',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            if (categories.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final category in categories)
+                    ActionChip(
+                      label: Text(category),
+                      onPressed: () => controller.text = category,
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, const _CategoryUpdate(null)),
+          child: const Text('清除分类'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final category = controller.text.trim();
+            if (category.isEmpty) return;
+            Navigator.pop(context, _CategoryUpdate(category));
+          },
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
 }
 
 class _NoMatchingBooks extends StatelessWidget {
@@ -470,21 +853,31 @@ class _BookCard extends StatelessWidget {
   const _BookCard({
     required this.book,
     required this.onTap,
+    required this.onLongPress,
+    required this.isSelected,
+    required this.selectionMode,
     required this.isRemoving,
     required this.onDelete,
+    required this.onToggleFavorite,
   });
 
   final LibraryBook book;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final bool isSelected;
+  final bool selectionMode;
   final bool isRemoving;
   final VoidCallback onDelete;
+  final VoidCallback onToggleFavorite;
 
   @override
   Widget build(BuildContext context) => Card(
     key: Key('book-${book.id}'),
+    color: isSelected ? Theme.of(context).colorScheme.secondaryContainer : null,
     clipBehavior: Clip.antiAlias,
     child: InkWell(
       onTap: isRemoving ? null : onTap,
+      onLongPress: isRemoving ? null : onLongPress,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -498,31 +891,47 @@ class _BookCard extends StatelessWidget {
                     tag: bookCoverHeroTag(book),
                     child: BookCover(book: book),
                   ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Material(
-                      color: Theme.of(context).colorScheme.surfaceContainer,
-                      shape: const CircleBorder(),
-                      child: PopupMenuButton<String>(
-                        tooltip: '更多操作',
-                        enabled: !isRemoving,
-                        onSelected: (_) => onDelete(),
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(value: 'delete', child: Text('删除书籍')),
-                        ],
-                        icon: isRemoving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.more_vert),
+                  if (selectionMode)
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: Checkbox(
+                        value: isSelected,
+                        onChanged: (_) => onTap(),
                       ),
                     ),
-                  ),
+                  if (!selectionMode)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Material(
+                        color: Theme.of(context).colorScheme.surfaceContainer,
+                        shape: const CircleBorder(),
+                        child: PopupMenuButton<String>(
+                          tooltip: '更多操作',
+                          enabled: !isRemoving,
+                          onSelected: (action) => action == 'favorite'
+                              ? onToggleFavorite()
+                              : onDelete(),
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'favorite',
+                              child: Text(book.isFavorite ? '取消收藏' : '收藏书籍'),
+                            ),
+                            PopupMenuItem(value: 'delete', child: Text('删除书籍')),
+                          ],
+                          icon: isRemoving
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.more_vert),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -553,24 +962,36 @@ class _BookListItem extends StatelessWidget {
   const _BookListItem({
     required this.book,
     required this.onTap,
+    required this.onLongPress,
+    required this.isSelected,
+    required this.selectionMode,
     required this.isRemoving,
     required this.onDelete,
+    required this.onToggleFavorite,
   });
 
   final LibraryBook book;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final bool isSelected;
+  final bool selectionMode;
   final bool isRemoving;
   final VoidCallback onDelete;
+  final VoidCallback onToggleFavorite;
 
   @override
   Widget build(BuildContext context) => Card(
     key: Key('book-list-${book.id}'),
+    color: isSelected ? Theme.of(context).colorScheme.secondaryContainer : null,
     child: InkWell(
       onTap: isRemoving ? null : onTap,
+      onLongPress: isRemoving ? null : onLongPress,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
+            if (selectionMode)
+              Checkbox(value: isSelected, onChanged: (_) => onTap()),
             SizedBox(
               width: 52,
               height: 76,
@@ -619,21 +1040,27 @@ class _BookListItem extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            PopupMenuButton<String>(
-              tooltip: '更多操作',
-              enabled: !isRemoving,
-              onSelected: (_) => onDelete(),
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'delete', child: Text('删除书籍')),
-              ],
-              icon: isRemoving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.more_vert),
-            ),
+            if (!selectionMode)
+              PopupMenuButton<String>(
+                tooltip: '更多操作',
+                enabled: !isRemoving,
+                onSelected: (action) =>
+                    action == 'favorite' ? onToggleFavorite() : onDelete(),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'favorite',
+                    child: Text(book.isFavorite ? '取消收藏' : '收藏书籍'),
+                  ),
+                  PopupMenuItem(value: 'delete', child: Text('删除书籍')),
+                ],
+                icon: isRemoving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.more_vert),
+              ),
           ],
         ),
       ),

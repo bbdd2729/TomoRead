@@ -123,6 +123,46 @@ class BookRepository {
     );
   }
 
+  Future<void> setFavoriteForBooks(
+    Iterable<String> bookIds,
+    bool isFavorite,
+  ) async {
+    final ids = bookIds.toList(growable: false);
+    if (ids.isEmpty) return;
+    final database = await _database.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await database.transaction((transaction) async {
+      for (final bookId in ids) {
+        await transaction.update(
+          'books',
+          {'is_favorite': isFavorite ? 1 : 0, 'updated_at': now},
+          where: 'id = ?',
+          whereArgs: [bookId],
+        );
+      }
+    });
+  }
+
+  Future<void> setCategoryForBooks(
+    Iterable<String> bookIds,
+    String? category,
+  ) async {
+    final ids = bookIds.toList(growable: false);
+    if (ids.isEmpty) return;
+    final database = await _database.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await database.transaction((transaction) async {
+      for (final bookId in ids) {
+        await transaction.update(
+          'books',
+          {'category': category, 'updated_at': now},
+          where: 'id = ?',
+          whereArgs: [bookId],
+        );
+      }
+    });
+  }
+
   Future<void> resetReadingPosition(String bookId) => updateReadingPosition(
     bookId: bookId,
     chapterIndex: 0,

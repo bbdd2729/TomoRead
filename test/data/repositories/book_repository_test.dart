@@ -56,11 +56,25 @@ void main() {
     expect(saved.progress, 0);
     expect(saved.locator, isNull);
   });
+
+  test('updates favorite and category values for multiple books', () async {
+    final first = _book();
+    final second = _book(id: 'book-second', hash: 'hash-second');
+    await repository.saveImportedPdfBook(first);
+    await repository.saveImportedPdfBook(second);
+
+    await repository.setFavoriteForBooks([first.id, second.id], true);
+    await repository.setCategoryForBooks([first.id, second.id], 'Reference');
+
+    final books = await repository.listBooks();
+    expect(books.map((book) => book.isFavorite), everyElement(isTrue));
+    expect(books.map((book) => book.category), everyElement('Reference'));
+  });
 }
 
-LibraryBook _book() => LibraryBook(
-  id: 'book-id',
-  fileHash: 'hash',
+LibraryBook _book({String id = 'book-id', String hash = 'hash'}) => LibraryBook(
+  id: id,
+  fileHash: hash,
   title: 'Original title',
   author: 'Original author',
   filePath: '/tmp/book.pdf',

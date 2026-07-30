@@ -290,6 +290,65 @@ void main() {
     expect(find.byKey(const Key('book-pdf-book')), findsOneWidget);
   });
 
+  testWidgets('filters by favorite, category, and tag and enters selection', (
+    tester,
+  ) async {
+    configureDesktop(tester);
+    final favorite = LibraryBook(
+      id: 'favorite-book',
+      fileHash: 'favorite-book',
+      title: 'Dart Handbook',
+      author: 'Alice',
+      filePath: 'C:/books/dart.epub',
+      progress: 0,
+      importedAt: DateTime(2026),
+      format: 'epub',
+      chapterCount: 4,
+      direction: ReadingDirection.ltr,
+      category: 'Technology',
+      tags: const ['Dart'],
+      isFavorite: true,
+    );
+    final other = LibraryBook(
+      id: 'other-book',
+      fileHash: 'other-book',
+      title: 'History Notes',
+      author: 'Bob',
+      filePath: 'C:/books/history.pdf',
+      progress: 0,
+      importedAt: DateTime(2025),
+      format: 'pdf',
+      chapterCount: 3,
+      direction: ReadingDirection.ltr,
+      category: 'History',
+      tags: const ['Archive'],
+    );
+    await pumpShell(tester, books: [favorite, other]);
+
+    await tester.tap(find.widgetWithText(FilterChip, '收藏'));
+    await tester.pump();
+    expect(find.byKey(const Key('book-favorite-book')), findsOneWidget);
+    expect(find.byKey(const Key('book-other-book')), findsNothing);
+
+    await tester.tap(find.widgetWithText(FilterChip, '收藏'));
+    await tester.pump();
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pump();
+    await tester.tap(find.text('Technology').last);
+    await tester.pump();
+    expect(find.byKey(const Key('book-favorite-book')), findsOneWidget);
+    expect(find.byKey(const Key('book-other-book')), findsNothing);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Dart'));
+    await tester.pump();
+    expect(find.byKey(const Key('book-favorite-book')), findsOneWidget);
+    expect(find.byKey(const Key('book-other-book')), findsNothing);
+
+    await tester.longPress(find.byKey(const Key('book-favorite-book')));
+    await tester.pump();
+    expect(find.byKey(const Key('library-selection-toolbar')), findsOneWidget);
+  });
+
   testWidgets('switches the library to list view', (tester) async {
     configureDesktop(tester);
     final book = LibraryBook(
