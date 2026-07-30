@@ -443,20 +443,19 @@ class ReaderWorkspace extends HookConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const contentMinWidth = 440.0;
         final isMobile = constraints.maxWidth < 840;
         final showToc =
             controlsVisible.value &&
             tocVisible.value &&
-            constraints.maxWidth >= contentMinWidth + tocPanelWidth.value + 8;
+            !isMobile &&
+            constraints.maxWidth >= tocPanelWidth.value + 160;
         final showSidePanel =
             controlsVisible.value &&
             sidePanelVisible.value &&
+            !isMobile &&
             constraints.maxWidth >=
-                contentMinWidth +
-                    sidePanelWidth.value +
-                    8 +
-                    (showToc ? tocPanelWidth.value + 8 : 0);
+                sidePanelWidth.value +
+                    (showToc ? tocPanelWidth.value + 160 : 160);
         Future<void> openMobileToc() => showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
@@ -546,38 +545,9 @@ class ReaderWorkspace extends HookConsumerWidget {
                       child: const Center(child: CircularProgressIndicator()),
                     )
                   : Material(
-                      child: Row(
+                      child: Stack(
                         children: [
-                          if (showToc)
-                            ResizablePane(
-                              width: tocPanelWidth.value,
-                              minWidth: 240,
-                              maxWidth: 480,
-                              defaultWidth: 280,
-                              onWidthChanged: (value) =>
-                                  tocPanelWidth.value = value,
-                              onWidthChangeEnd: (value) => ref
-                                  .read(appSettingsProvider.notifier)
-                                  .updateAppearance(
-                                    appearance.copyWith(readerTocWidth: value),
-                                  ),
-                              child: _ReaderTocPanel(
-                                toc: manifest.value?.toc ?? const [],
-                                activeChapterIndex: activeChapterIndex,
-                                onSelected: (item) {
-                                  final target = Uri.tryParse(item.href);
-                                  unawaited(
-                                    selectChapter(
-                                      item.spineIndex,
-                                      anchor: target?.fragment.isEmpty ?? true
-                                          ? null
-                                          : target!.fragment,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          Expanded(
+                          Positioned.fill(
                             child: _ReaderArticle(
                               settings: settings,
                               chapter: chapter.value,
@@ -625,45 +595,93 @@ class ReaderWorkspace extends HookConsumerWidget {
                               onToggleControls: toggleControls,
                             ),
                           ),
-                          if (showSidePanel)
-                            ResizablePane(
-                              edge: ResizablePaneEdge.leading,
-                              width: sidePanelWidth.value,
-                              minWidth: 280,
-                              maxWidth: 520,
-                              defaultWidth: 320,
-                              onWidthChanged: (value) =>
-                                  sidePanelWidth.value = value,
-                              onWidthChangeEnd: (value) => ref
-                                  .read(appSettingsProvider.notifier)
-                                  .updateAppearance(
-                                    appearance.copyWith(
-                                      readerSidePanelWidth: value,
+                          if (showToc)
+                            Positioned(
+                              left: 8,
+                              top: 8,
+                              bottom: 8,
+                              width: tocPanelWidth.value + 8,
+                              child: ResizablePane(
+                                width: tocPanelWidth.value,
+                                minWidth: 240,
+                                maxWidth: 480,
+                                defaultWidth: 280,
+                                onWidthChanged: (value) =>
+                                    tocPanelWidth.value = value,
+                                onWidthChangeEnd: (value) => ref
+                                    .read(appSettingsProvider.notifier)
+                                    .updateAppearance(
+                                      appearance.copyWith(
+                                        readerTocWidth: value,
+                                      ),
                                     ),
+                                child: _ReaderOverlaySurface(
+                                  child: _ReaderTocPanel(
+                                    toc: manifest.value?.toc ?? const [],
+                                    activeChapterIndex: activeChapterIndex,
+                                    onSelected: (item) {
+                                      final target = Uri.tryParse(item.href);
+                                      unawaited(
+                                        selectChapter(
+                                          item.spineIndex,
+                                          anchor:
+                                              target?.fragment.isEmpty ?? true
+                                              ? null
+                                              : target!.fragment,
+                                        ),
+                                      );
+                                    },
                                   ),
-                              child: _ReaderSidePanel(
-                                showBookmarks: showBookmarks.value,
-                                bookmarks: bookmarkItems,
-                                annotations: annotations,
-                                onPanelChanged: (value) =>
-                                    showBookmarks.value = value,
-                                onSelectBookmark: selectBookmark,
-                                onRemoveBookmark: removeBookmark,
-                                onEditBookmark: editBookmark,
-                                onSelectAnnotation: selectAnnotation,
-                                onEditAnnotation: editAnnotation,
-                                onRemoveAnnotation: (annotation) async {
-                                  await ref
-                                      .read(annotationRepositoryProvider)
-                                      .remove(annotation.id);
-                                  ref.invalidate(
-                                    annotationsForBookProvider(bookId),
-                                  );
-                                  if (focusedAnnotationId.value ==
-                                      annotation.id) {
-                                    focusedAnnotationId.value = null;
-                                  }
-                                },
+                                ),
+                              ),
+                            ),
+                          if (showSidePanel)
+                            Positioned(
+                              right: 8,
+                              top: 8,
+                              bottom: 8,
+                              width: sidePanelWidth.value + 8,
+                              child: ResizablePane(
+                                edge: ResizablePaneEdge.leading,
+                                width: sidePanelWidth.value,
+                                minWidth: 280,
+                                maxWidth: 520,
+                                defaultWidth: 320,
+                                onWidthChanged: (value) =>
+                                    sidePanelWidth.value = value,
+                                onWidthChangeEnd: (value) => ref
+                                    .read(appSettingsProvider.notifier)
+                                    .updateAppearance(
+                                      appearance.copyWith(
+                                        readerSidePanelWidth: value,
+                                      ),
+                                    ),
+                                child: _ReaderOverlaySurface(
+                                  child: _ReaderSidePanel(
+                                    showBookmarks: showBookmarks.value,
+                                    bookmarks: bookmarkItems,
+                                    annotations: annotations,
+                                    onPanelChanged: (value) =>
+                                        showBookmarks.value = value,
+                                    onSelectBookmark: selectBookmark,
+                                    onRemoveBookmark: removeBookmark,
+                                    onEditBookmark: editBookmark,
+                                    onSelectAnnotation: selectAnnotation,
+                                    onEditAnnotation: editAnnotation,
+                                    onRemoveAnnotation: (annotation) async {
+                                      await ref
+                                          .read(annotationRepositoryProvider)
+                                          .remove(annotation.id);
+                                      ref.invalidate(
+                                        annotationsForBookProvider(bookId),
+                                      );
+                                      if (focusedAnnotationId.value ==
+                                          annotation.id) {
+                                        focusedAnnotationId.value = null;
+                                      }
+                                    },
+                                  ),
+                                ),
                               ),
                             ),
                         ],
@@ -1417,6 +1435,22 @@ class _ReaderChrome extends StatelessWidget {
       opacity: visible ? 1 : 0,
       child: visible ? child : const SizedBox.shrink(),
     ),
+  );
+}
+
+class _ReaderOverlaySurface extends StatelessWidget {
+  const _ReaderOverlaySurface({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.surface,
+    elevation: 4,
+    shadowColor: Colors.black26,
+    borderRadius: BorderRadius.circular(8),
+    clipBehavior: Clip.antiAlias,
+    child: child,
   );
 }
 
