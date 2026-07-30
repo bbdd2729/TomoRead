@@ -294,17 +294,21 @@ body {
 #tomoread-pagination-viewport::-webkit-scrollbar { display: none; }
 #tomoread-pagination-content {
   box-sizing: border-box !important;
-  width: 100% !important;
-  min-width: 100% !important;
+  /* Keep the column container one-page wide. The viewport shows two of its
+     overflow columns at once, so EPUB width rules never span both pages. */
+  width: calc((100vw + ${margin}px) / 2) !important;
+  min-width: calc((100vw + ${margin}px) / 2) !important;
   height: 100% !important;
   padding: ${margin}px !important;
-  column-width: calc((100vw - ${margin * 3}px) / 2) !important;
+  column-count: 1 !important;
+  column-width: auto !important;
   column-gap: ${margin}px !important;
   column-fill: auto !important;
 }
 @media (max-width: 720px) {
   #tomoread-pagination-content {
-    column-width: calc(100vw - ${margin * 2}px) !important;
+    width: 100% !important;
+    min-width: 100% !important;
   }
 }
 #tomoread-pagination-content > * { break-inside: avoid; }
