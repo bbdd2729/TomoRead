@@ -76,12 +76,11 @@ class EpubWebView extends HookConsumerWidget {
         onToggleControls: onToggleControls,
       );
     }
-    final extractedDirectory = ref.watch(
-      epubExtractedDirectoryProvider(bookId),
-    );
+    final readerSession = ref.watch(epubReaderSessionProvider(bookId));
     final controller = useMemoized(WebviewController.new);
     final initialized = useState(false);
     final initializationError = useState<Object?>(null);
+    final runtimeLoaded = useRef(false);
     final styleScript = _styleScript(context, settings);
     final annotationScript = _annotationScript(
       annotations,
@@ -89,7 +88,11 @@ class EpubWebView extends HookConsumerWidget {
       focusedAnnotationId,
       annotationFocusRevision,
     );
-    final resourceDirectory = extractedDirectory.value;
+    final useFoliateRuntime = settings.layoutMode == ReaderLayoutMode.paginated;
+    final resourceDirectory = readerSession.value?.directoryPath;
+    final runtimeEntryPoint = readerSession.value?.virtualEntryPointUrl(
+      _hostName,
+    );
 
     Future<void> applyStyle() async {
       try {
@@ -117,6 +120,42 @@ class EpubWebView extends HookConsumerWidget {
       }
     }
 
+    Future<void> openFoliateRuntime() async {
+      try {
+        await controller.executeScript(
+          _runtimeOpenScript(
+            context,
+            settings,
+            href,
+            initialScrollRatio,
+            initialAnchor,
+          ),
+        );
+      } catch (_) {
+        // The runtime module can still be initializing after navigation.
+      }
+    }
+
+    Future<void> updateFoliateRuntimeSettings() async {
+      try {
+        await controller.executeScript(
+          _runtimeSettingsScript(context, settings),
+        );
+      } catch (_) {
+        // The runtime is reconfigured after its module becomes available.
+      }
+    }
+
+    Future<void> navigateFoliateRuntime() async {
+      try {
+        await controller.executeScript(
+          _runtimeNavigateScript(href, initialScrollRatio, initialAnchor),
+        );
+      } catch (_) {
+        // A chapter can change while the WebView is being disposed.
+      }
+    }
+
     useEffect(() {
       if (resourceDirectory == null) return null;
       var disposed = false;
@@ -141,20 +180,44 @@ class EpubWebView extends HookConsumerWidget {
       return () => disposed = true;
     }, [controller, resourceDirectory]);
 
-    useEffect(() {
-      if (!initialized.value) return null;
-      final subscription = controller.loadingState.listen((state) {
-        if (state == LoadingState.navigationCompleted) {
-          unawaited(applyStyle());
-          unawaited(applyAnnotations());
-          unawaited(restoreScrollPosition());
+    useEffect(
+      () {
+        if (!initialized.value) return null;
+        final subscription = controller.loadingState.listen((state) {
+          if (state == LoadingState.navigationCompleted) {
+            if (useFoliateRuntime) {
+              unawaited(openFoliateRuntime());
+            } else {
+              unawaited(applyStyle());
+              unawaited(applyAnnotations());
+              unawaited(restoreScrollPosition());
+            }
+          }
+        });
+        if (useFoliateRuntime) {
+          if (runtimeEntryPoint != null && !runtimeLoaded.value) {
+            runtimeLoaded.value = true;
+            unawaited(controller.loadUrl(runtimeEntryPoint));
+          } else if (runtimeLoaded.value) {
+            unawaited(navigateFoliateRuntime());
+          }
+        } else {
+          runtimeLoaded.value = false;
+          unawaited(controller.loadUrl(_chapterUrl(href)));
         }
-      });
-      unawaited(controller.loadUrl(_chapterUrl(href)));
-      return subscription.cancel;
-    }, [controller, href, initialized.value]);
+        return subscription.cancel;
+      },
+      [
+        controller,
+        href,
+        initialized.value,
+        runtimeEntryPoint,
+        useFoliateRuntime,
+      ],
+    );
 
     useEffect(() {
+      if (useFoliateRuntime) return null;
       final subscription = controller.url.listen((url) {
         final uri = Uri.tryParse(url);
         if (uri?.host != _hostName) return;
@@ -165,7 +228,7 @@ class EpubWebView extends HookConsumerWidget {
         if (nextHref != href) onNavigateToHref(nextHref);
       });
       return subscription.cancel;
-    }, [controller, href, onNavigateToHref]);
+    }, [controller, href, onNavigateToHref, useFoliateRuntime]);
 
     useEffect(() {
       final subscription = controller.webMessage.listen((message) {
@@ -184,6 +247,17 @@ class EpubWebView extends HookConsumerWidget {
         } else if (message['type'] == 'pageChanged') {
           final pageIndex = message['pageIndex'];
           final pageCount = message['pageCount'];
+          if (pageIndex is num && pageCount is num) {
+            onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
+          }
+        } else if (message['type'] == 'runtimeRelocate') {
+          final href = message['href'];
+          final ratio = message['ratio'];
+          final pageIndex = message['pageIndex'];
+          final pageCount = message['pageCount'];
+          if (href is String && ratio is num) {
+            onScrollPositionChanged(href, ratio.toDouble(), null);
+          }
           if (pageIndex is num && pageCount is num) {
             onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
           }
@@ -219,26 +293,53 @@ class EpubWebView extends HookConsumerWidget {
     }, [controller, onScrollPositionChanged, onTextSelectionChanged]);
 
     useEffect(() {
-      if (initialized.value) unawaited(applyStyle());
+      if (!initialized.value) return null;
+      if (useFoliateRuntime) {
+        unawaited(updateFoliateRuntimeSettings());
+      } else {
+        unawaited(applyStyle());
+      }
       return null;
-    }, [initialized.value, styleScript]);
+    }, [initialized.value, styleScript, useFoliateRuntime]);
 
     useEffect(() {
-      if (initialized.value) unawaited(applyAnnotations());
+      if (initialized.value && !useFoliateRuntime) {
+        unawaited(applyAnnotations());
+      }
       return null;
-    }, [initialized.value, annotationScript]);
+    }, [initialized.value, annotationScript, useFoliateRuntime]);
 
-    useEffect(() {
-      if (initialized.value) unawaited(restoreScrollPosition());
-      return null;
-    }, [initialized.value, href, initialAnchor, restoreRevision]);
+    useEffect(
+      () {
+        if (!initialized.value) return null;
+        if (useFoliateRuntime) {
+          unawaited(navigateFoliateRuntime());
+        } else {
+          unawaited(restoreScrollPosition());
+        }
+        return null;
+      },
+      [
+        initialized.value,
+        href,
+        initialAnchor,
+        restoreRevision,
+        useFoliateRuntime,
+      ],
+    );
 
     useEffect(() {
       final page = requestedPage;
       if (!initialized.value || page == null) return null;
-      unawaited(controller.executeScript(_goToPageScript(page)));
+      unawaited(
+        controller.executeScript(
+          useFoliateRuntime
+              ? _runtimeGoToPageScript(page)
+              : _goToPageScript(page),
+        ),
+      );
       return null;
-    }, [controller, href, initialized.value, requestedPage]);
+    }, [controller, href, initialized.value, requestedPage, useFoliateRuntime]);
 
     useEffect(
       () =>
@@ -246,17 +347,17 @@ class EpubWebView extends HookConsumerWidget {
       [controller],
     );
 
-    if (extractedDirectory.hasError || initializationError.value != null) {
+    if (readerSession.hasError || initializationError.value != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            '无法启动 EPUB 渲染器：${initializationError.value ?? extractedDirectory.error}',
+            '无法启动 EPUB 渲染器：${initializationError.value ?? readerSession.error}',
           ),
         ),
       );
     }
-    if (extractedDirectory.isLoading || !initialized.value) {
+    if (readerSession.isLoading || !initialized.value) {
       return const Center(child: CircularProgressIndicator());
     }
     return Webview(controller);
@@ -649,6 +750,73 @@ a { color: ${_cssColor(colorScheme.primary)}; }
 
   String _goToPageScript(int pageIndex) =>
       'window.__tomoReadGoToPage?.(${pageIndex.clamp(0, 100000)});';
+
+  String _runtimeOpenScript(
+    BuildContext context,
+    ReadingSettings settings,
+    String href,
+    double ratio,
+    String? anchor,
+  ) {
+    final payload = jsonEncode({
+      'href': href,
+      'ratio': ratio.clamp(0, 1),
+      'anchor': anchor,
+      'settings': _runtimeSettings(context, settings),
+    });
+    return _runtimeCall('runtime.open($payload)');
+  }
+
+  String _runtimeSettingsScript(
+    BuildContext context,
+    ReadingSettings settings,
+  ) => _runtimeCall(
+    'runtime.setSettings(${jsonEncode(_runtimeSettings(context, settings))})',
+  );
+
+  String _runtimeNavigateScript(
+    String href,
+    double ratio,
+    String? anchor,
+  ) => _runtimeCall(
+    'runtime.goToHref(${jsonEncode(href)}, ${ratio.clamp(0, 1)}, ${jsonEncode(anchor)})',
+  );
+
+  String _runtimeGoToPageScript(int pageIndex) =>
+      _runtimeCall('runtime.goToPage(${pageIndex.clamp(0, 100000)})');
+
+  String _runtimeCall(String invocation) =>
+      '''(() => {
+    let attempts = 0;
+    const run = () => {
+      const runtime = window.TomoReadEpubRuntime;
+      if (runtime) {
+        void $invocation;
+      } else if (attempts++ < 100) {
+        window.setTimeout(run, 20);
+      }
+    };
+    run();
+  })();''';
+
+  Map<String, Object?> _runtimeSettings(
+    BuildContext context,
+    ReadingSettings settings,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    return {
+      'flow': 'paginated',
+      'columnCount': settings.doubleColumn ? 2 : 1,
+      'maxInlineSize': 760,
+      'margin': settings.pageMargin,
+      'fontFamily': settings.font.fontFamily,
+      'fontSize': settings.fontSize,
+      'lineHeight': settings.lineHeight,
+      'foreground': _cssColor(scheme.onSurface),
+      'background': _cssColor(scheme.surface),
+      'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr',
+    };
+  }
 
   String _cssColor(Color color) =>
       '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
