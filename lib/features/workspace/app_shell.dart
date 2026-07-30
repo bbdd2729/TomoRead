@@ -137,14 +137,29 @@ class AppShell extends HookConsumerWidget {
 
     Future<void> openBookDetails(LibraryBook book) =>
         Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (routeContext) => BookDetailsPage(
+          PageRouteBuilder<void>(
+            transitionDuration: const Duration(milliseconds: 220),
+            reverseTransitionDuration: const Duration(milliseconds: 180),
+            pageBuilder: (routeContext, _, _) => BookDetailsPage(
               book: book,
               onOpenReader: (selectedBook) {
                 Navigator.of(routeContext).pop();
                 openReader(selectedBook);
               },
             ),
+            transitionsBuilder: (_, animation, secondaryAnimation, child) =>
+                FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: .985, end: 1).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      ),
+                    ),
+                    child: child,
+                  ),
+                ),
           ),
         );
 

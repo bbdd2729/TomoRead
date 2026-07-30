@@ -197,12 +197,15 @@ class BookDetailsPage extends HookConsumerWidget {
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 760;
           final cover = SizedBox(
-            width: isWide ? 232 : 184,
-            height: isWide ? 340 : 270,
+            width: isWide ? 248 : 184,
+            height: isWide ? 364 : 270,
             child: Hero(
               tag: bookCoverHeroTag(displayedBook),
-              child: ClipRRect(
+              child: Material(
+                elevation: 2,
+                shadowColor: Colors.black26,
                 borderRadius: BorderRadius.circular(8),
+                clipBehavior: Clip.antiAlias,
                 child: BookCover(
                   key: const Key('book-detail-cover'),
                   book: displayedBook,
@@ -244,8 +247,16 @@ class BookDetailsPage extends HookConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           cover,
-                          const SizedBox(width: 48),
-                          Expanded(child: details),
+                          const SizedBox(width: 56),
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 160),
+                              child: KeyedSubtree(
+                                key: ValueKey(isEditing.value),
+                                child: details,
+                              ),
+                            ),
+                          ),
                         ],
                       )
                     : Column(
@@ -253,7 +264,13 @@ class BookDetailsPage extends HookConsumerWidget {
                         children: [
                           Center(child: cover),
                           const SizedBox(height: 28),
-                          details,
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 160),
+                            child: KeyedSubtree(
+                              key: ValueKey(isEditing.value),
+                              child: details,
+                            ),
+                          ),
                         ],
                       ),
               ),
@@ -288,10 +305,15 @@ class _BookDetailsContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(book.title, style: theme.textTheme.headlineMedium),
+        Text(book.title, style: theme.textTheme.headlineSmall),
         const SizedBox(height: 8),
-        Text(author, style: theme.textTheme.titleMedium),
-        const SizedBox(height: 24),
+        Text(
+          author,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 20),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -321,7 +343,9 @@ class _BookDetailsContent extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
+        const Divider(),
+        const SizedBox(height: 20),
         Text('简介', style: theme.textTheme.titleLarge),
         const SizedBox(height: 10),
         if (description.isEmpty)
@@ -339,7 +363,9 @@ class _BookDetailsContent extends StatelessWidget {
               child: Text(isDescriptionExpanded ? '收起' : '展开全部'),
             ),
         ],
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
+        const Divider(),
+        const SizedBox(height: 20),
         Text('阅读进度', style: theme.textTheme.titleLarge),
         const SizedBox(height: 12),
         LinearProgressIndicator(value: book.progress),
@@ -348,7 +374,7 @@ class _BookDetailsContent extends StatelessWidget {
           '已读 ${(book.progress * 100).round()}%',
           style: theme.textTheme.bodyMedium,
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 28),
         FilledButton.icon(
           key: const Key('book-detail-read'),
           onPressed: onOpenReader,

@@ -933,23 +933,72 @@ class _ReaderTocPanel extends HookWidget {
       for (final item in items) ...[
         if (normalizedQuery.isEmpty ||
             item.title.toLowerCase().contains(normalizedQuery))
-          ListTile(
+          _TocListItem(
             key: item.spineIndex == activeChapterIndex && item.children.isEmpty
                 ? activeItemKey
                 : null,
-            contentPadding: EdgeInsets.only(left: depth * 16.0),
+            title: item.title,
+            depth: depth,
             enabled: item.spineIndex >= 0,
             selected: item.spineIndex == activeChapterIndex,
-            title: Text(
-              item.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
             onTap: item.spineIndex < 0 ? null : () => onSelected(item),
           ),
         ..._buildTocItems(item.children, activeItemKey, depth + 1, query),
       ],
     ];
+  }
+}
+
+class _TocListItem extends StatelessWidget {
+  const _TocListItem({
+    super.key,
+    required this.title,
+    required this.depth,
+    required this.enabled,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final int depth;
+  final bool enabled;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 1),
+      decoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(
+            color: selected ? colorScheme.primary : Colors.transparent,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Material(
+        color: selected ? colorScheme.surfaceContainerLow : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        child: ListTile(
+          contentPadding: EdgeInsets.only(left: depth * 16.0 + 12, right: 12),
+          enabled: enabled,
+          title: Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: selected
+                ? TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  )
+                : null,
+          ),
+          onTap: onTap,
+        ),
+      ),
+    );
   }
 }
 
