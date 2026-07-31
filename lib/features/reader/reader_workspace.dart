@@ -163,12 +163,10 @@ class ReaderWorkspace extends HookConsumerWidget {
     );
 
     useEffect(() {
+      // A new book or reader-mode switch has no valid runtime page position.
       pageIndex.value = 0;
       pageCount.value = 1;
       return null;
-      // The paginated runtime reports the new chapter and its page position in
-      // the same event. Resetting here on every chapter change races that report
-      // and leaves the footer permanently at its initial 1/1 state.
     }, [bookId, isPaginated]);
 
     void scheduleProgressWrite({
@@ -450,6 +448,12 @@ class ReaderWorkspace extends HookConsumerWidget {
       if (isPaginated) {
         final targetItem = manifest.value?.spine[targetChapter];
         if (targetItem == null) return;
+        // Keep the slider at the requested position until the runtime reports
+        // its measured page location after layout and animation complete.
+        chapterIndex.value = targetChapter;
+        scrollRatio.value = targetRatio;
+        activeAnchor.value = null;
+        activeCfi.value = null;
         navigationCommand.value = ReaderNavigationCommand.goToLocation(
           id: ++navigationSequence.value,
           href: targetItem.href,

@@ -13,6 +13,9 @@ let searchQuery = ''
 let pageTransition = 'slide'
 let turnLocked = false
 let currentSectionIndex = 0
+let currentRatio = 0
+let currentPageIndex = 0
+let currentPageCount = 1
 let commandTail = Promise.resolve()
 let nextCommandId = 1
 
@@ -88,10 +91,13 @@ const runPageTransition = async (direction, operation) => {
   }
 }
 
-const turnUnsafe = direction => runPageTransition(
-  direction,
-  () => direction === 'previous' ? paginator.prev() : paginator.next(),
-)
+const turnUnsafe = async direction => {
+  await runPageTransition(
+    direction,
+    () => direction === 'previous' ? paginator.prev() : paginator.next(),
+  )
+  await reportPaginatorPosition()
+}
 
 const anchorFor = (fragment, fraction, cfi) => {
   const cfiAnchor = cfi ? doc => rangeForCfi(doc, cfi) : null
@@ -265,6 +271,9 @@ const emitRelocation = detail => {
     pageCount - 1,
     detail.pageIndex ?? paginator.page ?? 0,
   ))
+  currentRatio = Number.isFinite(detail.fraction) ? detail.fraction : 0
+  currentPageIndex = pageIndex
+  currentPageCount = pageCount
   postMessage({
     type: 'runtimeRelocate',
     href: section.href,
@@ -281,16 +290,45 @@ const emitPagePosition = detail => {
   const section = getSections()[detail.index]
   if (!section) return
   currentSectionIndex = detail.index
+  currentRatio = Number.isFinite(detail.fraction) ? detail.fraction : 0
+  currentPageIndex = Math.max(0, detail.pageIndex ?? 0)
+  currentPageCount = Math.max(1, detail.pageCount ?? 1)
   postMessage({
     type: 'runtimeRelocate',
     href: section.href,
     chapterIndex: detail.index,
-    ratio: Number.isFinite(detail.fraction) ? detail.fraction : 0,
+    ratio: currentRatio,
     anchor: null,
     cfi: null,
-    pageIndex: Math.max(0, detail.pageIndex ?? 0),
-    pageCount: Math.max(1, detail.pageCount ?? 1),
+    pageIndex: currentPageIndex,
+    pageCount: currentPageCount,
   })
+}
+
+const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve))
+
+const reportPaginatorPosition = async ({ fallbackIndex, fallbackRatio } = {}) => {
+  // The paginator updates its iframe dimensions after the page animation.
+  // Wait two frames so this snapshot reflects the final rendered spread.
+  await nextFrame()
+  await nextFrame()
+  if (!paginator) return
+  const index = Number.isInteger(paginator.primaryIndex)
+    ? paginator.primaryIndex
+    : fallbackIndex ?? currentSectionIndex
+  const section = getSections()[index]
+  if (!section) return
+  const size = paginator.size || 0
+  const measuredPages = size > 0 ? Math.ceil(paginator.viewSize / size) : 0
+  const pageCount = Math.max(1, paginator.pages || 0, measuredPages)
+  const pageIndex = Math.max(0, Math.min(
+    pageCount - 1,
+    Number.isFinite(paginator.page) ? paginator.page : currentPageIndex,
+  ))
+  const ratio = pageCount > 1
+    ? pageIndex / (pageCount - 1)
+    : fallbackRatio ?? currentRatio
+  emitPagePosition({ index, ratio, pageIndex, pageCount })
 }
 
 const attachDocumentInteractions = ({ detail: { doc, index } }) => {
@@ -403,6 +441,7 @@ const goToHrefUnsafe = async (href, ratio = 0, anchor, cfi) => {
   currentSectionIndex = index
   const fragment = anchor || href.split('#')[1]
   await paginator.goTo({ index, anchor: anchorFor(fragment, ratio, cfi) })
+  await reportPaginatorPosition({ fallbackIndex: index, fallbackRatio: ratio })
 }
 
 const goToPageUnsafe = async pageIndex => {
