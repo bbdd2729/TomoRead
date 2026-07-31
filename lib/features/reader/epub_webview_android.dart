@@ -13,6 +13,7 @@ import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_settings.dart';
+import 'reader_navigation_command.dart';
 
 class AndroidEpubWebView extends HookConsumerWidget {
   const AndroidEpubWebView({
@@ -22,14 +23,16 @@ class AndroidEpubWebView extends HookConsumerWidget {
     required this.settings,
     required this.initialScrollRatio,
     required this.initialAnchor,
+    required this.initialCfi,
     required this.direction,
-    required this.requestedPage,
+    required this.navigationCommand,
     required this.restoreRevision,
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
     required this.onPaginationChanged,
     required this.onRequestPrevious,
     required this.onRequestNext,
+    required this.onNavigationCommandFinished,
     required this.onTextSelectionChanged,
     required this.onToggleControls,
   });
@@ -39,8 +42,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final ReadingSettings settings;
   final double initialScrollRatio;
   final String? initialAnchor;
+  final String? initialCfi;
   final ReadingDirection direction;
-  final int? requestedPage;
+  final ReaderNavigationCommand? navigationCommand;
   final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
   final void Function(String href, double ratio, String? anchor, String? cfi)
@@ -48,6 +52,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final void Function(int pageIndex, int pageCount) onPaginationChanged;
   final VoidCallback onRequestPrevious;
   final VoidCallback onRequestNext;
+  final ValueChanged<int> onNavigationCommandFinished;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
   final VoidCallback onToggleControls;
 
@@ -68,6 +73,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
             href,
             initialScrollRatio,
             initialAnchor,
+            initialCfi,
             epubManifest.value!,
           );
     final runtimeScriptRef = useRef<String?>(runtimeScript);
@@ -153,11 +159,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     useEffect(() {
       Future<void> applyStyleAndPosition() async {
         try {
-          if (settings.layoutMode == ReaderLayoutMode.paginated) {
-            if (runtimeScript != null) {
-              await controller.runJavaScript(runtimeScript);
-            }
-          } else {
+          if (settings.layoutMode != ReaderLayoutMode.paginated) {
             await controller.runJavaScript(style);
             await controller.runJavaScript(
               _restoreScript(initialScrollRatio, initialAnchor),
@@ -173,13 +175,22 @@ class AndroidEpubWebView extends HookConsumerWidget {
     }, [controller, href, style, restoreRevision, settings.layoutMode]);
 
     useEffect(() {
-      final page = requestedPage;
-      if (settings.layoutMode != ReaderLayoutMode.paginated || page == null) {
+      if (settings.layoutMode != ReaderLayoutMode.paginated) return null;
+      unawaited(
+        controller.runJavaScript(_runtimeSettingsScript(context, settings)),
+      );
+      return null;
+    }, [controller, settings, settings.layoutMode]);
+
+    useEffect(() {
+      final command = navigationCommand;
+      if (settings.layoutMode != ReaderLayoutMode.paginated ||
+          command == null) {
         return null;
       }
-      unawaited(controller.runJavaScript(_runtimeGoToPageScript(page)));
+      unawaited(controller.runJavaScript(_runtimeCommandScript(command)));
       return null;
-    }, [controller, requestedPage, settings.layoutMode]);
+    }, [controller, navigationCommand, settings.layoutMode]);
 
     if (extractedDirectory.hasError ||
         readerSession.hasError ||
@@ -237,6 +248,18 @@ class AndroidEpubWebView extends HookConsumerWidget {
       return;
     }
     if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'commandCompleted') {
+      final commandId = runtimeMessage['id'];
+      if (commandId is num) onNavigationCommandFinished(commandId.toInt());
+      return;
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'commandFailed') {
+      final commandId = runtimeMessage['id'];
+      if (commandId is num) onNavigationCommandFinished(commandId.toInt());
+      return;
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'textSelection') {
       final messageHref = runtimeMessage['href'];
       final text = runtimeMessage['text'];
@@ -283,6 +306,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     String href,
     double ratio,
     String? anchor,
+    String? cfi,
     EpubManifest manifest,
   ) {
     final scheme = Theme.of(context).colorScheme;
@@ -290,6 +314,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
       'href': href,
       'ratio': ratio.clamp(0, 1),
       'anchor': anchor,
+      'cfi': cfi,
       'session': {'manifest': manifest.toJson()},
       'settings': {
         'flow': 'paginated',
@@ -311,18 +336,47 @@ class AndroidEpubWebView extends HookConsumerWidget {
       let attempts = 0;
       const open = () => {
         const runtime = window.TomoReadEpubRuntime;
-        if (runtime) { void runtime.open($payload); }
+        if (runtime) { void runtime.command({ id: 0, type: 'open', payload: $payload }); }
         else if (attempts++ < 100) { window.setTimeout(open, 20); }
       };
       open();
     })();''';
   }
 
-  String _runtimeGoToPageScript(int pageIndex) =>
-      '''(() => {
-    const runtime = window.TomoReadEpubRuntime;
-    if (runtime) void runtime.goToPage(${pageIndex.clamp(0, 100000)});
-  })();''';
+  String _runtimeCommandScript(ReaderNavigationCommand command) {
+    final type = switch (command.kind) {
+      ReaderNavigationKind.goToLocation => 'goToLocation',
+      ReaderNavigationKind.nextPage => 'nextPage',
+      ReaderNavigationKind.previousPage => 'previousPage',
+    };
+    return '''(() => {
+      const runtime = window.TomoReadEpubRuntime;
+      if (runtime) void runtime.command(${jsonEncode({
+      'id': command.id,
+      'type': type,
+      'payload': {'href': command.href, 'ratio': command.ratio, 'anchor': command.anchor, 'cfi': command.cfi},
+    })});
+    })();''';
+  }
+
+  String _runtimeSettingsScript(
+    BuildContext context,
+    ReadingSettings settings,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    return '''(() => {
+      const runtime = window.TomoReadEpubRuntime;
+      if (runtime) void runtime.command(${jsonEncode({
+      'type': 'setSettings',
+      'payload': {
+        'settings': {'flow': 'paginated', 'columnCount': settings.doubleColumn ? 2 : 1, 'maxInlineSize': 760, 'margin': settings.pageMargin, 'fontFamily': settings.font.fontFamily, 'fontSize': settings.fontSize, 'lineHeight': settings.lineHeight, 'foreground': _cssColor(scheme.onSurface), 'background': _cssColor(scheme.surface), 'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr', 'pageTransition': settings.pageTransition.name},
+      },
+    })});
+    })();''';
+  }
+
+  String _cssColor(Color color) =>
+      '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
 
   String _styleScript(
     BuildContext context,

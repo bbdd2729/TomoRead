@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '11'
+const runtimeVersion = '12'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -13,6 +13,8 @@ let searchQuery = ''
 let pageTransition = 'slide'
 let turnLocked = false
 let currentSectionIndex = 0
+let commandTail = Promise.resolve()
+let nextCommandId = 1
 
 const postMessage = message => {
   if (window.chrome?.webview?.postMessage) {
@@ -86,12 +88,16 @@ const runPageTransition = async (direction, operation) => {
   }
 }
 
-const turn = direction => runPageTransition(
+const turnUnsafe = direction => runPageTransition(
   direction,
   () => direction === 'previous' ? paginator.prev() : paginator.next(),
 )
 
-const anchorFor = (fragment, fraction) => {
+const anchorFor = (fragment, fraction, cfi) => {
+  const cfiAnchor = cfi ? doc => rangeForCfi(doc, cfi) : null
+  if (cfiAnchor) {
+    return doc => cfiAnchor(doc) ?? anchorFor(fragment, fraction)(doc)
+  }
   if (!fragment) return fraction ?? 0
   const id = decodeURIComponent(fragment.replace(/^#/, ''))
   return doc => doc.getElementById(id) ?? doc.querySelector(`[name="${CSS.escape(id)}"]`) ?? fraction ?? 0
@@ -162,7 +168,6 @@ const applyAnnotations = (doc, index) => {
   `
   const groups = new Map(['yellow', 'green', 'blue', 'pink'].map(color => [color, new Highlight()]))
   const href = getSections()[index]?.href
-  let focusedRange
   for (const annotation of annotations) {
     if (annotation.href !== href) continue
     const range = annotation.locator.startsWith('cfi:')
@@ -175,10 +180,11 @@ const applyAnnotations = (doc, index) => {
         })()
     if (!range) continue
     groups.get(annotation.color)?.add(range)
-    if (annotation.id === focusedAnnotationId) focusedRange = range
   }
   for (const [color, ranges] of groups) highlights.set(`tomoread-${color}`, ranges)
-  if (focusedRange) window.setTimeout(() => void paginator?.scrollToAnchor(focusedRange), 0)
+  // The caller navigates to a focused annotation before this method runs.
+  // Scrolling a range from a preloaded iframe through the paginator can map it
+  // against a different primary document.
 }
 
 const applySearchHighlights = doc => {
@@ -276,16 +282,19 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
       const targetIndex = getSections().findIndex(section => sectionUrl(section.href) === target.href.split('#')[0])
       if (targetIndex >= 0) {
         event.preventDefault()
-        void paginator.goTo({ index: targetIndex, anchor: anchorFor(target.hash, 0) })
+        void executeCommand({
+          type: 'goToLocation',
+          payload: { href: getSections()[targetIndex].href, ratio: 0, anchor: target.hash },
+        })
       }
       return
     }
     if (doc.getSelection()?.toString().trim()) return
     const ratio = event.clientX / doc.defaultView.innerWidth
     if (ratio <= 0.25) {
-      void turn('previous')
+      void executeCommand({ type: 'previousPage' })
     } else if (ratio >= 0.75) {
-      void turn('next')
+      void executeCommand({ type: 'nextPage' })
     } else {
       postMessage({ type: 'readerControls' })
     }
@@ -303,7 +312,7 @@ const createPaginator = () => {
   })
 }
 
-const open = async options => {
+const ensureOpen = async options => {
   // Android WebView blocks fetch() from a file:// document. The host provides
   // the already-parsed manifest there, while Windows keeps its virtual HTTPS
   // origin and can load the generated manifest file directly.
@@ -319,12 +328,10 @@ const open = async options => {
     }
     paginator.open(book)
   }
-  applySettings(options.settings)
-  await goToHref(options.href, options.ratio, options.anchor)
-  postMessage({ type: 'runtimeOpened', runtimeVersion })
+  if (options.settings) applySettings(options.settings)
 }
 
-const goToHref = async (href, ratio = 0, anchor) => {
+const goToHrefUnsafe = async (href, ratio = 0, anchor, cfi) => {
   if (!paginator) return
   const index = findSection(href)
   if (index < 0) return
@@ -333,10 +340,10 @@ const goToHref = async (href, ratio = 0, anchor) => {
   // back to the first spine item in that case.
   currentSectionIndex = index
   const fragment = anchor || href.split('#')[1]
-  await paginator.goTo({ index, anchor: anchorFor(fragment, ratio) })
+  await paginator.goTo({ index, anchor: anchorFor(fragment, ratio, cfi) })
 }
 
-const goToPage = async pageIndex => {
+const goToPageUnsafe = async pageIndex => {
   if (!paginator) return
   const pages = Math.max(1, paginator.pages || 1)
   const fraction = pages <= 1 ? 0 : Math.max(0, Math.min(1, pageIndex / (pages - 1)))
@@ -345,6 +352,65 @@ const goToPage = async pageIndex => {
     () => paginator.goTo({ index: currentSectionIndex, anchor: fraction }),
   )
 }
+
+const executeCommand = command => {
+  const id = Number.isInteger(command?.id) ? command.id : nextCommandId++
+  const type = command?.type
+  const payload = command?.payload ?? {}
+  commandTail = commandTail.catch(() => undefined).then(async () => {
+    postMessage({ type: 'commandStarted', id, command: type })
+    try {
+      switch (type) {
+        case 'open':
+          await ensureOpen(payload)
+          await goToHrefUnsafe(payload.href, payload.ratio, payload.anchor, payload.cfi)
+          postMessage({ type: 'runtimeOpened', runtimeVersion })
+          break
+        case 'goToLocation':
+          await goToHrefUnsafe(payload.href, payload.ratio, payload.anchor, payload.cfi)
+          break
+        case 'nextPage':
+          await turnUnsafe('next')
+          break
+        case 'previousPage':
+          await turnUnsafe('previous')
+          break
+        case 'goToPage':
+          await goToPageUnsafe(payload.pageIndex)
+          break
+        case 'setSettings':
+          applySettings(payload.settings)
+          break
+        default:
+          throw new Error(`Unsupported EPUB command: ${type}`)
+      }
+      postMessage({ type: 'commandCompleted', id, command: type })
+    } catch (error) {
+      postMessage({ type: 'commandFailed', id, command: type, message: String(error?.message ?? error) })
+    }
+  })
+  return commandTail
+}
+
+const open = options => executeCommand({
+  id: options?.commandId,
+  type: 'open',
+  payload: options,
+})
+
+const goToHref = (href, ratio = 0, anchor, cfi) => executeCommand({
+  type: 'goToLocation',
+  payload: { href, ratio, anchor, cfi },
+})
+
+const goToPage = pageIndex => executeCommand({
+  type: 'goToPage',
+  payload: { pageIndex },
+})
+
+const turn = direction => executeCommand({
+  type: direction === 'previous' ? 'previousPage' : 'nextPage',
+})
 
 const setAnnotations = (nextAnnotations, nextFocusedAnnotationId) => {
   annotations = nextAnnotations ?? []
@@ -366,6 +432,7 @@ window.TomoReadEpubRuntime = Object.freeze({
   goToHref,
   goToPage,
   turn,
+  command: executeCommand,
   setAnnotations,
   setSearchQuery,
   setSettings: applySettings,

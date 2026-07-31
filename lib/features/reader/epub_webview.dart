@@ -14,6 +14,7 @@ import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
 import 'epub_webview_android.dart';
+import 'reader_navigation_command.dart';
 
 class EpubWebView extends HookConsumerWidget {
   const EpubWebView({
@@ -27,14 +28,16 @@ class EpubWebView extends HookConsumerWidget {
     required this.annotationFocusRevision,
     required this.initialScrollRatio,
     required this.initialAnchor,
+    required this.initialCfi,
     required this.direction,
-    required this.requestedPage,
+    required this.navigationCommand,
     required this.restoreRevision,
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
     required this.onPaginationChanged,
     required this.onRequestPrevious,
     required this.onRequestNext,
+    required this.onNavigationCommandFinished,
     required this.onTextSelectionChanged,
     required this.onToggleControls,
   });
@@ -50,8 +53,9 @@ class EpubWebView extends HookConsumerWidget {
   final int annotationFocusRevision;
   final double initialScrollRatio;
   final String? initialAnchor;
+  final String? initialCfi;
   final ReadingDirection direction;
-  final int? requestedPage;
+  final ReaderNavigationCommand? navigationCommand;
   final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
   final void Function(String href, double ratio, String? anchor, String? cfi)
@@ -59,6 +63,7 @@ class EpubWebView extends HookConsumerWidget {
   final void Function(int pageIndex, int pageCount) onPaginationChanged;
   final VoidCallback onRequestPrevious;
   final VoidCallback onRequestNext;
+  final ValueChanged<int> onNavigationCommandFinished;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
   final VoidCallback onToggleControls;
 
@@ -71,14 +76,16 @@ class EpubWebView extends HookConsumerWidget {
         settings: settings,
         initialScrollRatio: initialScrollRatio,
         initialAnchor: initialAnchor,
+        initialCfi: initialCfi,
         direction: direction,
-        requestedPage: requestedPage,
+        navigationCommand: navigationCommand,
         restoreRevision: restoreRevision,
         onNavigateToHref: onNavigateToHref,
         onScrollPositionChanged: onScrollPositionChanged,
         onPaginationChanged: onPaginationChanged,
         onRequestPrevious: onRequestPrevious,
         onRequestNext: onRequestNext,
+        onNavigationCommandFinished: onNavigationCommandFinished,
         onTextSelectionChanged: onTextSelectionChanged,
         onToggleControls: onToggleControls,
       );
@@ -157,6 +164,7 @@ class EpubWebView extends HookConsumerWidget {
             href,
             initialScrollRatio,
             initialAnchor,
+            initialCfi,
           ),
         );
       } catch (_) {
@@ -171,16 +179,6 @@ class EpubWebView extends HookConsumerWidget {
         );
       } catch (_) {
         // The runtime is reconfigured after its module becomes available.
-      }
-    }
-
-    Future<void> navigateFoliateRuntime() async {
-      try {
-        await controller.executeScript(
-          _runtimeNavigateScript(href, initialScrollRatio, initialAnchor),
-        );
-      } catch (_) {
-        // A chapter can change while the WebView is being disposed.
       }
     }
 
@@ -263,82 +261,100 @@ class EpubWebView extends HookConsumerWidget {
       return subscription.cancel;
     }, [controller, href, onNavigateToHref, useFoliateRuntime]);
 
-    useEffect(() {
-      final subscription = controller.webMessage.listen((message) {
-        if (message is! Map) return;
-        final messageHref = message['href'];
-        if (message['type'] == 'scrollProgress') {
-          final ratio = message['ratio'];
-          final anchor = message['anchor'];
-          if (messageHref is String && ratio is num) {
-            onScrollPositionChanged(
-              messageHref,
-              ratio.toDouble(),
-              anchor is String && anchor.isNotEmpty ? anchor : null,
-              null,
-            );
+    useEffect(
+      () {
+        final subscription = controller.webMessage.listen((message) {
+          if (message is! Map) return;
+          final messageHref = message['href'];
+          if (message['type'] == 'scrollProgress') {
+            final ratio = message['ratio'];
+            final anchor = message['anchor'];
+            if (messageHref is String && ratio is num) {
+              onScrollPositionChanged(
+                messageHref,
+                ratio.toDouble(),
+                anchor is String && anchor.isNotEmpty ? anchor : null,
+                null,
+              );
+            }
+          } else if (message['type'] == 'pageChanged') {
+            final pageIndex = message['pageIndex'];
+            final pageCount = message['pageCount'];
+            if (pageIndex is num && pageCount is num) {
+              onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
+            }
+          } else if (message['type'] == 'runtimeRelocate') {
+            final href = message['href'];
+            final ratio = message['ratio'];
+            final anchor = message['anchor'];
+            final cfi = message['cfi'];
+            final pageIndex = message['pageIndex'];
+            final pageCount = message['pageCount'];
+            if (href is String && ratio is num) {
+              onScrollPositionChanged(
+                href,
+                ratio.toDouble(),
+                anchor is String && anchor.isNotEmpty ? anchor : null,
+                cfi is String && cfi.isNotEmpty ? cfi : null,
+              );
+            }
+            if (pageIndex is num && pageCount is num) {
+              onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
+            }
+          } else if (message['type'] == 'runtimeError') {
+            final runtimeError = message['message'];
+            if (runtimeError is String && runtimeError.isNotEmpty) {
+              initializationError.value = StateError(runtimeError);
+            }
+          } else if (message['type'] == 'commandCompleted') {
+            final commandId = message['id'];
+            if (commandId is num) {
+              onNavigationCommandFinished(commandId.toInt());
+            }
+          } else if (message['type'] == 'commandFailed') {
+            final commandId = message['id'];
+            if (commandId is num) {
+              onNavigationCommandFinished(commandId.toInt());
+            }
+          } else if (message['type'] == 'readerNavigation') {
+            switch (message['direction']) {
+              case 'previous':
+                onRequestPrevious();
+              case 'next':
+                onRequestNext();
+            }
+          } else if (message['type'] == 'textSelection') {
+            final text = message['text'];
+            final startOffset = message['startOffset'];
+            final endOffset = message['endOffset'];
+            final cfi = message['cfi'];
+            if (messageHref is String &&
+                text is String &&
+                startOffset is num &&
+                endOffset is num) {
+              onTextSelectionChanged(
+                ReaderTextSelection(
+                  href: messageHref,
+                  text: text,
+                  startOffset: startOffset.toInt(),
+                  endOffset: endOffset.toInt(),
+                  cfi: cfi is String && cfi.isNotEmpty ? cfi : null,
+                ),
+              );
+            }
+          } else if (message['type'] == 'readerControls') {
+            onToggleControls();
           }
-        } else if (message['type'] == 'pageChanged') {
-          final pageIndex = message['pageIndex'];
-          final pageCount = message['pageCount'];
-          if (pageIndex is num && pageCount is num) {
-            onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
-          }
-        } else if (message['type'] == 'runtimeRelocate') {
-          final href = message['href'];
-          final ratio = message['ratio'];
-          final anchor = message['anchor'];
-          final cfi = message['cfi'];
-          final pageIndex = message['pageIndex'];
-          final pageCount = message['pageCount'];
-          if (href is String && ratio is num) {
-            onScrollPositionChanged(
-              href,
-              ratio.toDouble(),
-              anchor is String && anchor.isNotEmpty ? anchor : null,
-              cfi is String && cfi.isNotEmpty ? cfi : null,
-            );
-          }
-          if (pageIndex is num && pageCount is num) {
-            onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
-          }
-        } else if (message['type'] == 'runtimeError') {
-          final runtimeError = message['message'];
-          if (runtimeError is String && runtimeError.isNotEmpty) {
-            initializationError.value = StateError(runtimeError);
-          }
-        } else if (message['type'] == 'readerNavigation') {
-          switch (message['direction']) {
-            case 'previous':
-              onRequestPrevious();
-            case 'next':
-              onRequestNext();
-          }
-        } else if (message['type'] == 'textSelection') {
-          final text = message['text'];
-          final startOffset = message['startOffset'];
-          final endOffset = message['endOffset'];
-          final cfi = message['cfi'];
-          if (messageHref is String &&
-              text is String &&
-              startOffset is num &&
-              endOffset is num) {
-            onTextSelectionChanged(
-              ReaderTextSelection(
-                href: messageHref,
-                text: text,
-                startOffset: startOffset.toInt(),
-                endOffset: endOffset.toInt(),
-                cfi: cfi is String && cfi.isNotEmpty ? cfi : null,
-              ),
-            );
-          }
-        } else if (message['type'] == 'readerControls') {
-          onToggleControls();
-        }
-      });
-      return subscription.cancel;
-    }, [controller, onScrollPositionChanged, onTextSelectionChanged]);
+        });
+        return subscription.cancel;
+      },
+      [
+        controller,
+        onScrollPositionChanged,
+        onTextSelectionChanged,
+        onNavigationCommandFinished,
+      ],
+    );
 
     useEffect(() {
       if (!initialized.value) return null;
@@ -371,26 +387,20 @@ class EpubWebView extends HookConsumerWidget {
 
     useEffect(() {
       if (!initialized.value) return null;
-      if (useFoliateRuntime) {
-        unawaited(navigateFoliateRuntime());
-      } else {
+      if (!useFoliateRuntime) {
         unawaited(restoreScrollPosition());
       }
       return null;
     }, [initialized.value, href, restoreRevision, useFoliateRuntime]);
 
     useEffect(() {
-      final page = requestedPage;
-      if (!initialized.value || page == null) return null;
-      unawaited(
-        controller.executeScript(
-          useFoliateRuntime
-              ? _runtimeGoToPageScript(page)
-              : _goToPageScript(page),
-        ),
-      );
+      final command = navigationCommand;
+      if (!initialized.value || !useFoliateRuntime || command == null) {
+        return null;
+      }
+      unawaited(controller.executeScript(_runtimeCommandScript(command)));
       return null;
-    }, [controller, href, initialized.value, requestedPage, useFoliateRuntime]);
+    }, [controller, initialized.value, navigationCommand, useFoliateRuntime]);
 
     useEffect(
       () =>
@@ -799,42 +809,47 @@ a { color: ${_cssColor(colorScheme.primary)}; }
     });
   })();''';
 
-  String _goToPageScript(int pageIndex) =>
-      'window.__tomoReadGoToPage?.(${pageIndex.clamp(0, 100000)});';
-
   String _runtimeOpenScript(
     BuildContext context,
     ReadingSettings settings,
     String href,
     double ratio,
     String? anchor,
+    String? cfi,
   ) {
     final payload = jsonEncode({
       'href': href,
       'ratio': ratio.clamp(0, 1),
       'anchor': anchor,
+      'cfi': cfi,
       'settings': _runtimeSettings(context, settings),
     });
-    return _runtimeCall('runtime.open($payload)');
+    return _runtimeCall(
+      "runtime.command({ id: 0, type: 'open', payload: $payload })",
+    );
   }
 
   String _runtimeSettingsScript(
     BuildContext context,
     ReadingSettings settings,
   ) => _runtimeCall(
-    'runtime.setSettings(${jsonEncode(_runtimeSettings(context, settings))})',
+    "runtime.command({ type: 'setSettings', payload: { settings: ${jsonEncode(_runtimeSettings(context, settings))} } })",
   );
 
-  String _runtimeNavigateScript(
-    String href,
-    double ratio,
-    String? anchor,
-  ) => _runtimeCall(
-    'runtime.goToHref(${jsonEncode(href)}, ${ratio.clamp(0, 1)}, ${jsonEncode(anchor)})',
-  );
-
-  String _runtimeGoToPageScript(int pageIndex) =>
-      _runtimeCall('runtime.goToPage(${pageIndex.clamp(0, 100000)})');
+  String _runtimeCommandScript(ReaderNavigationCommand command) {
+    final type = switch (command.kind) {
+      ReaderNavigationKind.goToLocation => 'goToLocation',
+      ReaderNavigationKind.nextPage => 'nextPage',
+      ReaderNavigationKind.previousPage => 'previousPage',
+    };
+    return _runtimeCall(
+      'runtime.command(${jsonEncode({
+        'id': command.id,
+        'type': type,
+        'payload': {'href': command.href, 'ratio': command.ratio, 'anchor': command.anchor, 'cfi': command.cfi},
+      })})',
+    );
+  }
 
   String _runtimeAnnotationScript(
     List<ReadingAnnotation> annotations,

@@ -19,6 +19,7 @@ import '../../domain/models/reading_settings.dart';
 import '../../shared/widgets/resizable_pane.dart';
 import '../../shared/widgets/book_cover.dart';
 import 'epub_webview.dart';
+import 'reader_navigation_command.dart';
 import 'reader_runtime_controller.dart';
 import 'reader_search_dialog.dart';
 
@@ -95,7 +96,8 @@ class ReaderWorkspace extends HookConsumerWidget {
     final restoreRevision = useState(0);
     final pageIndex = useState(0);
     final pageCount = useState(1);
-    final requestedPage = useState<int?>(null);
+    final navigationCommand = useState<ReaderNavigationCommand?>(null);
+    final navigationSequence = useRef(0);
     final focusedAnnotationId = useState<String?>(null);
     final annotationFocusRevision = useState(0);
     final progressWriteTimer = useRef<Timer?>(null);
@@ -163,7 +165,6 @@ class ReaderWorkspace extends HookConsumerWidget {
     useEffect(() {
       pageIndex.value = 0;
       pageCount.value = 1;
-      requestedPage.value = null;
       return null;
     }, [activeChapterIndex, isPaginated]);
 
@@ -202,6 +203,19 @@ class ReaderWorkspace extends HookConsumerWidget {
       String? cfi,
     }) async {
       if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
+      if (isPaginated) {
+        final target = manifest.value?.spine[index];
+        if (target == null) return;
+        progressWriteTimer.value?.cancel();
+        navigationCommand.value = ReaderNavigationCommand.goToLocation(
+          id: ++navigationSequence.value,
+          href: target.href,
+          ratio: scrollPosition,
+          anchor: anchor,
+          cfi: cfi,
+        );
+        return;
+      }
       final revision = runtimeController.beginNavigation();
       progressWriteTimer.value?.cancel();
       chapterIndex.value = index;
@@ -209,7 +223,6 @@ class ReaderWorkspace extends HookConsumerWidget {
       activeAnchor.value = anchor;
       activeCfi.value = cfi;
       restoreRevision.value += 1;
-      requestedPage.value = null;
       try {
         await ref
             .read(bookRepositoryProvider)
@@ -355,7 +368,14 @@ class ReaderWorkspace extends HookConsumerWidget {
       if (nextIndex == null || nextIndex < 0) return;
       focusedAnnotationId.value = annotation.id;
       annotationFocusRevision.value += 1;
-      unawaited(selectChapter(nextIndex));
+      unawaited(
+        selectChapter(
+          nextIndex,
+          cfi: annotation.locator.startsWith('cfi:')
+              ? annotation.locator.substring(4)
+              : null,
+        ),
+      );
     }
 
     Future<void> editAnnotation(ReadingAnnotation annotation) async {
@@ -387,8 +407,10 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     void goToPrevious() {
-      if (isPaginated && pageIndex.value > 0) {
-        requestedPage.value = pageIndex.value - 1;
+      if (isPaginated) {
+        navigationCommand.value = ReaderNavigationCommand.previousPage(
+          id: ++navigationSequence.value,
+        );
         return;
       }
       if (activeChapterIndex > 0) {
@@ -402,8 +424,10 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     void goToNext() {
-      if (isPaginated && pageIndex.value < pageCount.value - 1) {
-        requestedPage.value = pageIndex.value + 1;
+      if (isPaginated) {
+        navigationCommand.value = ReaderNavigationCommand.nextPage(
+          id: ++navigationSequence.value,
+        );
         return;
       }
       if (totalChapters > 0 && activeChapterIndex < totalChapters - 1) {
@@ -420,14 +444,14 @@ class ReaderWorkspace extends HookConsumerWidget {
           : scaled.floor().clamp(0, totalChapters - 1).toInt();
       final targetRatio = target >= 1 ? 1.0 : scaled - targetChapter;
 
-      if (isPaginated && targetChapter == activeChapterIndex) {
-        final targetPage = pageCount.value <= 1
-            ? 0
-            : (targetRatio * (pageCount.value - 1))
-                  .round()
-                  .clamp(0, pageCount.value - 1)
-                  .toInt();
-        requestedPage.value = targetPage;
+      if (isPaginated) {
+        final targetItem = manifest.value?.spine[targetChapter];
+        if (targetItem == null) return;
+        navigationCommand.value = ReaderNavigationCommand.goToLocation(
+          id: ++navigationSequence.value,
+          href: targetItem.href,
+          ratio: targetRatio,
+        );
         return;
       }
       unawaited(selectChapter(targetChapter, scrollPosition: targetRatio));
@@ -597,10 +621,11 @@ class ReaderWorkspace extends HookConsumerWidget {
                               bookId: readerBook.value == null ? null : bookId,
                               initialScrollRatio: scrollRatio.value,
                               initialAnchor: activeAnchor.value,
+                              initialCfi: activeCfi.value,
                               direction:
                                   manifest.value?.direction ??
                                   ReadingDirection.ltr,
-                              requestedPage: requestedPage.value,
+                              navigationCommand: navigationCommand.value,
                               annotations: annotations,
                               searchQuery: searchQuery.value,
                               focusedAnnotationId: focusedAnnotationId.value,
@@ -611,15 +636,23 @@ class ReaderWorkspace extends HookConsumerWidget {
                               onScrollPositionChanged:
                                   (href, ratio, anchor, cfi) {
                                     runtimeController.reportRelocation();
-                                    if (href != chapter.value?.href) return;
+                                    final relocatedIndex = manifest.value?.spine
+                                        .indexWhere(
+                                          (item) => item.href == href,
+                                        );
+                                    if (relocatedIndex == null ||
+                                        relocatedIndex < 0) {
+                                      return;
+                                    }
                                     final clampedRatio = ratio
                                         .clamp(0, 1)
                                         .toDouble();
+                                    chapterIndex.value = relocatedIndex;
                                     scrollRatio.value = clampedRatio;
                                     activeAnchor.value = anchor;
                                     activeCfi.value = cfi;
                                     scheduleProgressWrite(
-                                      index: activeChapterIndex,
+                                      index: relocatedIndex,
                                       chapterRatio: clampedRatio,
                                       anchor: anchor,
                                       cfi: cfi,
@@ -628,12 +661,14 @@ class ReaderWorkspace extends HookConsumerWidget {
                               onPaginationChanged: (index, count) {
                                 pageIndex.value = index;
                                 pageCount.value = count;
-                                if (requestedPage.value == index) {
-                                  requestedPage.value = null;
-                                }
                               },
                               onRequestPrevious: goToPrevious,
                               onRequestNext: goToNext,
+                              onNavigationCommandFinished: (id) {
+                                if (navigationCommand.value?.id == id) {
+                                  navigationCommand.value = null;
+                                }
+                              },
                               onTextSelectionChanged: (selection) {
                                 if (selection.href == chapter.value?.href) {
                                   selectedText.value = selection;
@@ -1365,8 +1400,9 @@ class _ReaderArticle extends StatelessWidget {
     required this.bookId,
     required this.initialScrollRatio,
     required this.initialAnchor,
+    required this.initialCfi,
     required this.direction,
-    required this.requestedPage,
+    required this.navigationCommand,
     required this.restoreRevision,
     required this.annotations,
     required this.searchQuery,
@@ -1377,6 +1413,7 @@ class _ReaderArticle extends StatelessWidget {
     required this.onPaginationChanged,
     required this.onRequestPrevious,
     required this.onRequestNext,
+    required this.onNavigationCommandFinished,
     required this.onTextSelectionChanged,
     required this.onToggleControls,
   });
@@ -1387,8 +1424,9 @@ class _ReaderArticle extends StatelessWidget {
   final String? bookId;
   final double initialScrollRatio;
   final String? initialAnchor;
+  final String? initialCfi;
   final ReadingDirection direction;
-  final int? requestedPage;
+  final ReaderNavigationCommand? navigationCommand;
   final int restoreRevision;
   final List<ReadingAnnotation> annotations;
   final String? searchQuery;
@@ -1400,6 +1438,7 @@ class _ReaderArticle extends StatelessWidget {
   final void Function(int pageIndex, int pageCount) onPaginationChanged;
   final VoidCallback onRequestPrevious;
   final VoidCallback onRequestNext;
+  final ValueChanged<int> onNavigationCommandFinished;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
   final VoidCallback onToggleControls;
 
@@ -1424,8 +1463,9 @@ class _ReaderArticle extends StatelessWidget {
         settings: settings,
         initialScrollRatio: initialScrollRatio,
         initialAnchor: initialAnchor,
+        initialCfi: initialCfi,
         direction: direction,
-        requestedPage: requestedPage,
+        navigationCommand: navigationCommand,
         restoreRevision: restoreRevision,
         annotations: annotations,
         searchQuery: searchQuery,
@@ -1436,6 +1476,7 @@ class _ReaderArticle extends StatelessWidget {
         onPaginationChanged: onPaginationChanged,
         onRequestPrevious: onRequestPrevious,
         onRequestNext: onRequestNext,
+        onNavigationCommandFinished: onNavigationCommandFinished,
         onTextSelectionChanged: onTextSelectionChanged,
         onToggleControls: onToggleControls,
       );

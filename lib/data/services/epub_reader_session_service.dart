@@ -36,7 +36,7 @@ class EpubReaderSessionService {
        _runtimeAssetLoader = runtimeAssetLoader ?? rootBundle.loadString;
 
   static const _runtimeDirectoryName = '.tomoread-reader';
-  static const _runtimeVersion = '11';
+  static const _runtimeVersion = '12';
 
   static const _runtimeAssets = {
     'index.html': 'assets/epub_reader_runtime/index.html',
