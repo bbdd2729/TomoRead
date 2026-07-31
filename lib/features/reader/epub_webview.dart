@@ -39,6 +39,7 @@ class EpubWebView extends HookConsumerWidget {
     required this.onRequestNext,
     required this.onNavigationCommandFinished,
     required this.onTextSelectionChanged,
+    required this.onSelectionContextMenu,
     required this.onToggleControls,
   });
 
@@ -65,6 +66,7 @@ class EpubWebView extends HookConsumerWidget {
   final VoidCallback onRequestNext;
   final ValueChanged<int> onNavigationCommandFinished;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
+  final ValueChanged<ReaderSelectionContextMenu> onSelectionContextMenu;
   final VoidCallback onToggleControls;
 
   @override
@@ -87,6 +89,7 @@ class EpubWebView extends HookConsumerWidget {
         onRequestNext: onRequestNext,
         onNavigationCommandFinished: onNavigationCommandFinished,
         onTextSelectionChanged: onTextSelectionChanged,
+        onSelectionContextMenu: onSelectionContextMenu,
         onToggleControls: onToggleControls,
       );
     }
@@ -339,6 +342,33 @@ class EpubWebView extends HookConsumerWidget {
                   startOffset: startOffset.toInt(),
                   endOffset: endOffset.toInt(),
                   cfi: cfi is String && cfi.isNotEmpty ? cfi : null,
+                ),
+              );
+            }
+          } else if (message['type'] == 'selectionContextMenu') {
+            final text = message['text'];
+            final startOffset = message['startOffset'];
+            final endOffset = message['endOffset'];
+            final cfi = message['cfi'];
+            final x = message['x'];
+            final y = message['y'];
+            if (messageHref is String &&
+                text is String &&
+                startOffset is num &&
+                endOffset is num &&
+                x is num &&
+                y is num) {
+              onSelectionContextMenu(
+                ReaderSelectionContextMenu(
+                  selection: ReaderTextSelection(
+                    href: messageHref,
+                    text: text,
+                    startOffset: startOffset.toInt(),
+                    endOffset: endOffset.toInt(),
+                    cfi: cfi is String && cfi.isNotEmpty ? cfi : null,
+                  ),
+                  x: x.toDouble(),
+                  y: y.toDouble(),
                 ),
               );
             }
@@ -656,25 +686,40 @@ a { color: ${_cssColor(colorScheme.primary)}; }
       }
       window.__tomoReadReportProgress?.();
       if (!window.__tomoReadSelectionListener) {
-        const reportSelection = () => {
+        const readSelection = () => {
           const selection = window.getSelection();
-          if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+          if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
           const range = selection.getRangeAt(0);
-          if (!document.body.contains(range.commonAncestorContainer)) return;
+          if (!document.body.contains(range.commonAncestorContainer)) return null;
           const text = selection.toString().replace(/\\s+/g, ' ').trim();
-          if (!text) return;
+          if (!text) return null;
           const before = range.cloneRange();
           before.selectNodeContents(document.body);
           before.setEnd(range.startContainer, range.startOffset);
-          window.chrome?.webview?.postMessage({
-            type: 'textSelection',
+          return {
             href: window.location.pathname.replace(/^\\//, ''),
             text,
             startOffset: before.toString().length,
             endOffset: before.toString().length + range.toString().length,
-          });
+          };
+        };
+        const reportSelection = () => {
+          const selection = readSelection();
+          if (selection) window.chrome?.webview?.postMessage({ type: 'textSelection', ...selection });
         };
         document.addEventListener('selectionchange', reportSelection);
+        document.addEventListener('pointerup', reportSelection);
+        document.addEventListener('contextmenu', (event) => {
+          const selection = readSelection();
+          if (!selection) return;
+          event.preventDefault();
+          window.chrome?.webview?.postMessage({
+            type: 'selectionContextMenu',
+            ...selection,
+            x: event.clientX,
+            y: event.clientY,
+          });
+        });
         window.__tomoReadSelectionListener = true;
       }
       if (!window.__tomoReadControlsListener) {

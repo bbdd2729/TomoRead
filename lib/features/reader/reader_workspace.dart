@@ -25,6 +25,8 @@ import 'reader_search_dialog.dart';
 
 enum _MobileReaderToolbarAction { search, settings, focus }
 
+enum _SelectionContextAction { yellow, green, blue, pink, note }
+
 void _noopReaderAction() {}
 
 class _ReaderPreviousIntent extends Intent {
@@ -293,14 +295,12 @@ class ReaderWorkspace extends HookConsumerWidget {
       ref.invalidate(bookReadingOverrideProvider(bookId));
     }
 
-    Future<void> createAnnotation() async {
-      final selection = selectedText.value;
-      if (selection == null || selection.href != chapter.value?.href) return;
-      final draft = await showDialog<_AnnotationDraft>(
-        context: context,
-        builder: (context) => _AnnotationDialog(selection: selection),
-      );
-      if (draft == null || !context.mounted) return;
+    Future<void> saveAnnotation(
+      ReaderTextSelection selection,
+      AnnotationColor color, {
+      String? note,
+    }) async {
+      final normalizedNote = note?.trim();
       await ref
           .read(annotationRepositoryProvider)
           .add(
@@ -308,11 +308,78 @@ class ReaderWorkspace extends HookConsumerWidget {
             href: selection.href,
             locator: selection.locator,
             selectedText: selection.text,
-            color: draft.color,
-            note: draft.note,
+            color: color,
+            note: normalizedNote?.isEmpty ?? true ? null : normalizedNote,
           );
-      selectedText.value = null;
+      if (selectedText.value?.locator == selection.locator) {
+        selectedText.value = null;
+      }
       ref.invalidate(annotationsForBookProvider(bookId));
+    }
+
+    Future<void> createAnnotation([ReaderTextSelection? source]) async {
+      final selection = source ?? selectedText.value;
+      if (selection == null) return;
+      final draft = await showDialog<_AnnotationDraft>(
+        context: context,
+        builder: (context) => _AnnotationDialog(selection: selection),
+      );
+      if (draft == null || !context.mounted) return;
+      await saveAnnotation(selection, draft.color, note: draft.note);
+    }
+
+    Future<void> openSelectionContextMenu(
+      ReaderSelectionContextMenu menu,
+    ) async {
+      selectedText.value = menu.selection;
+      final box = context.findRenderObject() as RenderBox?;
+      final size = box?.size ?? MediaQuery.sizeOf(context);
+      final x = menu.x.clamp(8, size.width - 8).toDouble();
+      final y = menu.y.clamp(8, size.height - 8).toDouble();
+      final action = await showMenu<_SelectionContextAction>(
+        context: context,
+        position: RelativeRect.fromLTRB(x, y, size.width - x, size.height - y),
+        items: const [
+          PopupMenuItem(
+            value: _SelectionContextAction.yellow,
+            child: _SelectionContextMenuItem(color: AnnotationColor.yellow),
+          ),
+          PopupMenuItem(
+            value: _SelectionContextAction.green,
+            child: _SelectionContextMenuItem(color: AnnotationColor.green),
+          ),
+          PopupMenuItem(
+            value: _SelectionContextAction.blue,
+            child: _SelectionContextMenuItem(color: AnnotationColor.blue),
+          ),
+          PopupMenuItem(
+            value: _SelectionContextAction.pink,
+            child: _SelectionContextMenuItem(color: AnnotationColor.pink),
+          ),
+          PopupMenuDivider(),
+          PopupMenuItem(
+            value: _SelectionContextAction.note,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.sticky_note_2_outlined),
+              title: Text('添加笔记'),
+            ),
+          ),
+        ],
+      );
+      if (action == null || !context.mounted) return;
+      switch (action) {
+        case _SelectionContextAction.yellow:
+          await saveAnnotation(menu.selection, AnnotationColor.yellow);
+        case _SelectionContextAction.green:
+          await saveAnnotation(menu.selection, AnnotationColor.green);
+        case _SelectionContextAction.blue:
+          await saveAnnotation(menu.selection, AnnotationColor.blue);
+        case _SelectionContextAction.pink:
+          await saveAnnotation(menu.selection, AnnotationColor.pink);
+        case _SelectionContextAction.note:
+          await createAnnotation(menu.selection);
+      }
     }
 
     Future<void> openSearch() async {
@@ -677,9 +744,10 @@ class ReaderWorkspace extends HookConsumerWidget {
                                 }
                               },
                               onTextSelectionChanged: (selection) {
-                                if (selection.href == chapter.value?.href) {
-                                  selectedText.value = selection;
-                                }
+                                selectedText.value = selection;
+                              },
+                              onSelectionContextMenu: (menu) {
+                                unawaited(openSelectionContextMenu(menu));
                               },
                               onToggleControls: toggleControls,
                             ),
@@ -787,8 +855,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                   sidePanelVisible: sidePanelVisible.value,
                   mobileReaderControls: isMobile,
                   bookmarked: isBookmarked,
-                  canCreateAnnotation:
-                      selectedText.value?.href == chapter.value?.href,
+                  canCreateAnnotation: selectedText.value != null,
                   onExitReader: onExitReader,
                   onToggleToc: isMobile
                       ? () => unawaited(openMobileToc())
@@ -1422,6 +1489,7 @@ class _ReaderArticle extends StatelessWidget {
     required this.onRequestNext,
     required this.onNavigationCommandFinished,
     required this.onTextSelectionChanged,
+    required this.onSelectionContextMenu,
     required this.onToggleControls,
   });
 
@@ -1447,6 +1515,7 @@ class _ReaderArticle extends StatelessWidget {
   final VoidCallback onRequestNext;
   final ValueChanged<int> onNavigationCommandFinished;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
+  final ValueChanged<ReaderSelectionContextMenu> onSelectionContextMenu;
   final VoidCallback onToggleControls;
 
   @override
@@ -1485,6 +1554,7 @@ class _ReaderArticle extends StatelessWidget {
         onRequestNext: onRequestNext,
         onNavigationCommandFinished: onNavigationCommandFinished,
         onTextSelectionChanged: onTextSelectionChanged,
+        onSelectionContextMenu: onSelectionContextMenu,
         onToggleControls: onToggleControls,
       );
     }
@@ -1839,6 +1909,28 @@ class _BookmarkLabelDialog extends HookWidget {
       ],
     );
   }
+}
+
+class _SelectionContextMenuItem extends StatelessWidget {
+  const _SelectionContextMenuItem({required this.color});
+
+  final AnnotationColor color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(Icons.circle, color: _swatch(color), size: 18),
+      const SizedBox(width: 12),
+      Text('${color.label}高亮'),
+    ],
+  );
+
+  Color _swatch(AnnotationColor value) => switch (value) {
+    AnnotationColor.yellow => Colors.amber,
+    AnnotationColor.green => Colors.green,
+    AnnotationColor.blue => Colors.lightBlue,
+    AnnotationColor.pink => Colors.pink,
+  };
 }
 
 class _AnnotationDraft {

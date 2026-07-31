@@ -15,3 +15,15 @@ class ReaderTextSelection {
 
   String get locator => cfi == null ? '$startOffset:$endOffset' : 'cfi:$cfi';
 }
+
+class ReaderSelectionContextMenu {
+  const ReaderSelectionContextMenu({
+    required this.selection,
+    required this.x,
+    required this.y,
+  });
+
+  final ReaderTextSelection selection;
+  final double x;
+  final double y;
+}

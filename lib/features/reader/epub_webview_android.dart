@@ -34,6 +34,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     required this.onRequestNext,
     required this.onNavigationCommandFinished,
     required this.onTextSelectionChanged,
+    required this.onSelectionContextMenu,
     required this.onToggleControls,
   });
 
@@ -54,6 +55,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final VoidCallback onRequestNext;
   final ValueChanged<int> onNavigationCommandFinished;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
+  final ValueChanged<ReaderSelectionContextMenu> onSelectionContextMenu;
   final VoidCallback onToggleControls;
 
   @override
@@ -277,6 +279,37 @@ class AndroidEpubWebView extends HookConsumerWidget {
             startOffset: startOffset.toInt(),
             endOffset: endOffset.toInt(),
             cfi: cfi is String && cfi.isNotEmpty ? cfi : null,
+          ),
+        );
+      }
+      return;
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'selectionContextMenu') {
+      final messageHref = runtimeMessage['href'];
+      final text = runtimeMessage['text'];
+      final startOffset = runtimeMessage['startOffset'];
+      final endOffset = runtimeMessage['endOffset'];
+      final cfi = runtimeMessage['cfi'];
+      final x = runtimeMessage['x'];
+      final y = runtimeMessage['y'];
+      if (messageHref is String &&
+          text is String &&
+          startOffset is num &&
+          endOffset is num &&
+          x is num &&
+          y is num) {
+        onSelectionContextMenu(
+          ReaderSelectionContextMenu(
+            selection: ReaderTextSelection(
+              href: messageHref,
+              text: text,
+              startOffset: startOffset.toInt(),
+              endOffset: endOffset.toInt(),
+              cfi: cfi is String && cfi.isNotEmpty ? cfi : null,
+            ),
+            x: x.toDouble(),
+            y: y.toDouble(),
           ),
         );
       }

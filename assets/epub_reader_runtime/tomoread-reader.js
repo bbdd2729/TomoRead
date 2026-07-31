@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '15'
+const runtimeVersion = '17'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -224,6 +224,25 @@ const applySearchHighlights = doc => {
   style.textContent = '::highlight(tomoread-search) { background: #ffb74d99; }'
 }
 
+const readSelection = (doc, index) => {
+  const selection = doc.getSelection()
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null
+  const range = selection.getRangeAt(0)
+  if (!doc.body.contains(range.commonAncestorContainer)) return null
+  const text = selection.toString().replace(/\s+/g, ' ').trim()
+  if (!text) return null
+  const before = range.cloneRange()
+  before.selectNodeContents(doc.body)
+  before.setEnd(range.startContainer, range.startOffset)
+  return {
+    href: getSections()[index]?.href,
+    text,
+    startOffset: before.toString().length,
+    endOffset: before.toString().length + range.toString().length,
+    cfi: cfiFor(range),
+  }
+}
+
 const applySelectionListener = (doc, index) => {
   if (doc.__tomoReadSelectionBridge) return
   doc.__tomoReadSelectionBridge = true
@@ -233,23 +252,8 @@ const applySelectionListener = (doc, index) => {
     pending = true
     window.setTimeout(() => {
       pending = false
-      const selection = doc.getSelection()
-      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
-      const range = selection.getRangeAt(0)
-      if (!doc.body.contains(range.commonAncestorContainer)) return
-      const text = selection.toString().replace(/\s+/g, ' ').trim()
-      if (!text) return
-      const before = range.cloneRange()
-      before.selectNodeContents(doc.body)
-      before.setEnd(range.startContainer, range.startOffset)
-      postMessage({
-        type: 'textSelection',
-        href: getSections()[index]?.href,
-        text,
-        startOffset: before.toString().length,
-        endOffset: before.toString().length + range.toString().length,
-        cfi: cfiFor(range),
-      })
+      const selection = readSelection(doc, index)
+      if (selection) postMessage({ type: 'textSelection', ...selection })
     }, 80)
   }
   doc.addEventListener('selectionchange', reportSelection)
@@ -398,6 +402,17 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     const command = executeCommand({ type: direction })
     void command.finally(() => { wheelNavigationPending = false })
   }, { passive: false })
+  doc.addEventListener('contextmenu', event => {
+    const selection = readSelection(doc, index)
+    if (!selection) return
+    event.preventDefault()
+    postMessage({
+      type: 'selectionContextMenu',
+      ...selection,
+      x: event.clientX,
+      y: event.clientY,
+    })
+  })
 }
 
 const createPaginator = () => {
