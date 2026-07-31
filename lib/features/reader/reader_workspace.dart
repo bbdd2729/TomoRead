@@ -166,7 +166,10 @@ class ReaderWorkspace extends HookConsumerWidget {
       pageIndex.value = 0;
       pageCount.value = 1;
       return null;
-    }, [activeChapterIndex, isPaginated]);
+      // The paginated runtime reports the new chapter and its page position in
+      // the same event. Resetting here on every chapter change races that report
+      // and leaves the footer permanently at its initial 1/1 state.
+    }, [bookId, isPaginated]);
 
     void scheduleProgressWrite({
       required int index,

@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '14'
+const runtimeVersion = '15'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -277,6 +277,22 @@ const emitRelocation = detail => {
   })
 }
 
+const emitPagePosition = detail => {
+  const section = getSections()[detail.index]
+  if (!section) return
+  currentSectionIndex = detail.index
+  postMessage({
+    type: 'runtimeRelocate',
+    href: section.href,
+    chapterIndex: detail.index,
+    ratio: Number.isFinite(detail.fraction) ? detail.fraction : 0,
+    anchor: null,
+    cfi: null,
+    pageIndex: Math.max(0, detail.pageIndex ?? 0),
+    pageCount: Math.max(1, detail.pageCount ?? 1),
+  })
+}
+
 const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   applyAnnotations(doc, index)
   applySearchHighlights(doc)
@@ -351,6 +367,7 @@ const createPaginator = () => {
   paginator = document.createElement('foliate-paginator')
   stage.replaceChildren(paginator)
   paginator.addEventListener('relocate', ({ detail }) => emitRelocation(detail))
+  paginator.addEventListener('pagechange', ({ detail }) => emitPagePosition(detail))
   paginator.addEventListener('load', attachDocumentInteractions)
   paginator.addEventListener('error', error => {
     postMessage({ type: 'runtimeError', message: String(error.message ?? error) })

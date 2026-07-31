@@ -2491,6 +2491,27 @@ export class Paginator extends HTMLElement {
             // a newly visible view stops being aria-hidden.
             this.#syncA11y()
         }
+        const primaryView = this.#primaryView
+        let pageDetail
+        // Page position is useful even when an EPUB document has no
+        // selectable visible Range (for example during a section hand-off).
+        // Publish it separately so reader chrome never waits on annotations.
+        if (!this.scrolled && this.#renderedPages > 0 && primaryView) {
+            const page = this.#renderedPage
+            const pagesBeforePrimary = this.#getPagesBeforeView(this.#primaryIndex)
+            const textPages = primaryView.contentPages
+            const localPage = Math.max(0, page - pagesBeforePrimary)
+            const pageCount = Math.max(1, Math.ceil(textPages / this.columnCount))
+            pageDetail = {
+                index: this.#primaryIndex,
+                fraction: textPages > 0
+                    ? Math.max(0, Math.min(1, (localPage * this.columnCount) / textPages))
+                    : 0,
+                pageIndex: Math.min(pageCount - 1, localPage),
+                pageCount,
+            }
+            this.dispatchEvent(new CustomEvent('pagechange', { detail: pageDetail }))
+        }
         const { range, index: visibleIndex } = this.#getVisibleRange() || {}
         if (!range) return
         this.#lastVisibleRange = range
@@ -2500,7 +2521,6 @@ export class Paginator extends HTMLElement {
         else this.#justAnchored = true
 
         const index = visibleIndex ?? this.#primaryIndex
-        const primaryView = this.#primaryView
         const detail = { reason, range, index }
         if (this.scrolled) {
             const primaryOffset = this.#getViewOffset(index)
@@ -2522,8 +2542,8 @@ export class Paginator extends HTMLElement {
             // can describe the entire currently-rendered strip when adjacent
             // sections are preloaded, so expose the exact primary-section
             // spread position for host reader chrome instead.
-            detail.pageIndex = Math.max(0, localPage)
-            detail.pageCount = Math.max(1, Math.ceil(textPages / this.columnCount))
+            detail.pageIndex = pageDetail?.pageIndex ?? Math.max(0, localPage)
+            detail.pageCount = pageDetail?.pageCount ?? Math.max(1, Math.ceil(textPages / this.columnCount))
             if (reason === 'container-scroll' && localPage === 0) return
         }
         // Update per-column backgrounds for the current scroll position
