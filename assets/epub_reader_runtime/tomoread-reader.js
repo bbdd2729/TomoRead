@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '10'
+const runtimeVersion = '11'
 const stage = document.getElementById('reader-stage')
 
 let session

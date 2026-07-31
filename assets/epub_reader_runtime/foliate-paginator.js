@@ -1349,6 +1349,14 @@ export class Paginator extends HTMLElement {
                 return
             }
             const selRange = sel.getRangeAt(0)
+            // Adjacent EPUB sections live in separate iframe documents. A
+            // cached visible range can belong to a preloaded neighbour while
+            // the user's selection belongs to the active section; Range
+            // comparison across documents throws in Chromium.
+            if (selRange.startContainer.ownerDocument !== range.startContainer.ownerDocument) {
+                debugSelectionPaging('skip', { reason: 'different-document' })
+                return
+            }
             const backward = selectionIsBackward(sel)
             const direction = backward ? 'backward' : 'forward'
             const textLength = getSelectionTextLength(sel)
