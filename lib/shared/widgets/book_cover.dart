@@ -12,14 +12,26 @@ class BookCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coverPath = book.coverPath;
-    if (coverPath != null && File(coverPath).existsSync()) {
-      return Image.file(
-        File(coverPath),
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _fallback(context),
-      );
-    }
-    return _fallback(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (coverPath == null) return _fallback(context);
+
+        final logicalHeight = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : 240.0;
+        final cacheHeight =
+            (logicalHeight * MediaQuery.devicePixelRatioOf(context))
+                .round()
+                .clamp(256, 1200);
+        return Image.file(
+          File(coverPath),
+          cacheHeight: cacheHeight,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => _fallback(context),
+        );
+      },
+    );
   }
 
   Widget _fallback(BuildContext context) => DecoratedBox(

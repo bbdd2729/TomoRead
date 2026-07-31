@@ -216,142 +216,164 @@ class LibraryHomePage extends HookConsumerWidget {
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 600;
             final horizontalPadding = compact ? 16.0 : 32.0;
-            return ListView(
+            Widget buildBookCard(int index) => _BookCard(
+              book: visibleBooks[index],
+              onTap: () => selectionMode.value
+                  ? toggleSelection(visibleBooks[index].id)
+                  : onOpenBookDetails(visibleBooks[index]),
+              onLongPress: () {
+                selectionMode.value = true;
+                toggleSelection(visibleBooks[index].id);
+              },
+              isSelected: selectedBookIds.value.contains(
+                visibleBooks[index].id,
+              ),
+              selectionMode: selectionMode.value,
+              isRemoving: removingBookId.value == visibleBooks[index].id,
+              onDelete: () => removeBook(visibleBooks[index]),
+              onToggleFavorite: () => toggleFavorite(visibleBooks[index]),
+            );
+
+            Widget buildBookListItem(int index) => _BookListItem(
+              book: visibleBooks[index],
+              onTap: () => selectionMode.value
+                  ? toggleSelection(visibleBooks[index].id)
+                  : onOpenBookDetails(visibleBooks[index]),
+              onLongPress: () {
+                selectionMode.value = true;
+                toggleSelection(visibleBooks[index].id);
+              },
+              isSelected: selectedBookIds.value.contains(
+                visibleBooks[index].id,
+              ),
+              selectionMode: selectionMode.value,
+              isRemoving: removingBookId.value == visibleBooks[index].id,
+              onDelete: () => removeBook(visibleBooks[index]),
+              onToggleFavorite: () => toggleFavorite(visibleBooks[index]),
+            );
+
+            final headerChildren = <Widget>[
+              PageHeader(
+                title: '书库',
+                subtitle: '管理并继续阅读你的 EPUB 与 PDF 书籍。',
+                actionLabel: isImporting.value ? '正在导入' : '导入书籍',
+                actionIcon: Icons.add,
+                onAction: isImporting.value ? null : importBooks,
+              ),
+              const SizedBox(height: 20),
+              if (items.isEmpty)
+                _EmptyLibrary(onImport: isImporting.value ? null : importBooks)
+              else ...[
+                _LibraryControls(
+                  formatFilter: formatFilter.value,
+                  sort: sort.value,
+                  viewMode: viewMode.value,
+                  onQueryChanged: (value) => searchQuery.value = value,
+                  onFormatChanged: (value) => formatFilter.value = value,
+                  onSortChanged: (value) => sort.value = value,
+                  onViewModeChanged: (value) => viewMode.value = value,
+                  categories: _categoriesFor(items),
+                  tags: _tagsFor(items),
+                  category: categoryFilter.value,
+                  tag: tagFilter.value,
+                  favoritesOnly: favoritesOnly.value,
+                  onCategoryChanged: (value) => categoryFilter.value = value,
+                  onTagChanged: (value) => tagFilter.value = value,
+                  onFavoritesChanged: (value) => favoritesOnly.value = value,
+                ),
+                const SizedBox(height: 20),
+                if (selectionMode.value)
+                  _SelectionToolbar(
+                    selectedCount: selectedBookIds.value.length,
+                    isWorking: isBatchOperating.value,
+                    allSelectedAreFavorite: items
+                        .where(
+                          (book) => selectedBookIds.value.contains(book.id),
+                        )
+                        .every((book) => book.isFavorite),
+                    onCancel: cancelSelection,
+                    onToggleFavorite: () => updateSelectedFavorite(items),
+                    onChangeCategory: () => updateSelectedCategory(items),
+                    onDelete: () => removeSelectedBooks(items),
+                  ),
+                if (selectionMode.value) const SizedBox(height: 16),
+                if (visibleBooks.isEmpty)
+                  const _NoMatchingBooks()
+                else ...[
+                  _ContinueReadingCard(
+                    book: visibleBooks.first,
+                    onOpenReader: () => onOpenReader(visibleBooks.first),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Text(
+                        '全部书籍',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${visibleBooks.length} 本',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ],
+            ];
+
+            final headerSliver = SliverPadding(
               padding: EdgeInsets.fromLTRB(
                 horizontalPadding,
                 compact ? 20 : 28,
                 horizontalPadding,
-                40,
+                visibleBooks.isEmpty ? 40 : 0,
               ),
-              children: [
-                PageHeader(
-                  title: '书库',
-                  subtitle: '管理并继续阅读你的 EPUB 与 PDF 书籍。',
-                  actionLabel: isImporting.value ? '正在导入' : '导入书籍',
-                  actionIcon: Icons.add,
-                  onAction: isImporting.value ? null : importBooks,
-                ),
-                const SizedBox(height: 20),
-                if (items.isEmpty)
-                  _EmptyLibrary(
-                    onImport: isImporting.value ? null : importBooks,
+              sliver: SliverList(
+                delegate: SliverChildListDelegate(headerChildren),
+              ),
+            );
+
+            if (visibleBooks.isEmpty) {
+              return CustomScrollView(slivers: [headerSliver]);
+            }
+
+            final booksSliver = viewMode.value == _LibraryViewMode.grid
+                ? SliverGrid(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => buildBookCard(index),
+                      childCount: visibleBooks.length,
+                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 176,
+                          mainAxisExtent: 286,
+                          mainAxisSpacing: 20,
+                          crossAxisSpacing: 20,
+                        ),
                   )
-                else ...[
-                  _LibraryControls(
-                    formatFilter: formatFilter.value,
-                    sort: sort.value,
-                    viewMode: viewMode.value,
-                    onQueryChanged: (value) => searchQuery.value = value,
-                    onFormatChanged: (value) => formatFilter.value = value,
-                    onSortChanged: (value) => sort.value = value,
-                    onViewModeChanged: (value) => viewMode.value = value,
-                    categories: _categoriesFor(items),
-                    tags: _tagsFor(items),
-                    category: categoryFilter.value,
-                    tag: tagFilter.value,
-                    favoritesOnly: favoritesOnly.value,
-                    onCategoryChanged: (value) => categoryFilter.value = value,
-                    onTagChanged: (value) => tagFilter.value = value,
-                    onFavoritesChanged: (value) => favoritesOnly.value = value,
+                : SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => index.isOdd
+                          ? const SizedBox(height: 8)
+                          : buildBookListItem(index ~/ 2),
+                      childCount: visibleBooks.length * 2 - 1,
+                    ),
+                  );
+
+            return CustomScrollView(
+              slivers: [
+                headerSliver,
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    0,
+                    horizontalPadding,
+                    40,
                   ),
-                  const SizedBox(height: 20),
-                  if (selectionMode.value)
-                    _SelectionToolbar(
-                      selectedCount: selectedBookIds.value.length,
-                      isWorking: isBatchOperating.value,
-                      allSelectedAreFavorite: items
-                          .where(
-                            (book) => selectedBookIds.value.contains(book.id),
-                          )
-                          .every((book) => book.isFavorite),
-                      onCancel: cancelSelection,
-                      onToggleFavorite: () => updateSelectedFavorite(items),
-                      onChangeCategory: () => updateSelectedCategory(items),
-                      onDelete: () => removeSelectedBooks(items),
-                    ),
-                  if (selectionMode.value) const SizedBox(height: 16),
-                  if (visibleBooks.isEmpty)
-                    const _NoMatchingBooks()
-                  else ...[
-                    _ContinueReadingCard(
-                      book: visibleBooks.first,
-                      onOpenReader: () => onOpenReader(visibleBooks.first),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Text(
-                          '全部书籍',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${visibleBooks.length} 本',
-                          style: Theme.of(context).textTheme.labelLarge,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (viewMode.value == _LibraryViewMode.grid)
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate:
-                            const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 176,
-                              mainAxisExtent: 286,
-                              mainAxisSpacing: 20,
-                              crossAxisSpacing: 20,
-                            ),
-                        itemCount: visibleBooks.length,
-                        itemBuilder: (context, index) => _BookCard(
-                          book: visibleBooks[index],
-                          onTap: () => selectionMode.value
-                              ? toggleSelection(visibleBooks[index].id)
-                              : onOpenBookDetails(visibleBooks[index]),
-                          onLongPress: () {
-                            selectionMode.value = true;
-                            toggleSelection(visibleBooks[index].id);
-                          },
-                          isSelected: selectedBookIds.value.contains(
-                            visibleBooks[index].id,
-                          ),
-                          selectionMode: selectionMode.value,
-                          isRemoving:
-                              removingBookId.value == visibleBooks[index].id,
-                          onDelete: () => removeBook(visibleBooks[index]),
-                          onToggleFavorite: () =>
-                              toggleFavorite(visibleBooks[index]),
-                        ),
-                      )
-                    else
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: visibleBooks.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) => _BookListItem(
-                          book: visibleBooks[index],
-                          onTap: () => selectionMode.value
-                              ? toggleSelection(visibleBooks[index].id)
-                              : onOpenBookDetails(visibleBooks[index]),
-                          onLongPress: () {
-                            selectionMode.value = true;
-                            toggleSelection(visibleBooks[index].id);
-                          },
-                          isSelected: selectedBookIds.value.contains(
-                            visibleBooks[index].id,
-                          ),
-                          selectionMode: selectionMode.value,
-                          isRemoving:
-                              removingBookId.value == visibleBooks[index].id,
-                          onDelete: () => removeBook(visibleBooks[index]),
-                          onToggleFavorite: () =>
-                              toggleFavorite(visibleBooks[index]),
-                        ),
-                      ),
-                  ],
-                ],
+                  sliver: booksSliver,
+                ),
               ],
             );
           },
