@@ -79,6 +79,7 @@ class EpubWebView extends HookConsumerWidget {
         onPaginationChanged: onPaginationChanged,
         onRequestPrevious: onRequestPrevious,
         onRequestNext: onRequestNext,
+        onTextSelectionChanged: onTextSelectionChanged,
         onToggleControls: onToggleControls,
       );
     }
@@ -368,24 +369,15 @@ class EpubWebView extends HookConsumerWidget {
       ],
     );
 
-    useEffect(
-      () {
-        if (!initialized.value) return null;
-        if (useFoliateRuntime) {
-          unawaited(navigateFoliateRuntime());
-        } else {
-          unawaited(restoreScrollPosition());
-        }
-        return null;
-      },
-      [
-        initialized.value,
-        href,
-        initialAnchor,
-        restoreRevision,
-        useFoliateRuntime,
-      ],
-    );
+    useEffect(() {
+      if (!initialized.value) return null;
+      if (useFoliateRuntime) {
+        unawaited(navigateFoliateRuntime());
+      } else {
+        unawaited(restoreScrollPosition());
+      }
+      return null;
+    }, [initialized.value, href, restoreRevision, useFoliateRuntime]);
 
     useEffect(() {
       final page = requestedPage;

@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '7'
+const runtimeVersion = '10'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -213,8 +213,10 @@ const applySearchHighlights = doc => {
 }
 
 const applySelectionListener = (doc, index) => {
+  if (doc.__tomoReadSelectionBridge) return
+  doc.__tomoReadSelectionBridge = true
   let pending = false
-  doc.addEventListener('selectionchange', () => {
+  const reportSelection = () => {
     if (pending) return
     pending = true
     window.setTimeout(() => {
@@ -237,7 +239,14 @@ const applySelectionListener = (doc, index) => {
         cfi: cfiFor(range),
       })
     }, 80)
-  })
+  }
+  doc.addEventListener('selectionchange', reportSelection)
+  // Some embedded WebView implementations do not consistently forward
+  // selectionchange from sandboxed EPUB iframes. These end-of-selection
+  // signals provide the same payload after mouse, touch, or keyboard input.
+  doc.addEventListener('pointerup', reportSelection)
+  doc.addEventListener('touchend', reportSelection, { passive: true })
+  doc.addEventListener('keyup', reportSelection)
 }
 
 const emitRelocation = detail => {
@@ -319,6 +328,10 @@ const goToHref = async (href, ratio = 0, anchor) => {
   if (!paginator) return
   const index = findSection(href)
   if (index < 0) return
+  // A relocate event is intentionally suppressed for some first-page layouts.
+  // Keep the target index at the command boundary so page commands never fall
+  // back to the first spine item in that case.
+  currentSectionIndex = index
   const fragment = anchor || href.split('#')[1]
   await paginator.goTo({ index, anchor: anchorFor(fragment, ratio) })
 }

@@ -16,6 +16,9 @@
       const reportRuntimeError = event => {
         const message = event.reason?.message || event.error?.message || event.message
         if (!message) return
+        if (/^ResizeObserver loop (limit exceeded|completed with undelivered notifications)\.?$/.test(message)) {
+          return
+        }
         window.TomoRead?.postMessage(JSON.stringify({ type: 'runtimeError', message }))
         window.chrome?.webview?.postMessage({ type: 'runtimeError', message })
       }

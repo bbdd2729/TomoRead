@@ -11,6 +11,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../app/providers.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/font_choice.dart';
+import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_settings.dart';
 
 class AndroidEpubWebView extends HookConsumerWidget {
@@ -29,6 +30,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     required this.onPaginationChanged,
     required this.onRequestPrevious,
     required this.onRequestNext,
+    required this.onTextSelectionChanged,
     required this.onToggleControls,
   });
 
@@ -46,6 +48,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final void Function(int pageIndex, int pageCount) onPaginationChanged;
   final VoidCallback onRequestPrevious;
   final VoidCallback onRequestNext;
+  final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
   final VoidCallback onToggleControls;
 
   @override
@@ -147,30 +150,27 @@ class AndroidEpubWebView extends HookConsumerWidget {
       ],
     );
 
-    useEffect(
-      () {
-        Future<void> applyStyleAndPosition() async {
-          try {
-            if (settings.layoutMode == ReaderLayoutMode.paginated) {
-              if (runtimeScript != null) {
-                await controller.runJavaScript(runtimeScript);
-              }
-            } else {
-              await controller.runJavaScript(style);
-              await controller.runJavaScript(
-                _restoreScript(initialScrollRatio, initialAnchor),
-              );
+    useEffect(() {
+      Future<void> applyStyleAndPosition() async {
+        try {
+          if (settings.layoutMode == ReaderLayoutMode.paginated) {
+            if (runtimeScript != null) {
+              await controller.runJavaScript(runtimeScript);
             }
-          } catch (_) {
-            // The Android WebView may still be loading the next chapter.
+          } else {
+            await controller.runJavaScript(style);
+            await controller.runJavaScript(
+              _restoreScript(initialScrollRatio, initialAnchor),
+            );
           }
+        } catch (_) {
+          // The Android WebView may still be loading the next chapter.
         }
+      }
 
-        unawaited(applyStyleAndPosition());
-        return null;
-      },
-      [controller, href, style, runtimeScript, initialAnchor, restoreRevision],
-    );
+      unawaited(applyStyleAndPosition());
+      return null;
+    }, [controller, href, style, restoreRevision, settings.layoutMode]);
 
     useEffect(() {
       final page = requestedPage;
@@ -234,6 +234,29 @@ class AndroidEpubWebView extends HookConsumerWidget {
       error.value = StateError(
         runtimeMessage['message'] ?? 'Unknown runtime error',
       );
+      return;
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'textSelection') {
+      final messageHref = runtimeMessage['href'];
+      final text = runtimeMessage['text'];
+      final startOffset = runtimeMessage['startOffset'];
+      final endOffset = runtimeMessage['endOffset'];
+      final cfi = runtimeMessage['cfi'];
+      if (messageHref is String &&
+          text is String &&
+          startOffset is num &&
+          endOffset is num) {
+        onTextSelectionChanged(
+          ReaderTextSelection(
+            href: messageHref,
+            text: text,
+            startOffset: startOffset.toInt(),
+            endOffset: endOffset.toInt(),
+            cfi: cfi is String && cfi.isNotEmpty ? cfi : null,
+          ),
+        );
+      }
       return;
     }
     if (runtimeMessage is Map<String, dynamic> &&
