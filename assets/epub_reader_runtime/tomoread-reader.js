@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '13'
+const runtimeVersion = '14'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -286,6 +286,9 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   if (doc.__tomoReadInteractionBridge) return
   doc.__tomoReadInteractionBridge = true
   let tapNavigationPending = false
+  let wheelDelta = 0
+  let wheelResetTimer
+  let wheelNavigationPending = false
   doc.addEventListener('click', event => {
     const link = event.target.closest?.('a[href]')
     if (link) {
@@ -318,6 +321,29 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     window.setTimeout(() => { tapNavigationPending = false }, 80)
     void executeCommand({ type: direction })
   })
+  doc.addEventListener('wheel', event => {
+    if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+    event.preventDefault()
+    if (wheelNavigationPending) return
+
+    // Browsers report wheels in pixels, lines, or pages. Normalize enough to
+    // make a physical wheel notch and a trackpad gesture feel consistent.
+    const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+      ? 16
+      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+        ? doc.defaultView.innerHeight
+        : 1
+    wheelDelta += event.deltaY * unit
+    window.clearTimeout(wheelResetTimer)
+    wheelResetTimer = window.setTimeout(() => { wheelDelta = 0 }, 160)
+    if (Math.abs(wheelDelta) < 48) return
+
+    const direction = wheelDelta > 0 ? 'nextPage' : 'previousPage'
+    wheelDelta = 0
+    wheelNavigationPending = true
+    const command = executeCommand({ type: direction })
+    void command.finally(() => { wheelNavigationPending = false })
+  }, { passive: false })
 }
 
 const createPaginator = () => {
