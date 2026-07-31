@@ -110,6 +110,7 @@ class EpubWebView extends HookConsumerWidget {
       focusedAnnotationId,
     );
     final runtimeSearchScript = _runtimeSearchScript(searchQuery);
+    final runtimeSettingsScript = _runtimeSettingsScript(context, settings);
     final useFoliateRuntime = settings.layoutMode == ReaderLayoutMode.paginated;
     final resourceDirectory = readerSession.value?.directoryPath;
     final runtimeEntryPoint = readerSession.value?.virtualEntryPointUrl(
@@ -177,9 +178,7 @@ class EpubWebView extends HookConsumerWidget {
 
     Future<void> updateFoliateRuntimeSettings() async {
       try {
-        await controller.executeScript(
-          _runtimeSettingsScript(context, settings),
-        );
+        await controller.executeScript(runtimeSettingsScript);
       } catch (_) {
         // The runtime is reconfigured after its module becomes available.
       }

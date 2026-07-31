@@ -67,6 +67,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     final epubManifest = ref.watch(readerManifestProvider(bookId));
     final error = useState<Object?>(null);
     final style = _styleScript(context, settings, direction);
+    final runtimeSettingsScript = _runtimeSettingsScript(context, settings);
     final runtimeScript = epubManifest.value == null
         ? null
         : _runtimeOpenScript(
@@ -178,11 +179,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
 
     useEffect(() {
       if (settings.layoutMode != ReaderLayoutMode.paginated) return null;
-      unawaited(
-        controller.runJavaScript(_runtimeSettingsScript(context, settings)),
-      );
+      unawaited(controller.runJavaScript(runtimeSettingsScript));
       return null;
-    }, [controller, settings, settings.layoutMode]);
+    }, [controller, runtimeSettingsScript, settings.layoutMode]);
 
     useEffect(() {
       final command = navigationCommand;
