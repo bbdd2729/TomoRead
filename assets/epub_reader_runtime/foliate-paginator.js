@@ -2518,6 +2518,12 @@ export class Paginator extends HTMLElement {
             const localColumn = localPage * this.columnCount
             detail.fraction = textPages > 0 ? Math.max(0, Math.min(1, localColumn / textPages)) : 0
             detail.size = textPages > 0 ? this.columnCount / textPages : 1
+            // `page` and `pages` below are public convenience getters. They
+            // can describe the entire currently-rendered strip when adjacent
+            // sections are preloaded, so expose the exact primary-section
+            // spread position for host reader chrome instead.
+            detail.pageIndex = Math.max(0, localPage)
+            detail.pageCount = Math.max(1, Math.ceil(textPages / this.columnCount))
             if (reason === 'container-scroll' && localPage === 0) return
         }
         // Update per-column backgrounds for the current scroll position

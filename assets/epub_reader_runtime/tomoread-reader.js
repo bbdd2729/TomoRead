@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '12'
+const runtimeVersion = '13'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -259,6 +259,12 @@ const emitRelocation = detail => {
   const section = getSections()[detail.index]
   if (!section || !paginator) return
   currentSectionIndex = detail.index
+  const fallbackPageCount = Math.max(1, paginator.pages || 1)
+  const pageCount = Math.max(1, detail.pageCount ?? fallbackPageCount)
+  const pageIndex = Math.max(0, Math.min(
+    pageCount - 1,
+    detail.pageIndex ?? paginator.page ?? 0,
+  ))
   postMessage({
     type: 'runtimeRelocate',
     href: section.href,
@@ -266,8 +272,8 @@ const emitRelocation = detail => {
     ratio: Number.isFinite(detail.fraction) ? detail.fraction : 0,
     anchor: nearestAnchor(detail.range),
     cfi: cfiFor(detail.range),
-    pageIndex: Math.max(0, paginator.page || 0),
-    pageCount: Math.max(1, paginator.pages || 1),
+    pageIndex,
+    pageCount,
   })
 }
 
@@ -275,6 +281,11 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   applyAnnotations(doc, index)
   applySearchHighlights(doc)
   applySelectionListener(doc, index)
+  // A section can emit more than one `load` event while Foliate rebuilds its
+  // views. Registering click handlers each time sends duplicate page commands.
+  if (doc.__tomoReadInteractionBridge) return
+  doc.__tomoReadInteractionBridge = true
+  let tapNavigationPending = false
   doc.addEventListener('click', event => {
     const link = event.target.closest?.('a[href]')
     if (link) {
@@ -291,13 +302,21 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     }
     if (doc.getSelection()?.toString().trim()) return
     const ratio = event.clientX / doc.defaultView.innerWidth
-    if (ratio <= 0.25) {
-      void executeCommand({ type: 'previousPage' })
-    } else if (ratio >= 0.75) {
-      void executeCommand({ type: 'nextPage' })
-    } else {
+    const direction = ratio <= 0.25
+      ? 'previousPage'
+      : ratio >= 0.75
+        ? 'nextPage'
+        : null
+    if (!direction) {
       postMessage({ type: 'readerControls' })
+      return
     }
+    // Ignore a duplicate DOM click from a view rebuild, but do not keep the
+    // reader locked while the paginator is animating or loading a chapter.
+    if (tapNavigationPending) return
+    tapNavigationPending = true
+    window.setTimeout(() => { tapNavigationPending = false }, 80)
+    void executeCommand({ type: direction })
   })
 }
 
