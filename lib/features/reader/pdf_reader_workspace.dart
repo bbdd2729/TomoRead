@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:pdfrx/pdfrx.dart';
 
 import '../../app/providers.dart';
 import '../../domain/models/bookmark.dart';
+import '../../domain/models/reading_activity.dart';
 import 'pdf_bookmarks_dialog.dart';
 import 'pdf_navigation_dialog.dart';
 import 'pdf_search_dialog.dart';
@@ -35,12 +38,33 @@ class PdfReaderWorkspace extends HookConsumerWidget {
     final outlineLoading = useState(false);
     final outlineError = useState<Object?>(null);
     final controlsVisible = useState(false);
+    final activityTracker = ref.read(readingActivityTrackerProvider);
+    final lifecycleState = useAppLifecycleState();
 
     void toggleControls() => controlsVisible.value = !controlsVisible.value;
 
     useEffect(() {
       return () => textSearcher.value?.dispose();
     }, [viewerController]);
+
+    useEffect(() {
+      final book = bookState.value;
+      if (book == null) return null;
+      activityTracker.open(
+        ReaderIdentity(bookId: bookId, format: ReaderFormat.pdf),
+        ReaderPosition(progress: book.progress, locator: book.locator),
+      );
+      return () {
+        unawaited(activityTracker.close());
+      };
+    }, [bookId, bookState.value?.id]);
+
+    useEffect(() {
+      activityTracker.setForeground(
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed,
+      );
+      return null;
+    }, [lifecycleState]);
 
     Future<void> loadOutline(PdfDocument document) async {
       outlineLoading.value = true;
@@ -87,6 +111,13 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                 locator: 'page:$pageNumber',
               );
           ref.invalidate(libraryBooksProvider);
+          activityTracker.recordInteraction(
+            ReaderPosition(
+              progress: pageCount == 0 ? 0 : pageNumber / pageCount,
+              locator: 'page:$pageNumber',
+            ),
+            ReadingInteraction.pageTurn,
+          );
         }
 
         Future<void> toggleBookmark() async {

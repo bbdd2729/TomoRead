@@ -47,6 +47,9 @@ dependencies:
   archive: ^4.0.7
   crypto: ^3.0.7
   file_picker: ^11.0.2
+  flutter_markdown_plus: ^1.0.12
+  flutter_secure_storage: ^10.3.1
+  http: ^1.6.0
   xml: ^6.6.1
   webview_flutter_windows: ^1.1.1
   webview_flutter: ^4.13.0

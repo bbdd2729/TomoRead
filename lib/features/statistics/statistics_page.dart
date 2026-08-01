@@ -1,110 +1,202 @@
+import 'dart:io';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../domain/models/library_book.dart';
+import '../../domain/models/stats_models.dart';
 import '../../shared/widgets/page_header.dart';
+import 'statistics_providers.dart';
 
-class StatisticsPage extends StatelessWidget {
-  const StatisticsPage({super.key});
+class StatisticsPage extends ConsumerWidget {
+  const StatisticsPage({super.key, this.onOpenReader});
+
+  final ValueChanged<LibraryBook>? onOpenReader;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selection = ref.watch(statisticsSelectionProvider);
+    final viewModel = ref.watch(statsViewModelProvider);
+    return viewModel.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => _StatisticsError(
+        error: error,
+        onRetry: () => ref.invalidate(statsReportProvider),
+      ),
+      data: (model) => LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 720;
+          final padding = compact ? 20.0 : 32.0;
+          return CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(padding, 28, padding, 18),
+                sliver: SliverToBoxAdapter(
+                  child: PageHeader(
+                    title: '阅读统计',
+                    subtitle: '只统计前台、可见并发生阅读交互的有效时间',
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: padding),
+                sliver: SliverToBoxAdapter(
+                  child: _PeriodToolbar(
+                    selection: selection,
+                    report: model.report,
+                    onDimensionChanged: (value) => ref
+                        .read(statisticsSelectionProvider.notifier)
+                        .setDimension(value),
+                    onPrevious: () =>
+                        ref.read(statisticsSelectionProvider.notifier).move(-1),
+                    onNext: model.report.canGoNext
+                        ? () => ref
+                              .read(statisticsSelectionProvider.notifier)
+                              .move(1)
+                        : null,
+                  ),
+                ),
+              ),
+              if (model.report.summary.activeMillis == 0)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _EmptyStatistics(
+                    periodLabel: model.report.period.label,
+                  ),
+                )
+              else ...[
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(padding, 22, padding, 0),
+                  sliver: SliverGrid(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) =>
+                          _MetricTile(metric: model.metrics[index]),
+                      childCount: model.metrics.length,
+                    ),
+                    gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: compact ? 220 : 260,
+                      mainAxisExtent: 122,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(padding, 34, padding, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: _ActivitySection(
+                      timeline: model.report.timeline,
+                      periodLabel: model.report.period.label,
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(padding, 34, padding, 48),
+                  sliver: SliverToBoxAdapter(
+                    child: _TopBooksSection(
+                      entries: model.report.topBooks,
+                      onOpenReader: onOpenReader,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PeriodToolbar extends StatelessWidget {
+  const _PeriodToolbar({
+    required this.selection,
+    required this.report,
+    required this.onDimensionChanged,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final StatsSelection selection;
+  final StatsReport report;
+  final ValueChanged<StatsDimension> onDimensionChanged;
+  final VoidCallback onPrevious;
+  final VoidCallback? onNext;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final compact = constraints.maxWidth < 600;
-      final horizontalPadding = compact ? 20.0 : 32.0;
-      return ListView(
-        padding: EdgeInsets.fromLTRB(
-          horizontalPadding,
-          28,
-          horizontalPadding,
-          48,
+      final compact = constraints.maxWidth < 650;
+      final dimensions = SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SegmentedButton<StatsDimension>(
+          segments: const [
+            ButtonSegment(value: StatsDimension.day, label: Text('日')),
+            ButtonSegment(value: StatsDimension.week, label: Text('周')),
+            ButtonSegment(value: StatsDimension.month, label: Text('月')),
+            ButtonSegment(value: StatsDimension.year, label: Text('年')),
+            ButtonSegment(value: StatsDimension.lifetime, label: Text('全部')),
+          ],
+          selected: {selection.dimension},
+          onSelectionChanged: (value) => onDimensionChanged(value.first),
         ),
+      );
+      final navigation = Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const PageHeader(title: '阅读统计', subtitle: '追踪你的阅读习惯和进度。'),
-          const SizedBox(height: 28),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _statistics.length,
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 244,
-              mainAxisExtent: 148,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-            ),
-            itemBuilder: (context, index) => _StatisticCard(
-              label: _statistics[index].label,
-              value: _statistics[index].value,
-              icon: _statistics[index].icon,
-            ),
+          IconButton(
+            tooltip: '上一个周期',
+            onPressed: onPrevious,
+            icon: const Icon(Icons.chevron_left),
           ),
-          const SizedBox(height: 36),
-          Text('近 30 天趋势', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text('每天的阅读时长变化。', style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 12),
-          Card(
-            child: SizedBox(
-              height: compact ? 208 : 252,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 24, 16),
-                child: CustomPaint(
-                  painter: _TrendPainter(
-                    lineColor: Theme.of(context).colorScheme.primary,
-                    gridColor: Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-              ),
-            ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 150),
+            child: Text(report.period.label, textAlign: TextAlign.center),
           ),
-          const SizedBox(height: 36),
-          Text('阅读活动', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text('过去 12 周的阅读记录。', style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: List.generate(
-                  84,
-                  (index) => _ActivityCell(active: index % 11 == 0),
-                ),
-              ),
-            ),
+          IconButton(
+            tooltip: '下一个周期',
+            onPressed: onNext,
+            icon: const Icon(Icons.chevron_right),
           ),
+        ],
+      );
+      if (compact) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [dimensions, const SizedBox(height: 12), navigation],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(child: dimensions),
+          navigation,
         ],
       );
     },
   );
 }
 
-const _statistics = [
-  (label: '已读书籍', value: '6', icon: Icons.menu_book_outlined),
-  (label: '阅读时长', value: '12h 40m', icon: Icons.timer_outlined),
-  (label: '当前连续', value: '4 天', icon: Icons.local_fire_department_outlined),
-  (label: '日均时长', value: '24m', icon: Icons.trending_up),
-];
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({required this.metric});
 
-class _StatisticCard extends StatelessWidget {
-  const _StatisticCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
+  final StatsMetricViewModel metric;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Card(
+    final icon = switch (metric.icon) {
+      'calendar' => Icons.calendar_today_outlined,
+      'streak' => Icons.local_fire_department_outlined,
+      'books' => Icons.menu_book_outlined,
+      _ => Icons.schedule,
+    };
+    return Material(
+      color: colors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
             DecoratedBox(
               decoration: BoxDecoration(
@@ -112,15 +204,30 @@ class _StatisticCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: SizedBox(
-                width: 36,
-                height: 36,
-                child: Icon(icon, color: colors.onSecondaryContainer, size: 20),
+                width: 42,
+                height: 42,
+                child: Icon(icon, size: 21),
               ),
             ),
-            const Spacer(),
-            Text(value, style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 2),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    metric.value,
+                    style: Theme.of(context).textTheme.titleLarge,
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    metric.label,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -128,81 +235,230 @@ class _StatisticCard extends StatelessWidget {
   }
 }
 
-class _ActivityCell extends StatelessWidget {
-  const _ActivityCell({required this.active});
+class _ActivitySection extends StatelessWidget {
+  const _ActivitySection({required this.timeline, required this.periodLabel});
 
-  final bool active;
+  final List<ActivityPoint> timeline;
+  final String periodLabel;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: active ? '完成阅读' : '暂无记录',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: active
-              ? colors.primaryContainer
-              : colors.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(3),
+    final totalMinutes = timeline.fold<int>(
+      0,
+      (sum, point) => sum + (point.activeMillis / 60000).round(),
+    );
+    final chartWidth = math.max(640.0, timeline.length * 36.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('阅读趋势', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 4),
+        Text(
+          '$periodLabel 共阅读 $totalMinutes 分钟',
+          style: Theme.of(context).textTheme.bodySmall,
         ),
-        child: const SizedBox(width: 16, height: 16),
+        const SizedBox(height: 14),
+        Material(
+          color: Theme.of(context).colorScheme.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            height: 260,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+              child: Semantics(
+                label: '$periodLabel 阅读趋势，总计 $totalMinutes 分钟',
+                child: SizedBox(
+                  width: chartWidth,
+                  child: CustomPaint(
+                    painter: _ActivityChartPainter(
+                      points: timeline,
+                      barColor: Theme.of(context).colorScheme.primary,
+                      gridColor: Theme.of(context).colorScheme.outlineVariant,
+                      labelStyle:
+                          Theme.of(context).textTheme.labelSmall ??
+                          const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActivityChartPainter extends CustomPainter {
+  const _ActivityChartPainter({
+    required this.points,
+    required this.barColor,
+    required this.gridColor,
+    required this.labelStyle,
+  });
+
+  final List<ActivityPoint> points;
+  final Color barColor;
+  final Color gridColor;
+  final TextStyle labelStyle;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+    const labelHeight = 28.0;
+    final chartHeight = size.height - labelHeight;
+    final maxValue = points
+        .map((point) => point.activeMillis)
+        .fold<int>(1, math.max);
+    final slot = size.width / points.length;
+    final barWidth = math.min(18.0, slot * .58);
+    final grid = Paint()
+      ..color = gridColor
+      ..strokeWidth = 1;
+    for (var index = 0; index <= 4; index++) {
+      final y = chartHeight * index / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
+    final paint = Paint()..color = barColor;
+    for (var index = 0; index < points.length; index++) {
+      final point = points[index];
+      final height = chartHeight * point.activeMillis / maxValue;
+      final left = slot * index + (slot - barWidth) / 2;
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, chartHeight - height, barWidth, height),
+        const Radius.circular(3),
+      );
+      canvas.drawRRect(rect, paint);
+      final label = TextPainter(
+        text: TextSpan(text: point.label, style: labelStyle),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: slot);
+      label.paint(
+        canvas,
+        Offset(slot * index + (slot - label.width) / 2, chartHeight + 8),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ActivityChartPainter oldDelegate) =>
+      oldDelegate.points != points ||
+      oldDelegate.barColor != barColor ||
+      oldDelegate.gridColor != gridColor;
+}
+
+class _TopBooksSection extends StatelessWidget {
+  const _TopBooksSection({required this.entries, required this.onOpenReader});
+
+  final List<TopBookEntry> entries;
+  final ValueChanged<LibraryBook>? onOpenReader;
+
+  @override
+  Widget build(BuildContext context) {
+    if (entries.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('阅读最多', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 12),
+        ...entries.asMap().entries.map((entry) {
+          final item = entry.value;
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(vertical: 6),
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 24,
+                  child: Text('${entry.key + 1}', textAlign: TextAlign.center),
+                ),
+                const SizedBox(width: 10),
+                _BookCover(book: item.book),
+              ],
+            ),
+            title: Text(item.book.title),
+            subtitle: Text(
+              item.book.author.isEmpty ? '未知作者' : item.book.author,
+            ),
+            trailing: Text(formatReadingDuration(item.activeMillis)),
+            onTap: onOpenReader == null ? null : () => onOpenReader!(item.book),
+          );
+        }),
+      ],
+    );
+  }
+}
+
+class _BookCover extends StatelessWidget {
+  const _BookCover({required this.book});
+
+  final LibraryBook book;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = book.coverPath;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: SizedBox(
+        width: 38,
+        height: 52,
+        child: path != null && File(path).existsSync()
+            ? Image.file(File(path), fit: BoxFit.cover, cacheWidth: 96)
+            : ColoredBox(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                child: const Icon(Icons.menu_book_outlined, size: 20),
+              ),
       ),
     );
   }
 }
 
-class _TrendPainter extends CustomPainter {
-  const _TrendPainter({required this.lineColor, required this.gridColor});
+class _EmptyStatistics extends StatelessWidget {
+  const _EmptyStatistics({required this.periodLabel});
 
-  final Color lineColor;
-  final Color gridColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = gridColor
-      ..strokeWidth = 1;
-    for (var row = 1; row < 4; row++) {
-      final y = size.height * row / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-    final path = Path()
-      ..moveTo(0, size.height * .82)
-      ..cubicTo(
-        size.width * .16,
-        size.height * .82,
-        size.width * .18,
-        size.height * .46,
-        size.width * .32,
-        size.height * .58,
-      )
-      ..cubicTo(
-        size.width * .5,
-        size.height * .75,
-        size.width * .6,
-        size.height * .2,
-        size.width * .74,
-        size.height * .38,
-      )
-      ..cubicTo(
-        size.width * .85,
-        size.height * .5,
-        size.width * .88,
-        size.height * .14,
-        size.width,
-        size.height * .24,
-      );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = lineColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round,
-    );
-  }
+  final String periodLabel;
 
   @override
-  bool shouldRepaint(_TrendPainter oldDelegate) =>
-      oldDelegate.lineColor != lineColor || oldDelegate.gridColor != gridColor;
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.insights_outlined, size: 48),
+          const SizedBox(height: 14),
+          Text(
+            '$periodLabel 还没有阅读记录',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
+          const Text('打开一本书并开始阅读后，这里会记录有效阅读时间。', textAlign: TextAlign.center),
+        ],
+      ),
+    ),
+  );
+}
+
+class _StatisticsError extends StatelessWidget {
+  const _StatisticsError({required this.error, required this.onRetry});
+
+  final Object error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('无法加载阅读统计：$error'),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh),
+          label: const Text('重试'),
+        ),
+      ],
+    ),
+  );
 }

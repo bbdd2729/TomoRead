@@ -19,7 +19,11 @@ class ReadingAnnotation {
     required this.color,
     required this.createdAt,
     this.note,
-  });
+    DateTime? updatedAt,
+    this.chapterIndex,
+    this.chapterTitle,
+    this.tags = const [],
+  }) : updatedAt = updatedAt ?? createdAt;
 
   final String id;
   final String bookId;
@@ -29,4 +33,8 @@ class ReadingAnnotation {
   final String? note;
   final AnnotationColor color;
   final DateTime createdAt;
+  final DateTime updatedAt;
+  final int? chapterIndex;
+  final String? chapterTitle;
+  final List<String> tags;
 }

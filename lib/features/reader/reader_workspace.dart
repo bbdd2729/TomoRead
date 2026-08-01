@@ -8,6 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../app/appearance.dart';
 import '../../app/providers.dart';
 import '../../domain/models/bookmark.dart';
+import '../../domain/models/chat_models.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/epub_section_progress.dart';
@@ -15,6 +16,7 @@ import '../../domain/models/font_choice.dart';
 import '../../domain/models/library_book.dart';
 import '../../domain/models/reader_chapter.dart';
 import '../../domain/models/reader_text_selection.dart';
+import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../shared/widgets/resizable_pane.dart';
@@ -23,10 +25,21 @@ import 'epub_webview.dart';
 import 'reader_navigation_command.dart';
 import 'reader_runtime_controller.dart';
 import 'reader_search_dialog.dart';
+import '../chat/chat_controller.dart';
+import '../notes/notes_providers.dart';
 
 enum _MobileReaderToolbarAction { search, settings, focus }
 
-enum _SelectionContextAction { yellow, green, blue, pink, note }
+enum _SelectionContextAction {
+  yellow,
+  green,
+  blue,
+  pink,
+  note,
+  askAi,
+  explainAi,
+  summarizeAi,
+}
 
 void _noopReaderAction() {}
 
@@ -53,6 +66,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     required this.title,
     required this.readingSettings,
     this.onExitReader = _noopReaderAction,
+    this.onOpenChat = _noopReaderAction,
     this.initialControlsVisible = false,
   });
 
@@ -60,6 +74,7 @@ class ReaderWorkspace extends HookConsumerWidget {
   final String title;
   final ReadingSettings readingSettings;
   final VoidCallback onExitReader;
+  final VoidCallback onOpenChat;
   final bool initialControlsVisible;
 
   @override
@@ -68,6 +83,8 @@ class ReaderWorkspace extends HookConsumerWidget {
     final runtimeController = ref.read(
       readerRuntimeControllerProvider.notifier,
     );
+    final activityTracker = ref.read(readingActivityTrackerProvider);
+    final lifecycleState = useAppLifecycleState();
     final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
     final readerBook = ref.watch(readerBookProvider(bookId));
     final manifest = ref.watch(readerManifestProvider(bookId));
@@ -150,6 +167,23 @@ class ReaderWorkspace extends HookConsumerWidget {
       }
       return null;
     }, [bookId, readerBook.value?.chapterIndex, readerBook.value?.locator]);
+
+    useEffect(() {
+      final book = readerBook.value;
+      if (book == null) return null;
+      activityTracker.open(
+        ReaderIdentity(bookId: bookId, format: ReaderFormat.epub),
+        ReaderPosition(progress: book.progress, locator: book.locator),
+      );
+      return () => unawaited(activityTracker.close());
+    }, [bookId, readerBook.value?.id]);
+
+    useEffect(() {
+      activityTracker.setForeground(
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed,
+      );
+      return null;
+    }, [lifecycleState]);
 
     useEffect(
       () =>
@@ -260,7 +294,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     }) async {
       final normalizedNote = note?.trim();
       await ref
-          .read(annotationRepositoryProvider)
+          .read(annotationControllerProvider)
           .add(
             bookId: bookId,
             href: selection.href,
@@ -268,11 +302,32 @@ class ReaderWorkspace extends HookConsumerWidget {
             selectedText: selection.text,
             color: color,
             note: normalizedNote?.isEmpty ?? true ? null : normalizedNote,
+            chapterIndex: activeChapterIndex,
+            chapterTitle: chapterTitle,
           );
       if (selectedText.value?.locator == selection.locator) {
         selectedText.value = null;
       }
-      ref.invalidate(annotationsForBookProvider(bookId));
+    }
+
+    void openAiWithSelection(ReaderTextSelection selection, String prompt) {
+      ref
+          .read(pendingChatDraftProvider.notifier)
+          .set(
+            PendingChatDraft(
+              attachment: ChatContextAttachment(
+                bookId: bookId,
+                bookTitle: readerBook.value?.title ?? title,
+                href: selection.href,
+                locator: selection.locator,
+                chapterIndex: activeChapterIndex,
+                chapterTitle: chapterTitle,
+                quote: selection.text,
+              ),
+              prompt: prompt,
+            ),
+          );
+      onOpenChat();
     }
 
     Future<void> createAnnotation([ReaderTextSelection? source]) async {
@@ -323,6 +378,31 @@ class ReaderWorkspace extends HookConsumerWidget {
               title: Text('添加笔记'),
             ),
           ),
+          PopupMenuDivider(),
+          PopupMenuItem(
+            value: _SelectionContextAction.askAi,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.auto_awesome_outlined),
+              title: Text('询问 AI'),
+            ),
+          ),
+          PopupMenuItem(
+            value: _SelectionContextAction.explainAi,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.lightbulb_outline),
+              title: Text('解释这段'),
+            ),
+          ),
+          PopupMenuItem(
+            value: _SelectionContextAction.summarizeAi,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.summarize_outlined),
+              title: Text('总结这段'),
+            ),
+          ),
         ],
       );
       if (action == null || !context.mounted) return;
@@ -337,6 +417,12 @@ class ReaderWorkspace extends HookConsumerWidget {
           await saveAnnotation(menu.selection, AnnotationColor.pink);
         case _SelectionContextAction.note:
           await createAnnotation(menu.selection);
+        case _SelectionContextAction.askAi:
+          openAiWithSelection(menu.selection, '关于这段文字，我想问：');
+        case _SelectionContextAction.explainAi:
+          openAiWithSelection(menu.selection, '请解释这段文字的含义和关键概念。');
+        case _SelectionContextAction.summarizeAi:
+          openAiWithSelection(menu.selection, '请简洁总结这段文字的核心观点。');
       }
     }
 
@@ -411,9 +497,8 @@ class ReaderWorkspace extends HookConsumerWidget {
       );
       if (draft == null || !context.mounted) return;
       await ref
-          .read(annotationRepositoryProvider)
+          .read(annotationControllerProvider)
           .updateNote(annotation.id, draft.note);
-      ref.invalidate(annotationsForBookProvider(bookId));
     }
 
     void navigateToHref(String targetHref) {
@@ -617,9 +702,8 @@ class ReaderWorkspace extends HookConsumerWidget {
             onEditAnnotation: editAnnotation,
             onRemoveAnnotation: (annotation) async {
               await ref
-                  .read(annotationRepositoryProvider)
+                  .read(annotationControllerProvider)
                   .remove(annotation.id);
-              ref.invalidate(annotationsForBookProvider(bookId));
               if (focusedAnnotationId.value == annotation.id) {
                 focusedAnnotationId.value = null;
               }
@@ -684,6 +768,24 @@ class ReaderWorkspace extends HookConsumerWidget {
                                       anchor: anchor,
                                       cfi: cfi,
                                     );
+                                    activityTracker.recordInteraction(
+                                      ReaderPosition(
+                                        progress: sectionProgress
+                                            .overallProgress(
+                                              relocatedIndex,
+                                              clampedRatio,
+                                            ),
+                                        locator: EpubLocation(
+                                          chapterIndex: relocatedIndex,
+                                          scrollRatio: clampedRatio,
+                                          anchor: anchor,
+                                          cfi: cfi,
+                                        ).toLocator(),
+                                      ),
+                                      isPaginated
+                                          ? ReadingInteraction.pageTurn
+                                          : ReadingInteraction.scroll,
+                                    );
                                   },
                               onPaginationChanged: (index, count) {
                                 pageIndex.value = index;
@@ -698,6 +800,16 @@ class ReaderWorkspace extends HookConsumerWidget {
                               },
                               onTextSelectionChanged: (selection) {
                                 selectedText.value = selection;
+                                activityTracker.recordInteraction(
+                                  ReaderPosition(
+                                    progress: sectionProgress.overallProgress(
+                                      activeChapterIndex,
+                                      scrollRatio.value,
+                                    ),
+                                    locator: currentLocator,
+                                  ),
+                                  ReadingInteraction.selection,
+                                );
                               },
                               onSelectionContextMenu: (menu) {
                                 unawaited(openSelectionContextMenu(menu));
@@ -777,11 +889,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                               onEditAnnotation: editAnnotation,
                               onRemoveAnnotation: (annotation) async {
                                 await ref
-                                    .read(annotationRepositoryProvider)
+                                    .read(annotationControllerProvider)
                                     .remove(annotation.id);
-                                ref.invalidate(
-                                  annotationsForBookProvider(bookId),
-                                );
                                 if (focusedAnnotationId.value ==
                                     annotation.id) {
                                   focusedAnnotationId.value = null;

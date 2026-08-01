@@ -242,6 +242,7 @@ class AppShell extends HookConsumerWidget {
                 onReadingSettingsChanged: onReadingSettingsChanged,
                 onOpenBookDetails: openBookDetails,
                 onOpenReader: openReader,
+                onOpenChat: () => openDestination(AppDestination.chat),
               );
               final animatedContent = isReading
                   ? content
@@ -491,6 +492,7 @@ class _WorkspaceContent extends StatelessWidget {
     required this.onReadingSettingsChanged,
     required this.onOpenBookDetails,
     required this.onOpenReader,
+    required this.onOpenChat,
   });
 
   final AppDestination destination;
@@ -504,6 +506,7 @@ class _WorkspaceContent extends StatelessWidget {
   final ValueChanged<ReadingSettings> onReadingSettingsChanged;
   final ValueChanged<LibraryBook> onOpenBookDetails;
   final ValueChanged<LibraryBook> onOpenReader;
+  final VoidCallback onOpenChat;
 
   @override
   Widget build(BuildContext context) {
@@ -525,11 +528,12 @@ class _WorkspaceContent extends StatelessWidget {
                 title: readerTitle,
                 readingSettings: readingSettings,
                 onExitReader: onExitReader,
+                onOpenChat: onOpenChat,
               ),
-      AppDestination.chat => const ChatPage(),
-      AppDestination.notes => const NotesPage(),
+      AppDestination.chat => ChatPage(onOpenReader: onOpenReader),
+      AppDestination.notes => NotesPage(onOpenReader: onOpenReader),
       AppDestination.skills => const SkillsPage(),
-      AppDestination.statistics => const StatisticsPage(),
+      AppDestination.statistics => StatisticsPage(onOpenReader: onOpenReader),
       AppDestination.settings => SettingsPage(
         appearance: appearance,
         readingSettings: readingSettings,

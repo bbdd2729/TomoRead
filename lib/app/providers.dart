@@ -5,14 +5,21 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../data/database/app_database.dart';
 import '../data/repositories/bookmark_repository.dart';
 import '../data/repositories/annotation_repository.dart';
+import '../data/repositories/ai_provider_repository.dart';
 import '../data/repositories/book_repository.dart';
+import '../data/repositories/chat_repository.dart';
+import '../data/repositories/reading_session_repository.dart';
 import '../data/repositories/settings_repository.dart';
+import '../data/services/ai_gateway.dart';
+import '../data/services/ai_secret_store.dart';
 import '../data/services/book_import_service.dart';
 import '../data/services/book_storage_service.dart';
 import '../data/services/epub_content_service.dart';
 import '../data/services/epub_extraction_service.dart';
 import '../data/services/epub_reader_session_service.dart';
 import '../data/services/epub_section_progress_service.dart';
+import '../data/services/reading_activity_tracker.dart';
+import '../data/services/stats_report_service.dart';
 import '../domain/models/bookmark.dart';
 import '../domain/models/epub_manifest.dart';
 import '../domain/models/epub_section_progress.dart';
@@ -40,8 +47,64 @@ final annotationRepositoryProvider = Provider<AnnotationRepository>(
   (ref) => AnnotationRepository(ref.watch(appDatabaseProvider)),
 );
 
+final aiProviderRepositoryProvider = Provider<AiProviderRepository>(
+  (ref) => AiProviderRepository(ref.watch(appDatabaseProvider)),
+);
+
+final chatRepositoryProvider = Provider<ChatRepository>(
+  (ref) => ChatRepository(ref.watch(appDatabaseProvider)),
+);
+
+final readingSessionRepositoryProvider = Provider<ReadingSessionRepository>(
+  (ref) => ReadingSessionRepository(ref.watch(appDatabaseProvider)),
+);
+
+final aiSecretStoreProvider = Provider<AiSecretStore>((ref) => AiSecretStore());
+
+final aiGatewayProvider = Provider<AiGateway>(
+  (ref) => const OpenAiCompatibleGateway(),
+);
+
 final bookRepositoryProvider = Provider<BookRepository>(
   (ref) => BookRepository(ref.watch(appDatabaseProvider)),
+);
+
+final annotationRevisionProvider = NotifierProvider<RevisionNotifier, int>(
+  RevisionNotifier.new,
+);
+
+final statisticsRevisionProvider =
+    NotifierProvider<StatisticsRevisionNotifier, int>(
+      StatisticsRevisionNotifier.new,
+    );
+
+class RevisionNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state += 1;
+}
+
+class StatisticsRevisionNotifier extends RevisionNotifier {}
+
+final readingActivityTrackerProvider = Provider<ReadingActivityTracker>((ref) {
+  final tracker = ReadingActivityTracker(
+    repository: ref.watch(readingSessionRepositoryProvider),
+    onChanged: () {
+      if (ref.mounted) {
+        ref.read(statisticsRevisionProvider.notifier).bump();
+      }
+    },
+  );
+  ref.onDispose(() => unawaited(tracker.dispose()));
+  return tracker;
+});
+
+final statsReportServiceProvider = Provider<StatsReportService>(
+  (ref) => StatsReportService(
+    sessions: ref.watch(readingSessionRepositoryProvider),
+    books: ref.watch(bookRepositoryProvider),
+  ),
 );
 
 final bookImportServiceProvider = Provider<BookImportService>(
@@ -149,10 +212,10 @@ final bookmarksForBookProvider = FutureProvider.autoDispose
     );
 
 final annotationsForBookProvider = FutureProvider.autoDispose
-    .family<List<ReadingAnnotation>, String>(
-      (ref, bookId) =>
-          ref.watch(annotationRepositoryProvider).listForBook(bookId),
-    );
+    .family<List<ReadingAnnotation>, String>((ref, bookId) {
+      ref.watch(annotationRevisionProvider);
+      return ref.watch(annotationRepositoryProvider).listForBook(bookId);
+    });
 
 final readerBookProvider = FutureProvider.autoDispose
     .family<LibraryBook?, String>(
