@@ -60,13 +60,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final extractedDirectory = ref.watch(
-      epubExtractedDirectoryProvider(bookId),
-    );
     final readerSession = ref.watch(epubReaderSessionProvider(bookId));
     final epubManifest = ref.watch(readerManifestProvider(bookId));
     final error = useState<Object?>(null);
-    final style = _styleScript(context, settings, direction);
     final runtimeSettingsScript = _runtimeSettingsScript(context, settings);
     final runtimeScript = epubManifest.value == null
         ? null
@@ -81,8 +77,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
           );
     final runtimeScriptRef = useRef<String?>(runtimeScript);
     runtimeScriptRef.value = runtimeScript;
-    final navigationHandlerRef = useRef<ValueChanged<String>?>(null);
-    navigationHandlerRef.value = onNavigateToHref;
+    final runtimeLoaded = useRef(false);
     final messageHandlerRef = useRef<void Function(String)?>(null);
     messageHandlerRef.value = (rawMessage) =>
         _handleRuntimeMessage(rawMessage, error);
@@ -98,20 +93,6 @@ class AndroidEpubWebView extends HookConsumerWidget {
                 unawaited(webViewController.runJavaScript(script));
               }
             },
-            onNavigationRequest: (request) {
-              final uri = Uri.tryParse(request.url);
-              if (uri != null && uri.scheme == 'file') {
-                final nextHref = uri.pathSegments.isEmpty
-                    ? null
-                    : uri.pathSegments.last;
-                if (nextHref != null &&
-                    nextHref != _pathWithoutFragment(href)) {
-                  navigationHandlerRef.value?.call(nextHref);
-                  return NavigationDecision.prevent;
-                }
-              }
-              return NavigationDecision.navigate;
-            },
           ),
         )
         ..addJavaScriptChannel(
@@ -123,17 +104,19 @@ class AndroidEpubWebView extends HookConsumerWidget {
       return webViewController;
     });
 
+    useEffect(() {
+      runtimeLoaded.value = false;
+      return null;
+    }, [bookId]);
+
     useEffect(
       () {
-        final useRuntime = settings.layoutMode == ReaderLayoutMode.paginated;
-        if (useRuntime && runtimeScript == null) return null;
-        final directory = useRuntime
-            ? readerSession.value?.directoryPath
-            : extractedDirectory.value;
+        if (runtimeScript == null || runtimeLoaded.value) return null;
+        final directory = readerSession.value?.directoryPath;
         if (directory == null) return null;
-        final file = useRuntime
-            ? File(path.join(directory, '.tomoread-reader', 'index.html'))
-            : File(path.join(directory, _pathWithoutFragment(href)));
+        final file = File(
+          path.join(directory, '.tomoread-reader', 'index.html'),
+        );
         Future<void> loadChapter() async {
           if (!await file.exists()) {
             error.value = StateError('EPUB chapter is unavailable: $href');
@@ -146,70 +129,43 @@ class AndroidEpubWebView extends HookConsumerWidget {
           }
         }
 
+        runtimeLoaded.value = true;
         unawaited(loadChapter());
         return null;
       },
       [
         controller,
-        extractedDirectory.value,
         readerSession.value?.directoryPath,
         epubManifest.value,
-        href,
-        settings.layoutMode,
+        bookId,
       ],
     );
 
     useEffect(() {
-      Future<void> applyStyleAndPosition() async {
-        try {
-          if (settings.layoutMode != ReaderLayoutMode.paginated) {
-            await controller.runJavaScript(style);
-            await controller.runJavaScript(
-              _restoreScript(initialScrollRatio, initialAnchor),
-            );
-          }
-        } catch (_) {
-          // The Android WebView may still be loading the next chapter.
-        }
-      }
-
-      unawaited(applyStyleAndPosition());
-      return null;
-    }, [controller, href, style, restoreRevision, settings.layoutMode]);
-
-    useEffect(() {
-      if (settings.layoutMode != ReaderLayoutMode.paginated) return null;
       unawaited(controller.runJavaScript(runtimeSettingsScript));
       return null;
-    }, [controller, runtimeSettingsScript, settings.layoutMode]);
+    }, [controller, runtimeSettingsScript]);
 
     useEffect(() {
       final command = navigationCommand;
-      if (settings.layoutMode != ReaderLayoutMode.paginated ||
-          command == null) {
-        return null;
-      }
+      if (command == null) return null;
       unawaited(controller.runJavaScript(_runtimeCommandScript(command)));
       return null;
-    }, [controller, navigationCommand, settings.layoutMode]);
+    }, [controller, navigationCommand]);
 
-    if (extractedDirectory.hasError ||
-        readerSession.hasError ||
-        (settings.layoutMode == ReaderLayoutMode.paginated &&
-            epubManifest.hasError) ||
+    if (readerSession.hasError ||
+        epubManifest.hasError ||
         error.value != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            'Unable to start EPUB renderer: ${error.value ?? extractedDirectory.error ?? readerSession.error ?? epubManifest.error}',
+            'Unable to start EPUB renderer: ${error.value ?? readerSession.error ?? epubManifest.error}',
           ),
         ),
       );
     }
-    if (extractedDirectory.isLoading ||
-        (settings.layoutMode == ReaderLayoutMode.paginated &&
-            (readerSession.isLoading || epubManifest.isLoading))) {
+    if (readerSession.isLoading || epubManifest.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
     return WebViewWidget(controller: controller);
@@ -330,8 +286,6 @@ class AndroidEpubWebView extends HookConsumerWidget {
     }
   }
 
-  String _pathWithoutFragment(String value) => value.split('#').first;
-
   String _runtimeOpenScript(
     BuildContext context,
     ReadingSettings settings,
@@ -349,7 +303,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
       'cfi': cfi,
       'session': {'manifest': manifest.toJson()},
       'settings': {
-        'flow': 'paginated',
+        'flow': settings.layoutMode == ReaderLayoutMode.paginated
+            ? 'paginated'
+            : 'scrolled',
         'columnCount': settings.doubleColumn ? 2 : 1,
         'maxInlineSize': 760,
         'margin': settings.pageMargin,
@@ -401,7 +357,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
       if (runtime) void runtime.command(${jsonEncode({
       'type': 'setSettings',
       'payload': {
-        'settings': {'flow': 'paginated', 'columnCount': settings.doubleColumn ? 2 : 1, 'maxInlineSize': 760, 'margin': settings.pageMargin, 'fontFamily': settings.font.fontFamily, 'fontSize': settings.fontSize, 'lineHeight': settings.lineHeight, 'foreground': _cssColor(scheme.onSurface), 'background': _cssColor(scheme.surface), 'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr', 'pageTransition': settings.pageTransition.name},
+        'settings': {'flow': settings.layoutMode == ReaderLayoutMode.paginated ? 'paginated' : 'scrolled', 'columnCount': settings.doubleColumn ? 2 : 1, 'maxInlineSize': 760, 'margin': settings.pageMargin, 'fontFamily': settings.font.fontFamily, 'fontSize': settings.fontSize, 'lineHeight': settings.lineHeight, 'foreground': _cssColor(scheme.onSurface), 'background': _cssColor(scheme.surface), 'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr', 'pageTransition': settings.pageTransition.name},
       },
     })});
     })();''';
@@ -409,57 +365,4 @@ class AndroidEpubWebView extends HookConsumerWidget {
 
   String _cssColor(Color color) =>
       '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
-
-  String _styleScript(
-    BuildContext context,
-    ReadingSettings readingSettings,
-    ReadingDirection readingDirection,
-  ) {
-    final scheme = Theme.of(context).colorScheme;
-    final background =
-        '#${scheme.surface.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
-    final foreground =
-        '#${scheme.onSurface.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
-    final direction = readingDirection == ReadingDirection.rtl ? 'rtl' : 'ltr';
-    return '''(() => {
-      document.documentElement.style.background = '$background';
-      document.documentElement.style.color = '$foreground';
-      document.body.style.cssText += ';background:$background;color:$foreground;font-family:${readingSettings.font.fontFamily};font-size:${readingSettings.fontSize}px;line-height:${readingSettings.lineHeight};padding:${readingSettings.pageMargin}px;direction:$direction;box-sizing:border-box;';
-      if (!window.__tomoReadProgress) {
-        let pending = false;
-        window.addEventListener('scroll', () => {
-          if (pending) return;
-          pending = true;
-          setTimeout(() => {
-            pending = false;
-            const root = document.scrollingElement || document.documentElement;
-            const range = Math.max(0, root.scrollHeight - window.innerHeight);
-            TomoRead.postMessage('scroll|' + (range === 0 ? 0 : root.scrollTop / range));
-          }, 200);
-        }, {passive:true});
-        window.__tomoReadProgress = true;
-      }
-      if (!window.__tomoReadControlsListener) {
-        window.addEventListener('click', (event) => {
-          const target = event.target;
-          if (target?.closest?.('a, button, input, textarea, select')) return;
-          if (window.getSelection?.()?.toString().trim()) return;
-          const x = event.clientX / window.innerWidth;
-          const y = event.clientY / window.innerHeight;
-          if (x >= .25 && x <= .75 && y >= .25 && y <= .75) {
-            TomoRead.postMessage('tap');
-          }
-        });
-        window.__tomoReadControlsListener = true;
-      }
-    })();''';
-  }
-
-  String _restoreScript(double ratio, String? anchor) {
-    final clamped = ratio.clamp(0, 1);
-    final encodedAnchor = anchor == null
-        ? 'null'
-        : "'${anchor.replaceAll("'", "\\'")}'";
-    return '''(() => { const anchor = $encodedAnchor; const root = document.scrollingElement || document.documentElement; const target = anchor && document.getElementById(anchor); if (target) { target.scrollIntoView(); } else { root.scrollTop = Math.max(0, root.scrollHeight - window.innerHeight) * $clamped; } })();''';
-  }
 }

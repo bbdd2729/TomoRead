@@ -199,50 +199,16 @@ class ReaderWorkspace extends HookConsumerWidget {
       String? cfi,
     }) async {
       if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
-      if (isPaginated) {
-        final target = manifest.value?.spine[index];
-        if (target == null) return;
-        progressWriteTimer.value?.cancel();
-        navigationCommand.value = ReaderNavigationCommand.goToLocation(
-          id: ++navigationSequence.value,
-          href: target.href,
-          ratio: scrollPosition,
-          anchor: anchor,
-          cfi: cfi,
-        );
-        return;
-      }
-      final revision = runtimeController.beginNavigation();
+      final target = manifest.value?.spine[index];
+      if (target == null) return;
       progressWriteTimer.value?.cancel();
-      chapterIndex.value = index;
-      scrollRatio.value = scrollPosition.clamp(0, 1).toDouble();
-      activeAnchor.value = anchor;
-      activeCfi.value = cfi;
-      restoreRevision.value += 1;
-      try {
-        await ref
-            .read(bookRepositoryProvider)
-            .updateReadingPosition(
-              bookId: bookId,
-              chapterIndex: index,
-              progress: sectionProgress.overallProgress(
-                index,
-                scrollRatio.value,
-              ),
-              locator: EpubLocation(
-                chapterIndex: index,
-                scrollRatio: scrollRatio.value,
-                anchor: anchor,
-                cfi: cfi,
-              ).toLocator(),
-            );
-        if (runtimeController.isCurrent(revision)) {
-          ref.invalidate(libraryBooksProvider);
-          runtimeController.completeNavigation(revision);
-        }
-      } catch (error) {
-        runtimeController.reportFailure(revision, error);
-      }
+      navigationCommand.value = ReaderNavigationCommand.goToLocation(
+        id: ++navigationSequence.value,
+        href: target.href,
+        ratio: scrollPosition,
+        anchor: anchor,
+        cfi: cfi,
+      );
     }
 
     Future<void> toggleBookmark() async {
@@ -503,23 +469,19 @@ class ReaderWorkspace extends HookConsumerWidget {
           .toInt();
       final targetRatio = targetLocation.chapterRatio;
 
-      if (isPaginated) {
-        final targetItem = manifest.value?.spine[targetChapter];
-        if (targetItem == null) return;
-        // Keep the slider at the requested position until the runtime reports
-        // its measured page location after layout and animation complete.
-        chapterIndex.value = targetChapter;
-        scrollRatio.value = targetRatio;
-        activeAnchor.value = null;
-        activeCfi.value = null;
-        navigationCommand.value = ReaderNavigationCommand.goToLocation(
-          id: ++navigationSequence.value,
-          href: targetItem.href,
-          ratio: targetRatio,
-        );
-        return;
-      }
-      unawaited(selectChapter(targetChapter, scrollPosition: targetRatio));
+      final targetItem = manifest.value?.spine[targetChapter];
+      if (targetItem == null) return;
+      // Keep the slider at the requested position until the runtime reports
+      // its measured location after layout and scrolling complete.
+      chapterIndex.value = targetChapter;
+      scrollRatio.value = targetRatio;
+      activeAnchor.value = null;
+      activeCfi.value = null;
+      navigationCommand.value = ReaderNavigationCommand.goToLocation(
+        id: ++navigationSequence.value,
+        href: targetItem.href,
+        ratio: targetRatio,
+      );
     }
 
     void toggleToc() {

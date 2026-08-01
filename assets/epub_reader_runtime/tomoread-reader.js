@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '17'
+const runtimeVersion = '18'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -363,6 +363,10 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     }
     if (doc.getSelection()?.toString().trim()) return
     const ratio = event.clientX / doc.defaultView.innerWidth
+    if (paginator?.getAttribute('flow') === 'scrolled') {
+      if (ratio >= 0.25 && ratio <= 0.75) postMessage({ type: 'readerControls' })
+      return
+    }
     const direction = ratio <= 0.25
       ? 'previousPage'
       : ratio >= 0.75
@@ -382,6 +386,18 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   doc.addEventListener('wheel', event => {
     if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
     event.preventDefault()
+    if (paginator?.getAttribute('flow') === 'scrolled') {
+      const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? doc.defaultView.innerHeight
+          : 1
+      const delta = event.deltaY * unit
+      // Paginator uses the first value for horizontal writing and the second
+      // for vertical writing, while both move its active scroll axis.
+      paginator.scrollBy(delta, delta)
+      return
+    }
     if (wheelNavigationPending) return
 
     // Browsers report wheels in pixels, lines, or pages. Normalize enough to

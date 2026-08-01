@@ -111,8 +111,11 @@ class EpubWebView extends HookConsumerWidget {
     );
     final runtimeSearchScript = _runtimeSearchScript(searchQuery);
     final runtimeSettingsScript = _runtimeSettingsScript(context, settings);
-    final useFoliateRuntime = settings.layoutMode == ReaderLayoutMode.paginated;
     final resourceDirectory = readerSession.value?.directoryPath;
+    // Foliate owns both pagination and continuous scrolling. Keeping the two
+    // modes in the same runtime prevents the legacy one-chapter WebView from
+    // truncating a scrolling chapter to its first viewport.
+    final useFoliateRuntime = resourceDirectory != null;
     final runtimeEntryPoint = readerSession.value?.virtualEntryPointUrl(
       _hostName,
     );
@@ -937,7 +940,9 @@ a { color: ${_cssColor(colorScheme.primary)}; }
   ) {
     final scheme = Theme.of(context).colorScheme;
     return {
-      'flow': 'paginated',
+      'flow': settings.layoutMode == ReaderLayoutMode.paginated
+          ? 'paginated'
+          : 'scrolled',
       'columnCount': settings.doubleColumn ? 2 : 1,
       'maxInlineSize': 760,
       'margin': settings.pageMargin,
