@@ -10,8 +10,10 @@ import '../data/repositories/book_repository.dart';
 import '../data/repositories/chat_repository.dart';
 import '../data/repositories/reading_session_repository.dart';
 import '../data/repositories/settings_repository.dart';
+import '../data/repositories/skill_repository.dart';
 import '../data/services/ai_gateway.dart';
 import '../data/services/ai_secret_store.dart';
+import '../data/services/ai_tool_registry.dart';
 import '../data/services/book_import_service.dart';
 import '../data/services/book_storage_service.dart';
 import '../data/services/epub_content_service.dart';
@@ -27,6 +29,7 @@ import '../domain/models/library_book.dart';
 import '../domain/models/reader_chapter.dart';
 import '../domain/models/reading_settings.dart';
 import '../domain/models/reading_annotation.dart';
+import '../features/chat/ai_agent_runner.dart';
 import 'appearance.dart';
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -55,6 +58,10 @@ final chatRepositoryProvider = Provider<ChatRepository>(
   (ref) => ChatRepository(ref.watch(appDatabaseProvider)),
 );
 
+final skillRepositoryProvider = Provider<SkillRepository>(
+  (ref) => SkillRepository(ref.watch(appDatabaseProvider)),
+);
+
 final readingSessionRepositoryProvider = Provider<ReadingSessionRepository>(
   (ref) => ReadingSessionRepository(ref.watch(appDatabaseProvider)),
 );
@@ -63,6 +70,22 @@ final aiSecretStoreProvider = Provider<AiSecretStore>((ref) => AiSecretStore());
 
 final aiGatewayProvider = Provider<AiGateway>(
   (ref) => const OpenAiCompatibleGateway(),
+);
+
+final aiToolRegistryProvider = Provider<AiToolRegistry>(
+  (ref) => AiToolRegistry(
+    ref.watch(bookRepositoryProvider),
+    ref.watch(annotationRepositoryProvider),
+    ref.watch(skillRepositoryProvider),
+    ref.watch(epubContentServiceProvider),
+  ),
+);
+
+final aiAgentRunnerProvider = Provider<AiAgentRunner>(
+  (ref) => AiAgentRunner(
+    ref.watch(aiGatewayProvider),
+    ref.watch(aiToolRegistryProvider),
+  ),
 );
 
 final bookRepositoryProvider = Provider<BookRepository>(

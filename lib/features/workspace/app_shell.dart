@@ -532,7 +532,7 @@ class _WorkspaceContent extends StatelessWidget {
               ),
       AppDestination.chat => ChatPage(onOpenReader: onOpenReader),
       AppDestination.notes => NotesPage(onOpenReader: onOpenReader),
-      AppDestination.skills => const SkillsPage(),
+      AppDestination.skills => SkillsPage(onOpenChat: onOpenChat),
       AppDestination.statistics => StatisticsPage(onOpenReader: onOpenReader),
       AppDestination.settings => SettingsPage(
         appearance: appearance,

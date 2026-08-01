@@ -49,6 +49,11 @@ void main() {
     expect(threads.single.title, '新的标题');
     expect(messages.single.content, '回答内容 [1]');
     expect(messages.single.citations.single.quote, '引用内容');
+    expect(
+      messages.single.parts.whereType<ChatTextPart>().single.text,
+      '回答内容 [1]',
+    );
+    expect(messages.single.parts.whereType<ChatCitationPart>(), hasLength(1));
 
     await repository.deleteThread(thread.id);
     expect(await repository.listMessages(thread.id), isEmpty);

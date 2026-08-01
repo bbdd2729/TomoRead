@@ -27,6 +27,8 @@ class AiProviderRepository {
     required String secretKeyId,
     double temperature = 0.3,
     int maxOutputTokens = 2048,
+    bool toolsEnabled = false,
+    bool reasoningEnabled = true,
   }) async {
     final now = DateTime.now();
     final profile = AiProviderProfile(
@@ -38,6 +40,8 @@ class AiProviderRepository {
       temperature: temperature.clamp(0, 2).toDouble(),
       maxOutputTokens: maxOutputTokens.clamp(128, 32768),
       isActive: true,
+      toolsEnabled: toolsEnabled,
+      reasoningEnabled: reasoningEnabled,
       createdAt: now,
       updatedAt: now,
     );
@@ -54,6 +58,8 @@ class AiProviderRepository {
         'temperature': profile.temperature,
         'max_output_tokens': profile.maxOutputTokens,
         'is_active': 1,
+        'enable_tools': profile.toolsEnabled ? 1 : 0,
+        'enable_reasoning': profile.reasoningEnabled ? 1 : 0,
         'created_at': profile.createdAt.millisecondsSinceEpoch,
         'updated_at': profile.updatedAt.millisecondsSinceEpoch,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -70,6 +76,12 @@ class AiProviderRepository {
     temperature: (row['temperature']! as num).toDouble(),
     maxOutputTokens: row['max_output_tokens']! as int,
     isActive: (row['is_active']! as int) == 1,
+    toolsEnabled: (row['enable_tools'] as int? ?? 0) == 1,
+    reasoningEnabled: (row['enable_reasoning'] as int? ?? 1) == 1,
+    protocol: switch (row['protocol'] as String?) {
+      'openai_compatible' || null => AiProviderProtocol.openAiCompatible,
+      _ => AiProviderProtocol.openAiCompatible,
+    },
     createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at']! as int),
     updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at']! as int),
   );

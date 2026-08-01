@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -24,6 +25,23 @@ class ChatPage extends HookConsumerWidget {
         ref.watch(libraryBooksProvider).value ?? const <LibraryBook>[];
     final promptController = useTextEditingController();
     final scrollController = useScrollController();
+    final followsOutput = useState(true);
+
+    useEffect(() {
+      void trackScrollPosition() {
+        if (!scrollController.hasClients) return;
+        final distance =
+            scrollController.position.maxScrollExtent -
+            scrollController.position.pixels;
+        final shouldFollow = distance < 120;
+        if (followsOutput.value != shouldFollow) {
+          followsOutput.value = shouldFollow;
+        }
+      }
+
+      scrollController.addListener(trackScrollPosition);
+      return () => scrollController.removeListener(trackScrollPosition);
+    }, [scrollController]);
 
     useEffect(() {
       if (pending != null) {
@@ -47,9 +65,20 @@ class ChatPage extends HookConsumerWidget {
     }, [suggestedPrompt]);
 
     final messageCount = state.value?.messages.length ?? 0;
-    final streamingContentLength =
-        state.value?.messages.lastOrNull?.content.length ?? 0;
+    final streamingRevision = state.value?.messages.lastOrNull == null
+        ? 0
+        : state.value!.messages.last.content.length +
+              (state
+                      .value!
+                      .messages
+                      .last
+                      .parts
+                      .lastOrNull
+                      ?.updatedAt
+                      .microsecondsSinceEpoch ??
+                  0);
     useEffect(() {
+      if (!followsOutput.value) return null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (scrollController.hasClients) {
           scrollController.animateTo(
@@ -60,7 +89,7 @@ class ChatPage extends HookConsumerWidget {
         }
       });
       return null;
-    }, [messageCount, streamingContentLength]);
+    }, [messageCount, streamingRevision, followsOutput.value]);
 
     Future<void> openCitation(ChatCitation citation) async {
       final book = books
@@ -78,6 +107,9 @@ class ChatPage extends HookConsumerWidget {
       final cfi = citation.locator.startsWith('cfi:')
           ? citation.locator.substring(4)
           : null;
+      final sourceRatio = citation.locator.startsWith('ratio:')
+          ? double.tryParse(citation.locator.substring(6))
+          : null;
       await ref
           .read(bookRepositoryProvider)
           .updateReadingPosition(
@@ -88,7 +120,7 @@ class ChatPage extends HookConsumerWidget {
                 : index / (book.chapterCount - 1),
             locator: EpubLocation(
               chapterIndex: index,
-              scrollRatio: 0,
+              scrollRatio: sourceRatio?.clamp(0, 1) ?? 0,
               cfi: cfi,
             ).toLocator(),
           );
@@ -144,9 +176,24 @@ class ChatPage extends HookConsumerWidget {
               unawaited(ref.read(chatControllerProvider.notifier).send(value));
             },
             onStop: () => ref.read(chatControllerProvider.notifier).stop(),
+            onRetry: (message) =>
+                ref.read(chatControllerProvider.notifier).retry(message),
             onClearAttachment: () =>
                 ref.read(chatControllerProvider.notifier).clearAttachment(),
+            onClearSkill: () =>
+                ref.read(chatControllerProvider.notifier).clearSelectedSkill(),
             onOpenCitation: openCitation,
+            followsOutput: followsOutput.value,
+            onScrollToBottom: () {
+              followsOutput.value = true;
+              if (scrollController.hasClients) {
+                scrollController.animateTo(
+                  scrollController.position.maxScrollExtent,
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                );
+              }
+            },
           );
           if (compact) return conversation;
           return Row(
@@ -250,14 +297,33 @@ class _ChatThreadList extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        trailing: PopupMenuButton<String>(
-                          tooltip: '会话操作',
-                          onSelected: (value) => value == 'rename'
-                              ? onRename(thread)
-                              : onDelete(thread),
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(value: 'rename', child: Text('重命名')),
-                            PopupMenuItem(value: 'delete', child: Text('删除')),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (chat.runningThreadId == thread.id)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            PopupMenuButton<String>(
+                              tooltip: '会话操作',
+                              onSelected: (value) => value == 'rename'
+                                  ? onRename(thread)
+                                  : onDelete(thread),
+                              itemBuilder: (context) => const [
+                                PopupMenuItem(
+                                  value: 'rename',
+                                  child: Text('重命名'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text('删除'),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                         onTap: () => onSelected(thread),
@@ -279,8 +345,12 @@ class _ConversationPane extends StatelessWidget {
     required this.onConfigure,
     required this.onSend,
     required this.onStop,
+    required this.onRetry,
     required this.onClearAttachment,
+    required this.onClearSkill,
     required this.onOpenCitation,
+    required this.followsOutput,
+    required this.onScrollToBottom,
     this.onShowThreads,
   });
 
@@ -291,8 +361,12 @@ class _ConversationPane extends StatelessWidget {
   final VoidCallback onConfigure;
   final VoidCallback onSend;
   final VoidCallback onStop;
+  final ValueChanged<ChatMessage> onRetry;
   final VoidCallback onClearAttachment;
+  final VoidCallback onClearSkill;
   final ValueChanged<ChatCitation> onOpenCitation;
+  final bool followsOutput;
+  final VoidCallback onScrollToBottom;
 
   @override
   Widget build(BuildContext context) {
@@ -350,19 +424,37 @@ class _ConversationPane extends StatelessWidget {
             ],
           ),
         Expanded(
-          child: chat.isLoadingMessages
-              ? const Center(child: CircularProgressIndicator())
-              : chat.messages.isEmpty
-              ? const _EmptyConversation()
-              : ListView.builder(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-                  itemCount: chat.messages.length,
-                  itemBuilder: (context, index) => _MessageBubble(
-                    message: chat.messages[index],
-                    onOpenCitation: onOpenCitation,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: chat.isLoadingMessages
+                    ? const Center(child: CircularProgressIndicator())
+                    : chat.messages.isEmpty
+                    ? const _EmptyConversation()
+                    : ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 64),
+                        itemCount: chat.messages.length,
+                        itemBuilder: (context, index) => _MessageEntry(
+                          key: ValueKey(chat.messages[index].id),
+                          message: chat.messages[index],
+                          onOpenCitation: onOpenCitation,
+                          onRetry: onRetry,
+                        ),
+                      ),
+              ),
+              if (!followsOutput && chat.messages.isNotEmpty)
+                Positioned(
+                  right: 20,
+                  bottom: 14,
+                  child: IconButton.filledTonal(
+                    tooltip: '回到底部',
+                    onPressed: onScrollToBottom,
+                    icon: const Icon(Icons.arrow_downward),
                   ),
                 ),
+            ],
+          ),
         ),
         if (chat.errorMessage != null)
           Container(
@@ -390,7 +482,15 @@ class _ConversationPane extends StatelessWidget {
                       attachment: chat.attachment!,
                       onRemove: onClearAttachment,
                     ),
-                  if (chat.attachment != null) const SizedBox(height: 8),
+                  if (chat.attachment != null && chat.selectedSkillId != null)
+                    const SizedBox(height: 6),
+                  if (chat.selectedSkillId != null)
+                    _AttachedSkill(
+                      skillId: chat.selectedSkillId!,
+                      onRemove: onClearSkill,
+                    ),
+                  if (chat.attachment != null || chat.selectedSkillId != null)
+                    const SizedBox(height: 8),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -429,80 +529,447 @@ class _ConversationPane extends StatelessWidget {
   }
 }
 
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.onOpenCitation});
+class _MessageEntry extends StatelessWidget {
+  const _MessageEntry({
+    super.key,
+    required this.message,
+    required this.onOpenCitation,
+    required this.onRetry,
+  });
 
   final ChatMessage message;
   final ValueChanged<ChatCitation> onOpenCitation;
+  final ValueChanged<ChatMessage> onRetry;
 
   @override
   Widget build(BuildContext context) {
     final user = message.role == ChatRole.user;
     final colors = Theme.of(context).colorScheme;
-    return Align(
-      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 18),
-          child: Material(
-            color: user ? colors.primaryContainer : colors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.all(15),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (message.content.isEmpty &&
-                      message.status == ChatMessageStatus.streaming)
-                    const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  else
-                    SelectionArea(child: MarkdownBody(data: message.content)),
-                  if (message.citations.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    const Divider(height: 1),
-                    const SizedBox(height: 8),
-                    ...message.citations.map(
-                      (citation) => ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: CircleAvatar(
-                          radius: 12,
-                          child: Text('${citation.ordinal}'),
-                        ),
-                        title: Text(citation.chapterTitle ?? '引用原文'),
-                        subtitle: Text(
-                          citation.quote,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: const Icon(Icons.open_in_new, size: 17),
-                        onTap: () => onOpenCitation(citation),
-                      ),
-                    ),
-                  ],
-                  if (message.status == ChatMessageStatus.failed ||
-                      message.status == ChatMessageStatus.cancelled) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      message.status == ChatMessageStatus.cancelled
-                          ? '已停止生成'
-                          : '生成失败',
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                  ],
-                ],
+    final parts = message.parts.isEmpty && message.content.isNotEmpty
+        ? <ChatMessagePart>[
+            ChatTextPart(
+              id: 'display-${message.id}',
+              messageId: message.id,
+              ordinal: 0,
+              status: ChatPartStatus.completed,
+              createdAt: message.createdAt,
+              updatedAt: message.completedAt ?? message.createdAt,
+              text: message.content,
+            ),
+          ]
+        : message.parts;
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (parts.isEmpty && message.status == ChatMessageStatus.streaming)
+          const _StreamingIndicator(label: '正在组织回答')
+        else
+          ...parts.map(
+            (part) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _MessagePartView(
+                key: ValueKey(part.id),
+                part: part,
+                onOpenCitation: onOpenCitation,
               ),
             ),
           ),
+        if (!user) _MessageMeta(message: message, onRetry: onRetry),
+      ],
+    );
+    return Align(
+      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 780),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: user
+              ? Material(
+                  color: colors.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(15, 13, 15, 3),
+                    child: body,
+                  ),
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 15,
+                      backgroundColor: colors.secondaryContainer,
+                      foregroundColor: colors.onSecondaryContainer,
+                      child: const Icon(Icons.auto_awesome, size: 17),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: body),
+                  ],
+                ),
         ),
       ),
     );
   }
+}
+
+class _MessagePartView extends StatelessWidget {
+  const _MessagePartView({
+    super.key,
+    required this.part,
+    required this.onOpenCitation,
+  });
+
+  final ChatMessagePart part;
+  final ValueChanged<ChatCitation> onOpenCitation;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = part;
+    return switch (value) {
+      ChatTextPart() => SelectionArea(child: MarkdownBody(data: value.text)),
+      ChatReasoningPart() => _ReasoningPartView(part: value),
+      ChatQuotePart() => _QuotePartView(part: value),
+      ChatToolCallPart() => _ToolPartView(
+        title: value.displayName,
+        icon: Icons.build_outlined,
+        status: value.status,
+        argumentsJson: value.argumentsJson,
+        result: value.result,
+        error: value.error,
+        durationMillis: value.durationMillis,
+      ),
+      ChatSkillCallPart() => _ToolPartView(
+        title: value.skillName,
+        icon: Icons.auto_awesome_outlined,
+        status: value.status,
+        argumentsJson: value.argumentsJson,
+        result: value.result,
+        error: value.error,
+        durationMillis: value.durationMillis,
+        skill: true,
+      ),
+      ChatCitationPart() => _CitationPartView(
+        citation: value.citation,
+        onOpen: onOpenCitation,
+      ),
+      ChatNoticePart() => _NoticePartView(part: value),
+      ChatAbortedPart() => _AbortedPartView(part: value),
+    };
+  }
+}
+
+class _ReasoningPartView extends StatelessWidget {
+  const _ReasoningPartView({required this.part});
+
+  final ChatReasoningPart part;
+
+  @override
+  Widget build(BuildContext context) {
+    final running = part.status == ChatPartStatus.running;
+    return Material(
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(7),
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        key: ValueKey('${part.id}-${part.status.name}'),
+        initiallyExpanded: running,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        leading: running
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.psychology_outlined, size: 20),
+        title: Text(running ? '思考中' : '思考摘要'),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SelectionArea(child: MarkdownBody(data: part.text)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuotePartView extends StatelessWidget {
+  const _QuotePartView({required this.part});
+
+  final ChatQuotePart part;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.secondaryContainer.withValues(alpha: .55),
+        border: Border(left: BorderSide(color: colors.secondary, width: 3)),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${part.bookTitle} · ${part.chapterTitle ?? '当前章节'}',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(part.quote, maxLines: 6, overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolPartView extends StatelessWidget {
+  const _ToolPartView({
+    required this.title,
+    required this.icon,
+    required this.status,
+    required this.argumentsJson,
+    this.result,
+    this.error,
+    this.durationMillis,
+    this.skill = false,
+  });
+
+  final String title;
+  final IconData icon;
+  final ChatPartStatus status;
+  final String argumentsJson;
+  final String? result;
+  final String? error;
+  final int? durationMillis;
+  final bool skill;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final running =
+        status == ChatPartStatus.pending || status == ChatPartStatus.running;
+    final failed = status == ChatPartStatus.error;
+    final detail = error ?? result;
+    return Material(
+      color: skill
+          ? colors.tertiaryContainer.withValues(alpha: .35)
+          : colors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(7),
+        side: BorderSide(color: failed ? colors.error : colors.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        key: ValueKey('$title-${status.name}'),
+        initiallyExpanded: failed,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        leading: running
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(failed ? Icons.error_outline : icon, size: 20),
+        title: Text(title, style: Theme.of(context).textTheme.titleSmall),
+        subtitle: Text(switch (status) {
+          ChatPartStatus.pending => '等待执行',
+          ChatPartStatus.running => '正在执行',
+          ChatPartStatus.completed =>
+            durationMillis == null ? '已完成' : '已完成 · ${durationMillis}ms',
+          ChatPartStatus.error => '执行失败',
+        }),
+        children: [
+          if (argumentsJson.trim().isNotEmpty) ...[
+            _TechnicalDetail(label: '参数', value: argumentsJson),
+            if (detail != null) const SizedBox(height: 8),
+          ],
+          if (detail != null)
+            _TechnicalDetail(label: failed ? '错误' : '结果', value: detail),
+        ],
+      ),
+    );
+  }
+}
+
+class _TechnicalDetail extends StatelessWidget {
+  const _TechnicalDetail({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerLeft,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 4),
+        SelectionArea(
+          child: Text(
+            value,
+            maxLines: 12,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _CitationPartView extends StatelessWidget {
+  const _CitationPartView({required this.citation, required this.onOpen});
+
+  final ChatCitation citation;
+  final ValueChanged<ChatCitation> onOpen;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    dense: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+    leading: CircleAvatar(radius: 12, child: Text('${citation.ordinal}')),
+    title: Text(citation.chapterTitle ?? '引用原文'),
+    subtitle: Text(
+      citation.quote,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    ),
+    trailing: const Icon(Icons.open_in_new, size: 17),
+    onTap: () => onOpen(citation),
+  );
+}
+
+class _NoticePartView extends StatelessWidget {
+  const _NoticePartView({required this.part});
+
+  final ChatNoticePart part;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: part.level == ChatNoticeLevel.error
+            ? colors.errorContainer
+            : colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            Icon(
+              part.level == ChatNoticeLevel.error
+                  ? Icons.error_outline
+                  : Icons.info_outline,
+              size: 19,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(part.message)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AbortedPartView extends StatelessWidget {
+  const _AbortedPartView({required this.part});
+
+  final ChatAbortedPart part;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      const Icon(Icons.stop_circle_outlined, size: 18),
+      const SizedBox(width: 7),
+      Text(part.reason, style: Theme.of(context).textTheme.labelMedium),
+    ],
+  );
+}
+
+class _MessageMeta extends StatelessWidget {
+  const _MessageMeta({required this.message, required this.onRetry});
+
+  final ChatMessage message;
+  final ValueChanged<ChatMessage> onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final usage = message.usage;
+    final failed =
+        message.status == ChatMessageStatus.failed ||
+        message.status == ChatMessageStatus.cancelled;
+    return Row(
+      children: [
+        if (message.status == ChatMessageStatus.streaming)
+          const _StreamingIndicator(label: '正在生成')
+        else ...[
+          if (message.modelId != null)
+            Flexible(
+              child: Text(
+                message.modelId!,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
+          if (usage != null && usage.totalTokens > 0) ...[
+            const SizedBox(width: 8),
+            Text(
+              '${usage.totalTokens} tokens',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ],
+          const Spacer(),
+          if (message.content.isNotEmpty)
+            IconButton(
+              tooltip: '复制回答',
+              visualDensity: VisualDensity.compact,
+              onPressed: () =>
+                  Clipboard.setData(ClipboardData(text: message.content)),
+              icon: const Icon(Icons.copy_outlined, size: 17),
+            ),
+          if (failed)
+            IconButton(
+              tooltip: '重试',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => onRetry(message),
+              icon: const Icon(Icons.refresh, size: 18),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StreamingIndicator extends StatelessWidget {
+  const _StreamingIndicator({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const SizedBox(
+        width: 15,
+        height: 15,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+      const SizedBox(width: 8),
+      Text(label, style: Theme.of(context).textTheme.labelMedium),
+    ],
+  );
 }
 
 class _AttachedQuote extends StatelessWidget {
@@ -539,6 +1006,41 @@ class _AttachedQuote extends StatelessWidget {
   );
 }
 
+class _AttachedSkill extends StatelessWidget {
+  const _AttachedSkill({required this.skillId, required this.onRemove});
+
+  final String skillId;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.tertiaryContainer,
+    borderRadius: BorderRadius.circular(6),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome_outlined, size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text('已选择技能：${_skillDisplayName(skillId)}')),
+          IconButton(
+            tooltip: '移除技能',
+            onPressed: onRemove,
+            icon: const Icon(Icons.close, size: 18),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+String _skillDisplayName(String id) => switch (id) {
+  'chapter-summary' => '章节总结',
+  'concept-explainer' => '概念解释',
+  'structure-analysis' => '结构梳理',
+  _ => id,
+};
+
 class _EmptyConversation extends StatelessWidget {
   const _EmptyConversation();
 
@@ -573,50 +1075,72 @@ Future<void> _configureProvider(
   );
   final model = TextEditingController(text: profile?.modelId ?? 'gpt-4.1-mini');
   final key = TextEditingController();
+  var toolsEnabled = profile?.toolsEnabled ?? false;
+  var reasoningEnabled = profile?.reasoningEnabled ?? true;
   final saved = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('模型设置'),
-      content: SizedBox(
-        width: 480,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              decoration: const InputDecoration(labelText: '名称'),
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('模型设置'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: '名称'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: baseUrl,
+                  decoration: const InputDecoration(labelText: 'Base URL'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: model,
+                  decoration: const InputDecoration(labelText: '模型'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: key,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: profile == null ? 'API Key' : 'API Key（留空保持不变）',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Agent 工具'),
+                  subtitle: const Text('允许模型读取目录、标注和书中原文'),
+                  value: toolsEnabled,
+                  onChanged: (value) => setState(() => toolsEnabled = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('思考摘要'),
+                  subtitle: const Text('显示服务返回的可见 reasoning 内容'),
+                  value: reasoningEnabled,
+                  onChanged: (value) =>
+                      setState(() => reasoningEnabled = value),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: baseUrl,
-              decoration: const InputDecoration(labelText: 'Base URL'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: model,
-              decoration: const InputDecoration(labelText: '模型'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: key,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: profile == null ? 'API Key' : 'API Key（留空保持不变）',
-              ),
-            ),
-          ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('保存'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('保存'),
-        ),
-      ],
     ),
   );
   if (saved != true) return;
@@ -628,6 +1152,8 @@ Future<void> _configureProvider(
           baseUrl: baseUrl.text,
           modelId: model.text,
           apiKey: key.text,
+          toolsEnabled: toolsEnabled,
+          reasoningEnabled: reasoningEnabled,
         );
   } catch (error) {
     if (context.mounted) {

@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 10,
+        version: 11,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -64,6 +64,9 @@ class AppDatabase {
           }
           if (oldVersion < 10) {
             await _upgradeToVersion10(database);
+          }
+          if (oldVersion < 11) {
+            await _upgradeToVersion11(database);
           }
         },
       ),
@@ -147,6 +150,7 @@ class AppDatabase {
           ''');
     await _createAnnotationsTable(database);
     await _createChatTables(database);
+    await _createAiAgentTables(database);
     await _createAnnotationTagsTable(database);
     await _createReadingSessionsTable(database);
   }
@@ -248,6 +252,55 @@ class AppDatabase {
   Future<void> _upgradeToVersion10(Database database) =>
       _createReadingSessionsTable(database);
 
+  Future<void> _upgradeToVersion11(Database database) async {
+    await _addColumnIfMissing(
+      database,
+      table: 'ai_provider_profiles',
+      column: 'enable_tools',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      database,
+      table: 'ai_provider_profiles',
+      column: 'enable_reasoning',
+      definition: 'INTEGER NOT NULL DEFAULT 1',
+    );
+    for (final column in const [
+      ('input_tokens', 'INTEGER'),
+      ('output_tokens', 'INTEGER'),
+      ('reasoning_tokens', 'INTEGER'),
+      ('cached_tokens', 'INTEGER'),
+      ('stop_reason', 'TEXT'),
+    ]) {
+      await _addColumnIfMissing(
+        database,
+        table: 'chat_messages',
+        column: column.$1,
+        definition: column.$2,
+      );
+    }
+    await _createAiAgentTables(database);
+    await database.execute('''
+      INSERT OR IGNORE INTO chat_message_parts (
+        id, message_id, ordinal, type, status, text_content,
+        payload_json, provider_item_id, created_at, updated_at
+      )
+      SELECT
+        'legacy-text-' || id,
+        id,
+        0,
+        'text',
+        CASE WHEN status = 'streaming' THEN 'running' ELSE 'completed' END,
+        content,
+        NULL,
+        NULL,
+        created_at,
+        COALESCE(completed_at, created_at)
+      FROM chat_messages
+      WHERE content <> ''
+    ''');
+  }
+
   Future<void> _createBooksIndexes(Database database) async {
     await database.execute(
       'CREATE INDEX IF NOT EXISTS books_category ON books(category)',
@@ -313,6 +366,8 @@ class AppDatabase {
         temperature REAL NOT NULL DEFAULT 0.3,
         max_output_tokens INTEGER NOT NULL DEFAULT 2048,
         is_active INTEGER NOT NULL DEFAULT 0,
+        enable_tools INTEGER NOT NULL DEFAULT 0,
+        enable_reasoning INTEGER NOT NULL DEFAULT 1,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -341,6 +396,11 @@ class AppDatabase {
         status TEXT NOT NULL CHECK(status IN ('complete', 'streaming', 'failed', 'cancelled')),
         model_id TEXT,
         error_code TEXT,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        reasoning_tokens INTEGER,
+        cached_tokens INTEGER,
+        stop_reason TEXT,
         created_at INTEGER NOT NULL,
         completed_at INTEGER,
         FOREIGN KEY(thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
@@ -363,6 +423,89 @@ class AppDatabase {
         quote TEXT NOT NULL,
         FOREIGN KEY(message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
         UNIQUE(message_id, ordinal)
+      )
+    ''');
+  }
+
+  Future<void> _createAiAgentTables(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS chat_message_parts (
+        id TEXT PRIMARY KEY,
+        message_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending', 'running', 'completed', 'error')),
+        text_content TEXT,
+        payload_json TEXT,
+        provider_item_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+        UNIQUE(message_id, ordinal)
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS chat_message_parts_message_ordinal
+      ON chat_message_parts(message_id, ordinal)
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS ai_runs (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        user_message_id TEXT NOT NULL,
+        assistant_message_id TEXT NOT NULL,
+        provider_profile_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        stop_reason TEXT,
+        error_code TEXT,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        reasoning_tokens INTEGER,
+        cached_tokens INTEGER,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        FOREIGN KEY(thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE,
+        FOREIGN KEY(user_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+        FOREIGN KEY(assistant_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS ai_runs_thread_started
+      ON ai_runs(thread_id, started_at DESC)
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS ai_tool_executions (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        part_id TEXT NOT NULL,
+        call_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        tool_kind TEXT NOT NULL,
+        arguments_json TEXT NOT NULL,
+        result_text TEXT,
+        status TEXT NOT NULL,
+        error_message TEXT,
+        duration_ms INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(run_id) REFERENCES ai_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(part_id) REFERENCES chat_message_parts(id) ON DELETE CASCADE,
+        UNIQUE(run_id, call_id)
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS ai_skills (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        icon_key TEXT NOT NULL,
+        is_enabled INTEGER NOT NULL,
+        is_built_in INTEGER NOT NULL,
+        version INTEGER NOT NULL,
+        prompt_template TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
       )
     ''');
   }

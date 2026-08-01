@@ -4,6 +4,46 @@ enum ChatRole { system, user, assistant }
 
 enum ChatMessageStatus { complete, streaming, failed, cancelled }
 
+enum AiProviderProtocol { openAiCompatible }
+
+enum ChatPartStatus { pending, running, completed, error }
+
+enum ChatNoticeLevel { info, warning, error }
+
+enum AiToolKind { read, write, skill }
+
+enum AiRunStatus {
+  queued,
+  streaming,
+  waitingForTool,
+  completed,
+  failed,
+  cancelled,
+}
+
+class AiUsage {
+  const AiUsage({
+    this.inputTokens = 0,
+    this.outputTokens = 0,
+    this.reasoningTokens = 0,
+    this.cachedTokens = 0,
+  });
+
+  final int inputTokens;
+  final int outputTokens;
+  final int reasoningTokens;
+  final int cachedTokens;
+
+  int get totalTokens => inputTokens + outputTokens;
+
+  AiUsage merge(AiUsage other) => AiUsage(
+    inputTokens: inputTokens + other.inputTokens,
+    outputTokens: outputTokens + other.outputTokens,
+    reasoningTokens: reasoningTokens + other.reasoningTokens,
+    cachedTokens: cachedTokens + other.cachedTokens,
+  );
+}
+
 class AiProviderProfile {
   const AiProviderProfile({
     required this.id,
@@ -16,16 +56,22 @@ class AiProviderProfile {
     required this.isActive,
     required this.createdAt,
     required this.updatedAt,
+    this.protocol = AiProviderProtocol.openAiCompatible,
+    this.toolsEnabled = false,
+    this.reasoningEnabled = true,
   });
 
   final String id;
   final String name;
+  final AiProviderProtocol protocol;
   final String baseUrl;
   final String modelId;
   final String secretKeyId;
   final double temperature;
   final int maxOutputTokens;
   final bool isActive;
+  final bool toolsEnabled;
+  final bool reasoningEnabled;
   final DateTime createdAt;
   final DateTime updatedAt;
 }
@@ -57,6 +103,253 @@ class ChatThread {
   );
 }
 
+sealed class ChatMessagePart {
+  const ChatMessagePart({
+    required this.id,
+    required this.messageId,
+    required this.ordinal,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String messageId;
+  final int ordinal;
+  final ChatPartStatus status;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+}
+
+class ChatTextPart extends ChatMessagePart {
+  const ChatTextPart({
+    required super.id,
+    required super.messageId,
+    required super.ordinal,
+    required super.status,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.text,
+  });
+
+  final String text;
+
+  ChatTextPart copyWith({
+    String? text,
+    ChatPartStatus? status,
+    DateTime? updatedAt,
+  }) => ChatTextPart(
+    id: id,
+    messageId: messageId,
+    ordinal: ordinal,
+    status: status ?? this.status,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    text: text ?? this.text,
+  );
+}
+
+class ChatReasoningPart extends ChatMessagePart {
+  const ChatReasoningPart({
+    required super.id,
+    required super.messageId,
+    required super.ordinal,
+    required super.status,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.text,
+    this.reasoningType = 'thinking',
+  });
+
+  final String text;
+  final String reasoningType;
+
+  ChatReasoningPart copyWith({
+    String? text,
+    ChatPartStatus? status,
+    DateTime? updatedAt,
+  }) => ChatReasoningPart(
+    id: id,
+    messageId: messageId,
+    ordinal: ordinal,
+    status: status ?? this.status,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    text: text ?? this.text,
+    reasoningType: reasoningType,
+  );
+}
+
+class ChatQuotePart extends ChatMessagePart {
+  const ChatQuotePart({
+    required super.id,
+    required super.messageId,
+    required super.ordinal,
+    required super.status,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.bookId,
+    required this.bookTitle,
+    required this.href,
+    required this.locator,
+    required this.quote,
+    this.chapterIndex,
+    this.chapterTitle,
+  });
+
+  final String bookId;
+  final String bookTitle;
+  final String href;
+  final String locator;
+  final int? chapterIndex;
+  final String? chapterTitle;
+  final String quote;
+}
+
+class ChatToolCallPart extends ChatMessagePart {
+  const ChatToolCallPart({
+    required super.id,
+    required super.messageId,
+    required super.ordinal,
+    required super.status,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.callId,
+    required this.toolName,
+    required this.displayName,
+    this.argumentsJson = '',
+    this.result,
+    this.error,
+    this.durationMillis,
+  });
+
+  final String callId;
+  final String toolName;
+  final String displayName;
+  final String argumentsJson;
+  final String? result;
+  final String? error;
+  final int? durationMillis;
+
+  ChatToolCallPart copyWith({
+    ChatPartStatus? status,
+    String? argumentsJson,
+    String? result,
+    String? error,
+    int? durationMillis,
+    DateTime? updatedAt,
+  }) => ChatToolCallPart(
+    id: id,
+    messageId: messageId,
+    ordinal: ordinal,
+    status: status ?? this.status,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    callId: callId,
+    toolName: toolName,
+    displayName: displayName,
+    argumentsJson: argumentsJson ?? this.argumentsJson,
+    result: result ?? this.result,
+    error: error ?? this.error,
+    durationMillis: durationMillis ?? this.durationMillis,
+  );
+}
+
+class ChatSkillCallPart extends ChatMessagePart {
+  const ChatSkillCallPart({
+    required super.id,
+    required super.messageId,
+    required super.ordinal,
+    required super.status,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.callId,
+    required this.skillId,
+    required this.skillName,
+    this.argumentsJson = '',
+    this.result,
+    this.error,
+    this.durationMillis,
+  });
+
+  final String callId;
+  final String skillId;
+  final String skillName;
+  final String argumentsJson;
+  final String? result;
+  final String? error;
+  final int? durationMillis;
+
+  ChatSkillCallPart copyWith({
+    ChatPartStatus? status,
+    String? argumentsJson,
+    String? result,
+    String? error,
+    int? durationMillis,
+    DateTime? updatedAt,
+  }) => ChatSkillCallPart(
+    id: id,
+    messageId: messageId,
+    ordinal: ordinal,
+    status: status ?? this.status,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    callId: callId,
+    skillId: skillId,
+    skillName: skillName,
+    argumentsJson: argumentsJson ?? this.argumentsJson,
+    result: result ?? this.result,
+    error: error ?? this.error,
+    durationMillis: durationMillis ?? this.durationMillis,
+  );
+}
+
+class ChatCitationPart extends ChatMessagePart {
+  const ChatCitationPart({
+    required super.id,
+    required super.messageId,
+    required super.ordinal,
+    required super.status,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.citation,
+  });
+
+  final ChatCitation citation;
+}
+
+class ChatNoticePart extends ChatMessagePart {
+  const ChatNoticePart({
+    required super.id,
+    required super.messageId,
+    required super.ordinal,
+    required super.status,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.message,
+    required this.level,
+    this.code,
+  });
+
+  final String message;
+  final ChatNoticeLevel level;
+  final String? code;
+}
+
+class ChatAbortedPart extends ChatMessagePart {
+  const ChatAbortedPart({
+    required super.id,
+    required super.messageId,
+    required super.ordinal,
+    required super.status,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.reason,
+  });
+
+  final String reason;
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -69,6 +362,9 @@ class ChatMessage {
     this.errorCode,
     this.completedAt,
     this.citations = const [],
+    this.parts = const [],
+    this.usage,
+    this.stopReason,
   });
 
   final String id;
@@ -81,6 +377,9 @@ class ChatMessage {
   final DateTime createdAt;
   final DateTime? completedAt;
   final List<ChatCitation> citations;
+  final List<ChatMessagePart> parts;
+  final AiUsage? usage;
+  final String? stopReason;
 
   ChatMessage copyWith({
     String? content,
@@ -88,6 +387,9 @@ class ChatMessage {
     String? errorCode,
     DateTime? completedAt,
     List<ChatCitation>? citations,
+    List<ChatMessagePart>? parts,
+    AiUsage? usage,
+    String? stopReason,
   }) => ChatMessage(
     id: id,
     threadId: threadId,
@@ -99,6 +401,9 @@ class ChatMessage {
     createdAt: createdAt,
     completedAt: completedAt ?? this.completedAt,
     citations: citations ?? this.citations,
+    parts: parts ?? this.parts,
+    usage: usage ?? this.usage,
+    stopReason: stopReason ?? this.stopReason,
   );
 }
 
@@ -144,4 +449,50 @@ class ChatContextAttachment {
   final int? chapterIndex;
   final String? chapterTitle;
   final String quote;
+}
+
+class AiSkillDefinition {
+  const AiSkillDefinition({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.iconKey,
+    required this.enabled,
+    required this.builtIn,
+    required this.version,
+    required this.promptTemplate,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String name;
+  final String description;
+  final String iconKey;
+  final bool enabled;
+  final bool builtIn;
+  final int version;
+  final String promptTemplate;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  AiSkillDefinition copyWith({
+    String? name,
+    String? description,
+    String? iconKey,
+    bool? enabled,
+    String? promptTemplate,
+    DateTime? updatedAt,
+  }) => AiSkillDefinition(
+    id: id,
+    name: name ?? this.name,
+    description: description ?? this.description,
+    iconKey: iconKey ?? this.iconKey,
+    enabled: enabled ?? this.enabled,
+    builtIn: builtIn,
+    version: version,
+    promptTemplate: promptTemplate ?? this.promptTemplate,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
 }

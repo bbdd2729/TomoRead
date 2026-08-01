@@ -6,6 +6,7 @@ import 'package:tomoread/app/providers.dart';
 import 'package:tomoread/data/database/app_database.dart';
 import 'package:tomoread/data/repositories/book_repository.dart';
 import 'package:tomoread/domain/models/annotation_query.dart';
+import 'package:tomoread/domain/models/chat_models.dart';
 import 'package:tomoread/domain/models/epub_location.dart';
 import 'package:tomoread/domain/models/epub_manifest.dart';
 import 'package:tomoread/domain/models/library_book.dart';
@@ -30,6 +31,22 @@ void main() {
     expect(find.text('尚未配置模型'), findsOneWidget);
     expect(find.byKey(const Key('chat-composer')), findsOneWidget);
     expect(find.text('配置模型'), findsOneWidget);
+  });
+
+  testWidgets('chat renders reasoning, tool, skill, and citation parts', (
+    tester,
+  ) async {
+    await _pumpPage(tester, const ChatPage(), [
+      chatControllerProvider.overrideWith(_PartsChatController.new),
+      libraryBooksProvider.overrideWith(_EmptyLibraryBooksNotifier.new),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('思考摘要'), findsOneWidget);
+    expect(find.text('读取目录'), findsOneWidget);
+    expect(find.text('章节总结'), findsOneWidget);
+    expect(find.text('第一章'), findsOneWidget);
+    expect(find.text('回答正文 [1]'), findsOneWidget);
   });
 
   testWidgets('notes page renders a real empty state on compact layouts', (
@@ -155,6 +172,105 @@ class _EmptyChatController extends ChatController {
   @override
   Future<ChatPageState> build() async =>
       const ChatPageState(threads: [], messages: []);
+}
+
+class _PartsChatController extends ChatController {
+  @override
+  Future<ChatPageState> build() async {
+    final now = DateTime(2026);
+    const threadId = 'thread-parts';
+    const messageId = 'message-parts';
+    final citation = ChatCitation(
+      id: 'citation-parts',
+      messageId: messageId,
+      ordinal: 1,
+      bookId: 'book-a',
+      href: 'chapter.xhtml',
+      locator: 'ratio:0.2',
+      chapterIndex: 0,
+      chapterTitle: '第一章',
+      quote: '引用原文',
+    );
+    return ChatPageState(
+      activeThreadId: threadId,
+      threads: [
+        ChatThread(
+          id: threadId,
+          scope: ChatScope.book,
+          bookId: 'book-a',
+          title: '结构化消息',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ],
+      messages: [
+        ChatMessage(
+          id: messageId,
+          threadId: threadId,
+          role: ChatRole.assistant,
+          content: '回答正文 [1]',
+          status: ChatMessageStatus.complete,
+          modelId: 'model-a',
+          createdAt: now,
+          completedAt: now,
+          citations: [citation],
+          parts: [
+            ChatReasoningPart(
+              id: 'reasoning-a',
+              messageId: messageId,
+              ordinal: 0,
+              status: ChatPartStatus.completed,
+              createdAt: now,
+              updatedAt: now,
+              text: '思考摘要内容',
+            ),
+            ChatToolCallPart(
+              id: 'tool-a',
+              messageId: messageId,
+              ordinal: 1,
+              status: ChatPartStatus.completed,
+              createdAt: now,
+              updatedAt: now,
+              callId: 'call-a',
+              toolName: 'get_table_of_contents',
+              displayName: '读取目录',
+              result: '完成',
+            ),
+            ChatSkillCallPart(
+              id: 'skill-a',
+              messageId: messageId,
+              ordinal: 2,
+              status: ChatPartStatus.completed,
+              createdAt: now,
+              updatedAt: now,
+              callId: 'call-b',
+              skillId: 'chapter-summary',
+              skillName: '章节总结',
+              result: '完成',
+            ),
+            ChatTextPart(
+              id: 'text-a',
+              messageId: messageId,
+              ordinal: 3,
+              status: ChatPartStatus.completed,
+              createdAt: now,
+              updatedAt: now,
+              text: '回答正文 [1]',
+            ),
+            ChatCitationPart(
+              id: 'citation-part-a',
+              messageId: messageId,
+              ordinal: 4,
+              status: ChatPartStatus.completed,
+              createdAt: now,
+              updatedAt: now,
+              citation: citation,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 class _EmptyLibraryBooksNotifier extends LibraryBooksNotifier {
