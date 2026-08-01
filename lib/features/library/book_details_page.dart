@@ -197,14 +197,18 @@ class BookDetailsPage extends HookConsumerWidget {
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 760;
           final cover = SizedBox(
-            width: isWide ? 248 : 184,
-            height: isWide ? 364 : 270,
+            width: isWide ? 252 : 184,
+            height: isWide ? 368 : 270,
             child: Hero(
               tag: bookCoverHeroTag(displayedBook),
               child: Material(
-                elevation: 2,
-                shadowColor: Colors.black26,
-                borderRadius: BorderRadius.circular(8),
+                color: Theme.of(context).colorScheme.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
                 clipBehavior: Clip.antiAlias,
                 child: BookCover(
                   key: const Key('book-detail-cover'),
@@ -234,20 +238,20 @@ class BookDetailsPage extends HookConsumerWidget {
 
           return SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
-              isWide ? 48 : 24,
-              32,
-              isWide ? 48 : 24,
-              48,
+              isWide ? 56 : 20,
+              isWide ? 48 : 28,
+              isWide ? 56 : 20,
+              56,
             ),
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1040),
+                constraints: const BoxConstraints(maxWidth: 1120),
                 child: isWide
                     ? Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           cover,
-                          const SizedBox(width: 56),
+                          const SizedBox(width: 64),
                           Expanded(
                             child: AnimatedSwitcher(
                               duration: const Duration(milliseconds: 160),
@@ -305,6 +309,13 @@ class _BookDetailsContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          book.format.toUpperCase(),
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 8),
         Text(book.title, style: theme.textTheme.headlineSmall),
         const SizedBox(height: 8),
         Text(
@@ -370,9 +381,15 @@ class _BookDetailsContent extends StatelessWidget {
         const SizedBox(height: 12),
         LinearProgressIndicator(value: book.progress),
         const SizedBox(height: 8),
-        Text(
-          '已读 ${(book.progress * 100).round()}%',
-          style: theme.textTheme.bodyMedium,
+        Row(
+          children: [
+            Text('已读 ${(book.progress * 100).round()}%'),
+            const Spacer(),
+            Text(
+              '${book.chapterCount} ${book.format == 'pdf' ? '页' : '章'}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
         ),
         const SizedBox(height: 28),
         FilledButton.icon(

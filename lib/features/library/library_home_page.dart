@@ -510,128 +510,139 @@ class _LibraryControls extends StatelessWidget {
       final searchWidth = constraints.maxWidth < 520
           ? constraints.maxWidth
           : 320.0;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
+      final colors = Theme.of(context).colorScheme;
+      return Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: colors.outlineVariant),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: searchWidth,
-                child: TextField(
-                  key: const Key('library-search'),
-                  onChanged: onQueryChanged,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: '搜索书名或作者',
-                    border: OutlineInputBorder(),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: searchWidth,
+                    child: TextField(
+                      key: const Key('library-search'),
+                      onChanged: onQueryChanged,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        hintText: '搜索书名或作者',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              SegmentedButton<_LibraryFormatFilter>(
-                segments: [
-                  for (final filter in _LibraryFormatFilter.values)
-                    ButtonSegment(value: filter, label: Text(filter.label)),
+                  SegmentedButton<_LibraryFormatFilter>(
+                    segments: [
+                      for (final filter in _LibraryFormatFilter.values)
+                        ButtonSegment(value: filter, label: Text(filter.label)),
+                    ],
+                    selected: {formatFilter},
+                    onSelectionChanged: (selection) =>
+                        onFormatChanged(selection.first),
+                  ),
+                  SizedBox(
+                    width: 152,
+                    child: DropdownButtonFormField<_LibrarySort>(
+                      initialValue: sort,
+                      decoration: const InputDecoration(
+                        labelText: '排序',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final option in _LibrarySort.values)
+                          DropdownMenuItem(
+                            value: option,
+                            child: Text(option.label),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) onSortChanged(value);
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 220,
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey(category),
+                      initialValue: category,
+                      decoration: const InputDecoration(
+                        labelText: '分类',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: _allCategories,
+                          child: Text('全部分类'),
+                        ),
+                        const DropdownMenuItem(
+                          value: _uncategorized,
+                          child: Text('未分类'),
+                        ),
+                        for (final item in categories)
+                          DropdownMenuItem(value: item, child: Text(item)),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) onCategoryChanged(value);
+                      },
+                    ),
+                  ),
+                  FilterChip(
+                    selected: favoritesOnly,
+                    onSelected: onFavoritesChanged,
+                    avatar: Icon(
+                      favoritesOnly ? Icons.favorite : Icons.favorite_border,
+                      size: 18,
+                    ),
+                    label: const Text('收藏'),
+                  ),
+                  Tooltip(
+                    message: '切换书库视图',
+                    child: SegmentedButton<_LibraryViewMode>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: _LibraryViewMode.grid,
+                          icon: Icon(Icons.grid_view_outlined),
+                        ),
+                        ButtonSegment(
+                          value: _LibraryViewMode.list,
+                          icon: Icon(Icons.view_list_outlined),
+                        ),
+                      ],
+                      selected: {viewMode},
+                      onSelectionChanged: (selection) =>
+                          onViewModeChanged(selection.first),
+                    ),
+                  ),
                 ],
-                selected: {formatFilter},
-                onSelectionChanged: (selection) =>
-                    onFormatChanged(selection.first),
               ),
-              SizedBox(
-                width: 152,
-                child: DropdownButtonFormField<_LibrarySort>(
-                  initialValue: sort,
-                  decoration: const InputDecoration(
-                    labelText: '排序',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    for (final option in _LibrarySort.values)
-                      DropdownMenuItem(
-                        value: option,
-                        child: Text(option.label),
+              if (tags.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final item in tags)
+                      ChoiceChip(
+                        selected: tag == item,
+                        onSelected: (selected) =>
+                            onTagChanged(selected ? item : null),
+                        label: Text(item),
                       ),
                   ],
-                  onChanged: (value) {
-                    if (value != null) onSortChanged(value);
-                  },
                 ),
-              ),
-              SizedBox(
-                width: 220,
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey(category),
-                  initialValue: category,
-                  decoration: const InputDecoration(
-                    labelText: '分类',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    const DropdownMenuItem(
-                      value: _allCategories,
-                      child: Text('全部分类'),
-                    ),
-                    const DropdownMenuItem(
-                      value: _uncategorized,
-                      child: Text('未分类'),
-                    ),
-                    for (final item in categories)
-                      DropdownMenuItem(value: item, child: Text(item)),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) onCategoryChanged(value);
-                  },
-                ),
-              ),
-              FilterChip(
-                selected: favoritesOnly,
-                onSelected: onFavoritesChanged,
-                avatar: Icon(
-                  favoritesOnly ? Icons.favorite : Icons.favorite_border,
-                  size: 18,
-                ),
-                label: const Text('收藏'),
-              ),
-              Tooltip(
-                message: '切换书库视图',
-                child: SegmentedButton<_LibraryViewMode>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(
-                      value: _LibraryViewMode.grid,
-                      icon: Icon(Icons.grid_view_outlined),
-                    ),
-                    ButtonSegment(
-                      value: _LibraryViewMode.list,
-                      icon: Icon(Icons.view_list_outlined),
-                    ),
-                  ],
-                  selected: {viewMode},
-                  onSelectionChanged: (selection) =>
-                      onViewModeChanged(selection.first),
-                ),
-              ),
+              ],
             ],
           ),
-          if (tags.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final item in tags)
-                  ChoiceChip(
-                    selected: tag == item,
-                    onSelected: (selected) =>
-                        onTagChanged(selected ? item : null),
-                    label: Text(item),
-                  ),
-              ],
-            ),
-          ],
-        ],
+        ),
       );
     },
   );
@@ -838,59 +849,72 @@ class _ContinueReadingCard extends StatelessWidget {
   final VoidCallback onOpenReader;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surfaceContainerLow,
-    borderRadius: BorderRadius.circular(8),
-    clipBehavior: Clip.antiAlias,
-    child: Padding(
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          SizedBox(width: 96, height: 132, child: BookCover(book: book)),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('继续阅读', style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(height: 8),
-                Text(
-                  book.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  book.author.isEmpty ? '未知作者' : book.author,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  book.format.toUpperCase(),
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-                const SizedBox(height: 16),
-                LinearProgressIndicator(value: book.progress),
-                const SizedBox(height: 8),
-                Text(
-                  '已读 ${(book.progress * 100).round()}%',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          IconButton.filledTonal(
-            tooltip: '继续阅读',
-            onPressed: onOpenReader,
-            icon: const Icon(Icons.play_arrow),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: colors.outlineVariant),
       ),
-    ),
-  );
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: SizedBox(
+                width: 96,
+                height: 132,
+                child: BookCover(book: book),
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('继续阅读', style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                  Text(
+                    book.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    book.author.isEmpty ? '未知作者' : book.author,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    book.format.toUpperCase(),
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(height: 16),
+                  LinearProgressIndicator(value: book.progress),
+                  const SizedBox(height: 8),
+                  Text(
+                    '已读 ${(book.progress * 100).round()}%',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            IconButton.filledTonal(
+              tooltip: '继续阅读',
+              onPressed: onOpenReader,
+              icon: const Icon(Icons.play_arrow),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _BookCard extends HookWidget {
@@ -922,8 +946,10 @@ class _BookCard extends HookWidget {
         ? colorScheme.secondaryContainer
         : isHovered.value
         ? colorScheme.surfaceContainerLow
-        : Colors.transparent;
-    final border = isSelected ? colorScheme.primary : Colors.transparent;
+        : colorScheme.surface;
+    final border = isSelected
+        ? colorScheme.primary
+        : colorScheme.outlineVariant;
     return MouseRegion(
       onEnter: (_) => isHovered.value = true,
       onExit: (_) => isHovered.value = false,
@@ -952,9 +978,12 @@ class _BookCard extends HookWidget {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Hero(
-                          tag: bookCoverHeroTag(book),
-                          child: BookCover(book: book),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: Hero(
+                            tag: bookCoverHeroTag(book),
+                            child: BookCover(book: book),
+                          ),
                         ),
                         if (selectionMode)
                           Positioned(
@@ -1067,12 +1096,15 @@ class _BookListItem extends StatelessWidget {
           children: [
             if (selectionMode)
               Checkbox(value: isSelected, onChanged: (_) => onTap()),
-            SizedBox(
-              width: 52,
-              height: 76,
-              child: Hero(
-                tag: bookCoverHeroTag(book),
-                child: BookCover(book: book),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: SizedBox(
+                width: 52,
+                height: 76,
+                child: Hero(
+                  tag: bookCoverHeroTag(book),
+                  child: BookCover(book: book),
+                ),
               ),
             ),
             const SizedBox(width: 16),
