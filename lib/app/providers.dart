@@ -12,8 +12,10 @@ import '../data/services/book_storage_service.dart';
 import '../data/services/epub_content_service.dart';
 import '../data/services/epub_extraction_service.dart';
 import '../data/services/epub_reader_session_service.dart';
+import '../data/services/epub_section_progress_service.dart';
 import '../domain/models/bookmark.dart';
 import '../domain/models/epub_manifest.dart';
+import '../domain/models/epub_section_progress.dart';
 import '../domain/models/library_book.dart';
 import '../domain/models/reader_chapter.dart';
 import '../domain/models/reading_settings.dart';
@@ -56,6 +58,10 @@ final epubContentServiceProvider = Provider<EpubContentService>(
 
 final epubExtractionServiceProvider = Provider<EpubExtractionService>(
   (ref) => const EpubExtractionService(),
+);
+
+final epubSectionProgressServiceProvider = Provider<EpubSectionProgressService>(
+  (ref) => const EpubSectionProgressService(),
 );
 
 final epubReaderSessionServiceProvider = Provider<EpubReaderSessionService>(
@@ -186,6 +192,21 @@ final epubExtractedDirectoryProvider = FutureProvider.autoDispose
         throw const EpubExtractionException('书籍不存在');
       }
       return ref.read(epubExtractionServiceProvider).ensureExtracted(book);
+    });
+
+final epubSectionProgressProvider = FutureProvider.autoDispose
+    .family<EpubSectionProgress, String>((ref, bookId) async {
+      final readerSession = await ref.watch(
+        epubReaderSessionProvider(bookId).future,
+      );
+      final manifest = await ref.watch(readerManifestProvider(bookId).future);
+      if (manifest == null) return EpubSectionProgress.even(0);
+      return ref
+          .read(epubSectionProgressServiceProvider)
+          .load(
+            extractedDirectory: readerSession.directoryPath,
+            manifest: manifest,
+          );
     });
 
 final epubReaderSessionProvider = FutureProvider.autoDispose

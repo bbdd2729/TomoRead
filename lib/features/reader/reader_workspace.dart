@@ -10,6 +10,7 @@ import '../../app/providers.dart';
 import '../../domain/models/bookmark.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
+import '../../domain/models/epub_section_progress.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/library_book.dart';
 import '../../domain/models/reader_chapter.dart';
@@ -61,17 +62,6 @@ class ReaderWorkspace extends HookConsumerWidget {
   final VoidCallback onExitReader;
   final bool initialControlsVisible;
 
-  static double _overallProgress(
-    int chapterIndex,
-    double chapterRatio,
-    int chapterCount,
-  ) {
-    if (chapterCount == 0) return 0;
-    return ((chapterIndex + chapterRatio.clamp(0, 1)) / chapterCount)
-        .clamp(0, 1)
-        .toDouble();
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final readingOverride = ref.watch(bookReadingOverrideProvider(bookId));
@@ -81,6 +71,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
     final readerBook = ref.watch(readerBookProvider(bookId));
     final manifest = ref.watch(readerManifestProvider(bookId));
+    final sectionProgressState = ref.watch(epubSectionProgressProvider(bookId));
     final annotationsState = ref.watch(annotationsForBookProvider(bookId));
     final appearance =
         ref.watch(appSettingsProvider).value?.appearance ??
@@ -111,6 +102,8 @@ class ReaderWorkspace extends HookConsumerWidget {
     final settings = override?.settings ?? readingSettings;
     final isPaginated = settings.layoutMode == ReaderLayoutMode.paginated;
     final totalChapters = manifest.value?.spine.length ?? 0;
+    final sectionProgress =
+        sectionProgressState.value ?? EpubSectionProgress.even(totalChapters);
     final activeChapterIndex = totalChapters == 0
         ? chapterIndex.value
         : chapterIndex.value.clamp(0, totalChapters - 1).toInt();
@@ -186,7 +179,7 @@ class ReaderWorkspace extends HookConsumerWidget {
               .updateReadingPosition(
                 bookId: bookId,
                 chapterIndex: index,
-                progress: _overallProgress(index, chapterRatio, totalChapters),
+                progress: sectionProgress.overallProgress(index, chapterRatio),
                 locator: EpubLocation(
                   chapterIndex: index,
                   scrollRatio: chapterRatio,
@@ -232,10 +225,9 @@ class ReaderWorkspace extends HookConsumerWidget {
             .updateReadingPosition(
               bookId: bookId,
               chapterIndex: index,
-              progress: _overallProgress(
+              progress: sectionProgress.overallProgress(
                 index,
                 scrollRatio.value,
-                totalChapters,
               ),
               locator: EpubLocation(
                 chapterIndex: index,
@@ -505,12 +497,11 @@ class ReaderWorkspace extends HookConsumerWidget {
 
     void seekToOverallProgress(double value) {
       if (totalChapters == 0) return;
-      final target = value.clamp(0, 1).toDouble();
-      final scaled = target * totalChapters;
-      final targetChapter = target >= 1
-          ? totalChapters - 1
-          : scaled.floor().clamp(0, totalChapters - 1).toInt();
-      final targetRatio = target >= 1 ? 1.0 : scaled - targetChapter;
+      final targetLocation = sectionProgress.locationForProgress(value);
+      final targetChapter = targetLocation.chapterIndex
+          .clamp(0, totalChapters - 1)
+          .toInt();
+      final targetRatio = targetLocation.chapterRatio;
 
       if (isPaginated) {
         final targetItem = manifest.value?.spine[targetChapter];
@@ -882,11 +873,10 @@ class ReaderWorkspace extends HookConsumerWidget {
                   chapterIndex: activeChapterIndex,
                   chapterCount: totalChapters,
                   layoutMode: settings.layoutMode,
-                  chapterProgress: isPaginated
-                      ? (pageCount.value <= 1
-                            ? 0.0
-                            : pageIndex.value / (pageCount.value - 1))
-                      : scrollRatio.value,
+                  overallProgress: sectionProgress.overallProgress(
+                    activeChapterIndex,
+                    scrollRatio.value,
+                  ),
                   pageIndex: pageIndex.value,
                   pageCount: pageCount.value,
                   onSeekProgress: seekToOverallProgress,
@@ -2084,7 +2074,7 @@ class _ReaderFooter extends StatelessWidget {
     required this.chapterIndex,
     required this.chapterCount,
     required this.layoutMode,
-    required this.chapterProgress,
+    required this.overallProgress,
     required this.pageIndex,
     required this.pageCount,
     required this.onSeekProgress,
@@ -2095,7 +2085,7 @@ class _ReaderFooter extends StatelessWidget {
   final int chapterIndex;
   final int chapterCount;
   final ReaderLayoutMode layoutMode;
-  final double chapterProgress;
+  final double overallProgress;
   final int pageIndex;
   final int pageCount;
   final ValueChanged<double> onSeekProgress;
@@ -2104,9 +2094,7 @@ class _ReaderFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress = chapterCount == 0
-        ? 0.0
-        : (chapterIndex + chapterProgress.clamp(0, 1)) / chapterCount;
+    final progress = overallProgress.clamp(0, 1).toDouble();
     return Material(
       key: const Key('reader-footer'),
       color: Theme.of(context).colorScheme.surface,
@@ -2133,8 +2121,8 @@ class _ReaderFooter extends StatelessWidget {
               chapterCount == 0
                   ? '正在读取目录'
                   : layoutMode == ReaderLayoutMode.paginated
-                  ? '${(progress * 100).round()}% · 第 ${pageIndex + 1} / $pageCount 页 · 第 ${chapterIndex + 1} / $chapterCount 章'
-                  : '${(progress * 100).round()}% · ${chapterIndex + 1} / $chapterCount',
+                  ? '全书 ${(progress * 100).round()}% · 第 ${pageIndex + 1} / $pageCount 页 · 第 ${chapterIndex + 1} / $chapterCount 章'
+                  : '全书 ${(progress * 100).round()}% · 第 ${chapterIndex + 1} / $chapterCount 章',
             ),
             const SizedBox(width: 8),
             IconButton(
