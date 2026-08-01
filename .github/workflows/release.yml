@@ -4,13 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version in x.y.z format, for example 1.2.3
+        description: Build version in x.y.z format, for example 1.2.3
         required: true
         type: string
-      build_android:
-        description: Build signed Android APK and AAB
+      publish_release:
+        description: Create a Git tag and publish the packages to GitHub Releases
         required: true
         default: true
+        type: boolean
+      build_android:
+        description: Build signed Android v7a/v8a APKs and AAB
+        required: true
+        default: false
         type: boolean
       build_linux:
         description: Build Linux x64 archive
@@ -35,7 +40,7 @@ env:
 
 jobs:
   prepare:
-    name: Validate release
+    name: Validate build inputs
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release.outputs.version }}
@@ -50,6 +55,7 @@ jobs:
         name: Validate version and tag
         env:
           VERSION: ${{ inputs.version }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
           BUILD_ANDROID: ${{ inputs.build_android }}
           BUILD_LINUX: ${{ inputs.build_linux }}
           BUILD_WINDOWS: ${{ inputs.build_windows }}
@@ -66,7 +72,8 @@ jobs:
           fi
 
           tag="v$VERSION"
-          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+          if [[ "$PUBLISH_RELEASE" == "true" ]] && \
+             git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
             echo "Tag $tag already exists and cannot be overwritten." >&2
             exit 1
           fi
@@ -108,7 +115,7 @@ jobs:
       - name: Install desktop build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes ninja-build libgtk-3-dev libsqlite3-dev
+          sudo apt-get install --yes ninja-build libgtk-3-dev libsecret-1-dev libsqlite3-dev
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -206,20 +213,26 @@ jobs:
       - name: Build Android release artifacts
         shell: bash
         run: |
-          flutter build apk --release --build-name "$VERSION" --build-number "$BUILD_NUMBER"
+          flutter build apk --release --split-per-abi \
+            --target-platform android-arm,android-arm64 \
+            --build-name "$VERSION" \
+            --build-number "$BUILD_NUMBER"
           flutter build appbundle --release --build-name "$VERSION" --build-number "$BUILD_NUMBER"
       - name: Collect Android release packages
         shell: bash
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/TomoRead-${VERSION}-android.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+            "dist/TomoRead-${VERSION}-android-armeabi-v7a.apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+            "dist/TomoRead-${VERSION}-android-arm64-v8a.apk"
           cp build/app/outputs/bundle/release/app-release.aab "dist/TomoRead-${VERSION}-android.aab"
       - name: Upload Android release packages
         uses: actions/upload-artifact@v7
         with:
           name: tomoread-release-android
           path: |
-            dist/TomoRead-*-android.apk
+            dist/TomoRead-*-android-*.apk
             dist/TomoRead-*-android.aab
           if-no-files-found: error
 
@@ -228,6 +241,7 @@ jobs:
     needs: [prepare, verify, linux, windows, android]
     if: >-
       always() &&
+      inputs.publish_release &&
       needs.prepare.result == 'success' &&
       needs.verify.result == 'success' &&
       (needs.linux.result == 'success' || needs.linux.result == 'skipped') &&
@@ -236,6 +250,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.prepare.outputs.version }}
       TAG: ${{ needs.prepare.outputs.tag }}
       COMMIT_SHA: ${{ needs.prepare.outputs.commit_sha }}
@@ -249,7 +264,22 @@ jobs:
       - name: Create GitHub release and tag
         shell: bash
         run: |
-          gh release create "$TAG" release-assets/* \
+          shopt -s nullglob
+          assets=(release-assets/*)
+          if (( ${#assets[@]} == 0 )); then
+            echo "No release assets were downloaded." >&2
+            exit 1
+          fi
+
+          gh release create "$TAG" "${assets[@]}" \
+            --repo "$GH_REPO" \
             --target "$COMMIT_SHA" \
             --title "TomoRead $VERSION" \
             --generate-notes
+
+          release_url=$(gh release view "$TAG" --repo "$GH_REPO" --json url --jq '.url')
+          {
+            echo "### Release published"
+            echo
+            echo "[$TAG]($release_url)"
+          } >> "$GITHUB_STEP_SUMMARY"
