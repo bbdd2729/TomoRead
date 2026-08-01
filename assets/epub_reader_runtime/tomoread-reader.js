@@ -485,11 +485,12 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     const selection = readSelection(doc, index)
     if (!selection) return
     event.preventDefault()
+    const frameRect = doc.defaultView?.frameElement?.getBoundingClientRect?.()
     postMessage({
       type: 'selectionContextMenu',
       ...selection,
-      x: event.clientX,
-      y: event.clientY,
+      x: event.clientX + (frameRect?.left ?? 0),
+      y: event.clientY + (frameRect?.top ?? 0),
     })
   })
 }

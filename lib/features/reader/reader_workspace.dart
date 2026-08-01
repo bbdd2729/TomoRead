@@ -378,10 +378,14 @@ class ReaderWorkspace extends HookConsumerWidget {
       ReaderSelectionContextMenu menu,
     ) async {
       selectedText.value = menu.selection;
-      final box = context.findRenderObject() as RenderBox?;
-      final size = box?.size ?? MediaQuery.sizeOf(context);
-      final x = menu.x.clamp(8, size.width - 8).toDouble();
-      final y = menu.y.clamp(8, size.height - 8).toDouble();
+      final overlay =
+          Overlay.of(context).context.findRenderObject() as RenderBox?;
+      final size = overlay?.size ?? MediaQuery.sizeOf(context);
+      final localPosition =
+          overlay?.globalToLocal(Offset(menu.x, menu.y)) ??
+          Offset(menu.x, menu.y);
+      final x = localPosition.dx.clamp(8, size.width - 8).toDouble();
+      final y = localPosition.dy.clamp(8, size.height - 8).toDouble();
       final action = await showMenu<_SelectionContextAction>(
         context: context,
         position: RelativeRect.fromLTRB(x, y, size.width - x, size.height - y),
@@ -1634,29 +1638,41 @@ class _ReaderArticle extends StatelessWidget {
       );
     }
     if (bookId != null) {
-      return EpubWebView(
-        bookId: bookId!,
-        href: chapter!.href,
-        settings: settings,
-        initialScrollRatio: initialScrollRatio,
-        initialAnchor: initialAnchor,
-        initialCfi: initialCfi,
-        direction: direction,
-        navigationCommand: navigationCommand,
-        restoreRevision: restoreRevision,
-        annotations: annotations,
-        searchQuery: searchQuery,
-        focusedAnnotationId: focusedAnnotationId,
-        annotationFocusRevision: annotationFocusRevision,
-        onNavigateToHref: onNavigateToHref,
-        onScrollPositionChanged: onScrollPositionChanged,
-        onPaginationChanged: onPaginationChanged,
-        onRequestPrevious: onRequestPrevious,
-        onRequestNext: onRequestNext,
-        onNavigationCommandFinished: onNavigationCommandFinished,
-        onTextSelectionChanged: onTextSelectionChanged,
-        onSelectionContextMenu: onSelectionContextMenu,
-        onToggleControls: onToggleControls,
+      return Builder(
+        builder: (webViewContext) => EpubWebView(
+          bookId: bookId!,
+          href: chapter!.href,
+          settings: settings,
+          initialScrollRatio: initialScrollRatio,
+          initialAnchor: initialAnchor,
+          initialCfi: initialCfi,
+          direction: direction,
+          navigationCommand: navigationCommand,
+          restoreRevision: restoreRevision,
+          annotations: annotations,
+          searchQuery: searchQuery,
+          focusedAnnotationId: focusedAnnotationId,
+          annotationFocusRevision: annotationFocusRevision,
+          onNavigateToHref: onNavigateToHref,
+          onScrollPositionChanged: onScrollPositionChanged,
+          onPaginationChanged: onPaginationChanged,
+          onRequestPrevious: onRequestPrevious,
+          onRequestNext: onRequestNext,
+          onNavigationCommandFinished: onNavigationCommandFinished,
+          onTextSelectionChanged: onTextSelectionChanged,
+          onSelectionContextMenu: (menu) {
+            final box = webViewContext.findRenderObject() as RenderBox?;
+            final globalPosition = box?.localToGlobal(Offset(menu.x, menu.y));
+            onSelectionContextMenu(
+              ReaderSelectionContextMenu(
+                selection: menu.selection,
+                x: globalPosition?.dx ?? menu.x,
+                y: globalPosition?.dy ?? menu.y,
+              ),
+            );
+          },
+          onToggleControls: onToggleControls,
+        ),
       );
     }
     final blocks = chapter!.blocks;
