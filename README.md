@@ -1,70 +1,110 @@
 # TomoRead
 
-TomoRead 是一款基于 Flutter 构建的跨平台阅读器，面向本地书库与沉浸式阅读体验，并为 AI 问答、阅读指导和知识整理能力预留了清晰的架构扩展点。
+[![CI Build](https://github.com/bbdd2729/TomoRead/actions/workflows/ci.yml/badge.svg)](https://github.com/bbdd2729/TomoRead/actions/workflows/ci.yml)
+[![Release](https://github.com/bbdd2729/TomoRead/actions/workflows/release.yml/badge.svg)](https://github.com/bbdd2729/TomoRead/actions/workflows/release.yml)
 
-当前版本聚焦可靠的本地 EPUB/PDF 阅读、书库管理与阅读数据持久化。AI 能力属于后续开发重点，尚未接入在线模型服务。
+TomoRead 是一款基于 Flutter 的跨平台 AI 阅读器，面向本地 EPUB/PDF 书库、沉浸式阅读、全局知识整理和基于原文的 AI 对话。
+
+项目目前以 Windows 和 Linux 桌面端为主要开发目标。书籍、阅读位置、书签、标注、笔记、对话和阅读统计默认保存在本地；模型 API Key 通过系统安全存储管理。使用 AI 功能时，用户输入和明确附加的原文会发送到所配置的模型服务商。
 
 ## 下载
 
-前往 [Releases](../../releases) 页面下载已发布版本。发布包按平台提供：
+前往 [GitHub Releases](https://github.com/bbdd2729/TomoRead/releases) 下载已发布版本：
 
-- Windows x64：解压 ZIP 后运行 `tomoread.exe`
-- Linux x64：下载并解压 `tar.gz` 包
-- Android：下载并安装 APK；AAB 用于应用商店发布
+- Windows x64：下载 ZIP，解压后运行 `tomoread.exe`
+- Linux x64：下载并解压 `tar.gz`，运行 bundle 中的 TomoRead
+- Android：实验性支持；APK 分为 `armeabi-v7a`（32 位 ARM）和 `arm64-v8a`（64 位 ARM），AAB 用于应用商店
 
-## 功能
+> TomoRead 仍在积极开发中。升级前建议保留重要笔记的 Markdown 或 JSON 导出文件。
 
-- [x] 导入与管理本地 EPUB、PDF 文件
-- [x] EPUB 元数据、封面、目录与章节解析
-- [x] PDF 阅读与目录导航
-- [x] 桌面端与移动端自适应阅读界面
-- [x] 书库搜索、筛选、分类、标签、收藏与列表/网格视图
-- [x] 书籍详情页：编辑书名、作者、简介、标签与分类
-- [x] 书签、高亮、笔记与阅读进度持久化
-- [x] 全局与单本书阅读设置：字体、字号、行距、边距、主题与阅读方向
-- [x] 沉浸式阅读模式、可收放目录/书签面板与可拖动面板宽度
-- [x] EPUB 分页/滚动阅读、章节与页组导航、底部进度定位
-- [x] Windows、Linux、Android 自动构建与手动发布工作流
-- [ ] AI 选中文本提问与上下文对话
-- [ ] AI 阅读指导、摘要、词句解释与学习卡片
-- [ ] 云端同步、跨设备进度和笔记同步
+## 当前能力
+
+### 阅读器
+
+- [x] 本地 EPUB、PDF 导入、文件哈希去重与托管存储
+- [x] EPUB 元数据、封面、目录、阅读顺序与章节资源解析
+- [x] EPUB 分页和滚动模式、单栏/双栏排版、滚轮与点击翻页
+- [x] PDF 渲染、目录导航和阅读位置保存
+- [x] 沉浸式阅读，工具栏和目录/书签浮层不会挤压正文
+- [x] 桌面端可拖动侧栏宽度，移动端使用抽屉和底部面板
+- [x] 全局阅读设置与单本书覆盖设置
+- [x] 字体、字号、行距、页边距、配色、阅读方向和翻页方式
+- [x] 书签、高亮、彩色标注、笔记及自定义文本选择菜单
+
+### 书库与知识整理
+
+- [x] 网格/列表书库、搜索、格式筛选、分类、标签与收藏
+- [x] 批量收藏、分类和删除
+- [x] 书籍详情页以及书名、作者、简介、分类、标签编辑
+- [x] 全局笔记页：全文搜索、书籍/颜色/标签筛选与排序
+- [x] 笔记 Markdown 编辑、预览、自动保存和原文定位
+- [x] 笔记导出为 Markdown 或 JSON
+- [x] 阅读统计：日/周/月/年/全部、阅读时长、活跃天数、连续阅读和书籍排行
+
+### AI 阅读
+
+- [x] OpenAI 兼容接口配置和模型切换
+- [x] API Key 使用系统安全存储，不写入 SQLite
+- [x] 通用对话与单本书对话持久化
+- [x] 流式回复、停止生成、Markdown 展示与失败恢复
+- [x] 选中文本后询问、解释或总结，并保存可跳回原文的引用
+- [ ] 整章/整书检索增强与可控上下文组装
+- [ ] 阅读计划、学习卡片和笔记自动整理
+- [ ] 更多模型协议与本地模型接入
 
 ## 支持平台
 
-| 平台 | 状态 | 发布产物 |
+| 平台 | 状态 | Release 产物 |
 | --- | --- | --- |
-| Windows x64 | 支持 | ZIP 包 |
-| Linux x64 | 支持 | `tar.gz` 包 |
-| Android | 支持 | APK、AAB |
+| Windows x64 | 主要支持 | ZIP |
+| Linux x64 | 支持 | `tar.gz` |
+| Android | 实验性，正在修复构建与性能问题 | v7a APK、v8a APK、AAB（可选） |
 | macOS | 计划中 | - |
 | iOS | 计划中 | - |
 
-每次推送和 Pull Request 都会执行静态检查、测试及 Windows、Linux、Android 构建。手动触发 `Release` 工作流时可选择目标平台与版本号，成功后会创建对应 Git tag 和 GitHub Release。
+每次推送和 Pull Request 会执行静态分析与测试，并运行配置中的平台构建。手动执行 `Release` 工作流时可以选择 Windows、Linux、Android 中的任意组合。
 
-## 架构
+## 技术架构
 
-项目采用按职责分层的 Flutter 架构，界面状态由 Hooks Riverpod 管理，持久化使用 SQLite：
+项目使用 Hooks Riverpod 管理状态，使用 SQLite 保存结构化业务数据，使用系统安全存储保存模型密钥。功能按 UI、领域模型和数据访问职责拆分：
 
 ```text
 lib/
-├── app/        # 应用入口、主题、Provider 与全局状态
-├── domain/     # 领域模型：书籍、目录、位置、书签、标注、阅读设置
-├── data/       # SQLite、仓储、EPUB/PDF 导入、解析、解压与文件存储
-├── features/   # 书库、书籍详情、阅读器、设置等功能界面
-└── shared/     # 跨功能复用的 UI 组件与工具
+├── app/                    # 应用入口、主题、全局 Provider
+├── domain/models/          # 书籍、定位、标注、对话、阅读活动等领域模型
+├── data/
+│   ├── database/           # SQLite schema 与版本迁移
+│   ├── repositories/       # 书库、标注、对话、统计等数据访问
+│   └── services/           # 导入、EPUB、AI、导出与阅读活动追踪
+├── features/
+│   ├── library/            # 书库与书籍详情
+│   ├── reader/             # EPUB/PDF 阅读工作区
+│   ├── chat/               # AI 对话
+│   ├── notes/              # 全局笔记
+│   ├── statistics/         # 阅读统计
+│   ├── settings/           # 软件与阅读设置
+│   └── workspace/          # 响应式桌面/移动导航壳
+└── shared/                 # 跨功能复用组件
 ```
 
-### 数据流
+### 关键数据流
 
-1. 导入服务复制并校验原始书籍文件，解析 EPUB/PDF 元数据。
-2. 仓储层将书库、阅读位置、书签、标注和设置保存到 SQLite。
-3. Riverpod Provider 负责把异步数据与界面状态连接起来。
-4. EPUB 在 WebView 中渲染，PDF 使用 `pdfrx` 渲染；两者共用书签、进度与阅读设置模型。
-5. 后续 AI 服务将通过独立的数据/服务边界接入，不耦合到阅读器 UI 或数据库实现。
+1. 导入服务复制书籍到应用目录，计算哈希并解析 EPUB/PDF 元数据。
+2. Repository 将书库、阅读位置、书签、标注、对话和阅读会话写入 SQLite。
+3. Riverpod Provider 将异步仓储和服务组合为页面状态，Widget 只处理展示与交互。
+4. EPUB 使用内置 Foliate.js runtime 在 WebView 中渲染，PDF 使用 `pdfrx`；渲染器通过统一的定位模型与 Flutter 侧交互。
+5. 阅读器将有效前台阅读活动写入会话表，统计服务再按日期和书籍聚合。
+6. AI Gateway 通过 OpenAI 兼容 SSE 接口流式返回内容，对话与引用独立持久化。
 
-## 开发
+更详细的功能设计位于：
 
-环境要求：Flutter 3.44.8、对应平台的原生开发环境，以及 Windows/Linux 桌面构建所需工具链。
+- [AI 对话架构](.agent/ai-chat-architecture.md)
+- [全局笔记架构](.agent/global-notes-architecture.md)
+- [阅读统计架构](.agent/reading-statistics-architecture.md)
+
+## 本地开发
+
+当前 CI 使用 Flutter `3.44.8`。准备对应平台的 Flutter 原生工具链后执行：
 
 ```bash
 flutter pub get
@@ -73,41 +113,64 @@ flutter test
 flutter run -d windows
 ```
 
-常用构建命令：
+桌面端构建：
 
 ```bash
 flutter build windows --release
 flutter build linux --release
-flutter build apk --release
 ```
 
-Android Release 构建需要配置签名。GitHub Actions 使用仓库 Secrets 中的 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS` 和 `ANDROID_KEY_PASSWORD`。
+Android 当前为实验性平台：
+
+```bash
+flutter build apk --debug
+```
+
+## 发布流程
+
+1. 打开仓库的 **Actions > Release > Run workflow**。
+2. 填写 `x.y.z` 格式版本号，例如 `0.2.0`，不要填写前导 `v`。
+3. 选择需要构建的平台。Android 默认关闭，不影响桌面版本构建。
+4. `publish_release=false` 时只生成 Actions Artifacts，不创建 tag 或 Release，适合测试正式构建。
+5. `publish_release=true` 时，工作流会在构建成功后创建 `v0.2.0` 形式的 Git tag 和同名 GitHub Release，并上传全部所选平台产物。
+6. 发布模式下，已经存在的 tag 不会被覆盖；失败修复后，如果 tag 尚未创建，可以使用相同版本重新运行。仅构建模式可以重复使用任意合法版本号。
+
+选择 Android 构建时，需要在仓库 Secrets 中配置：
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+Android 会生成以下产物：
+
+- `TomoRead-x.y.z-android-armeabi-v7a.apk`
+- `TomoRead-x.y.z-android-arm64-v8a.apk`
+- `TomoRead-x.y.z-android.aab`
 
 ## 路线图
 
 ### 已完成
 
-- [x] 本地书库、EPUB/PDF 导入与去重
-- [x] 阅读位置、书签、笔记、标注和设置的本地持久化
-- [x] 书籍详情、书库组织、阅读器工具栏与沉浸模式
-- [x] 三平台 CI 构建和可选平台 Release 发布
+- [x] 本地 EPUB/PDF 书库与书籍详情
+- [x] EPUB 分页/滚动阅读和 PDF 阅读
+- [x] 阅读位置、书签、标注、笔记和设置持久化
+- [x] 全局笔记、筛选、编辑、导出和原文跳转
+- [x] 阅读活动采集与多维统计页面
+- [x] OpenAI 兼容 AI 对话、原文引用和安全密钥存储
+- [x] Windows/Linux 构建与可选平台 Release 工作流
 
 ### 近期
 
-- [ ] 完善 EPUB 分页器：稳定的双页组、精确定位、更多 EPUB 样式兼容
-- [ ] 扩展 PDF 阅读控制与可拖动进度定位
-- [ ] 阅读统计、搜索结果导航与导出能力
-- [ ] 完善移动端阅读交互和页面切换动画
-
-### AI 阅读能力
-
-- [ ] 配置模型提供商与安全的 API Key 管理
-- [ ] 基于选中文本、章节和书籍元数据的 AI 问答
-- [ ] 段落解释、摘要、阅读计划与学习指导
-- [ ] 笔记整理、知识卡片和可控的上下文引用
+- [ ] 继续提高复杂 EPUB 的分页、定位和样式兼容性
+- [ ] 完善 Android 构建、WebView 渲染与低端设备性能
+- [ ] 扩展 PDF 标注、文本选择和阅读控制
+- [ ] 增加统计导出、阅读目标和更丰富的趋势分析
+- [ ] 完善 AI 上下文选择、会话管理和错误诊断
 
 ### 后续
 
-- [ ] WebDAV/云端同步与冲突处理
+- [ ] 整章/整书检索增强、阅读指导和知识卡片
+- [ ] WebDAV/云端同步、备份恢复与冲突处理
 - [ ] macOS、iOS 支持
-- [ ] 插件化的阅读格式与 AI Provider 扩展
+- [ ] 可扩展的阅读格式和 AI Provider 接口
