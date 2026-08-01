@@ -267,25 +267,12 @@ class AppShell extends HookConsumerWidget {
                     );
 
               return Scaffold(
-                appBar: isReading
+                appBar: isReading || isDesktop
                     ? null
                     : AppBar(
                         toolbarHeight: 52,
                         title: const Text('TomoRead'),
                         actions: [
-                          if (isDesktop)
-                            IconButton(
-                              key: const Key('desktop-navigation-toggle'),
-                              tooltip: navigationCollapsed.value
-                                  ? 'Show navigation'
-                                  : 'Hide navigation',
-                              onPressed: toggleNavigation,
-                              icon: Icon(
-                                navigationCollapsed.value
-                                    ? Icons.keyboard_double_arrow_right
-                                    : Icons.keyboard_double_arrow_left,
-                              ),
-                            ),
                           IconButton(
                             tooltip: '搜索',
                             key: const Key('global-search'),
@@ -294,15 +281,6 @@ class AppShell extends HookConsumerWidget {
                           ),
                           const SizedBox(width: 8),
                         ],
-                        bottom: PreferredSize(
-                          preferredSize: const Size.fromHeight(40),
-                          child: _WorkspaceTabBar(
-                            tabs: tabs.value,
-                            activeTabId: activeTabId.value,
-                            onSelected: (tab) => activeTabId.value = tab.id,
-                            onClosed: closeTab,
-                          ),
-                        ),
                       ),
                 drawer: isReading || isDesktop
                     ? null
@@ -345,10 +323,34 @@ class AppShell extends HookConsumerWidget {
                                 onAddBook: onImportBooks,
                               ),
                             ),
-                          Expanded(child: animatedContent),
+                          const VerticalDivider(width: 1),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                _DesktopWorkspaceHeader(
+                                  tabs: tabs.value,
+                                  activeTabId: activeTabId.value,
+                                  navigationCollapsed:
+                                      navigationCollapsed.value,
+                                  onSelected: (tab) =>
+                                      activeTabId.value = tab.id,
+                                  onClosed: closeTab,
+                                  onToggleNavigation: toggleNavigation,
+                                  onSearch: openLibrarySearch,
+                                ),
+                                Expanded(child: animatedContent),
+                              ],
+                            ),
+                          ),
                         ],
                       )
                     : animatedContent,
+                bottomNavigationBar: isReading || isDesktop
+                    ? null
+                    : _MobileNavigationBar(
+                        selected: activeDestination,
+                        onSelected: openDestination,
+                      ),
               );
             },
           ),
@@ -364,6 +366,116 @@ class _OpenLibrarySearchIntent extends Intent {
 
 class _ToggleNavigationIntent extends Intent {
   const _ToggleNavigationIntent();
+}
+
+class _DesktopWorkspaceHeader extends StatelessWidget {
+  const _DesktopWorkspaceHeader({
+    required this.tabs,
+    required this.activeTabId,
+    required this.navigationCollapsed,
+    required this.onSelected,
+    required this.onClosed,
+    required this.onToggleNavigation,
+    required this.onSearch,
+  });
+
+  final List<WorkspaceTab> tabs;
+  final String activeTabId;
+  final bool navigationCollapsed;
+  final ValueChanged<WorkspaceTab> onSelected;
+  final ValueChanged<WorkspaceTab> onClosed;
+  final VoidCallback onToggleNavigation;
+  final VoidCallback onSearch;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: SizedBox(
+        height: 56,
+        child: Row(
+          children: [
+            IconButton(
+              key: const Key('desktop-navigation-toggle'),
+              tooltip: navigationCollapsed ? '展开侧边栏' : '收起侧边栏',
+              onPressed: onToggleNavigation,
+              icon: Icon(
+                navigationCollapsed
+                    ? Icons.keyboard_double_arrow_right
+                    : Icons.keyboard_double_arrow_left,
+              ),
+            ),
+            Expanded(
+              child: _WorkspaceTabBar(
+                tabs: tabs,
+                activeTabId: activeTabId,
+                onSelected: onSelected,
+                onClosed: onClosed,
+              ),
+            ),
+            IconButton(
+              tooltip: '搜索书库',
+              key: const Key('global-search'),
+              onPressed: onSearch,
+              icon: const Icon(Icons.search),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileNavigationBar extends StatelessWidget {
+  const _MobileNavigationBar({
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final AppDestination selected;
+  final ValueChanged<AppDestination> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedIndex = _mobileNavigationDestinations.indexOf(selected);
+    return NavigationBar(
+      selectedIndex: selectedIndex < 0 ? 0 : selectedIndex,
+      onDestinationSelected: (index) =>
+          onSelected(_mobileNavigationDestinations[index]),
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.local_library_outlined),
+          selectedIcon: Icon(Icons.local_library),
+          label: '书库',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.forum_outlined),
+          selectedIcon: Icon(Icons.forum),
+          label: 'AI 对话',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.sticky_note_2_outlined),
+          selectedIcon: Icon(Icons.sticky_note_2),
+          label: '笔记',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.bar_chart_outlined),
+          selectedIcon: Icon(Icons.bar_chart),
+          label: '统计',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.settings_outlined),
+          selectedIcon: Icon(Icons.settings),
+          label: '设置',
+        ),
+      ],
+    );
+  }
 }
 
 class _WorkspaceContent extends StatelessWidget {
@@ -517,15 +629,34 @@ class _AppNavigationRail extends StatelessWidget {
     final selectedIndex = selected.index < 5 ? selected.index : null;
     return NavigationRail(
       extended: extended,
-      minExtendedWidth: 220,
+      minExtendedWidth: 236,
       selectedIndex: selectedIndex,
       leading: Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: FloatingActionButton.small(
-          tooltip: '添加书籍',
-          onPressed: onAddBook,
-          child: const Icon(Icons.add),
-        ),
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+        child: extended
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _TomoReadBrand(compact: false),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      onPressed: onAddBook,
+                      icon: const Icon(Icons.add),
+                      label: const Text('导入书籍'),
+                    ),
+                  ),
+                ],
+              )
+            : Tooltip(
+                message: '导入书籍',
+                child: IconButton.filledTonal(
+                  onPressed: onAddBook,
+                  icon: const Icon(Icons.add),
+                ),
+              ),
       ),
       trailing: extended
           ? Expanded(
@@ -590,11 +721,8 @@ class _AppNavigationDrawer extends StatelessWidget {
       onDestinationSelected: (index) => onSelected(_drawerDestinations[index]),
       children: const [
         Padding(
-          padding: EdgeInsets.fromLTRB(28, 20, 16, 12),
-          child: Text(
-            'TomoRead',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
-          ),
+          padding: EdgeInsets.fromLTRB(24, 24, 16, 16),
+          child: _TomoReadBrand(compact: false),
         ),
         NavigationDrawerDestination(
           icon: Icon(Icons.local_library_outlined),
@@ -632,6 +760,68 @@ class _AppNavigationDrawer extends StatelessWidget {
   }
 }
 
+class _TomoReadBrand extends StatelessWidget {
+  const _TomoReadBrand({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    if (compact) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.primaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(Icons.auto_stories, color: colors.onPrimaryContainer),
+        ),
+      );
+    }
+    return SizedBox(
+      width: double.infinity,
+      child: Row(
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: SizedBox(
+              width: 38,
+              height: 38,
+              child: Icon(Icons.auto_stories, color: colors.onPrimaryContainer),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'TomoRead',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                Text(
+                  '阅读与思考',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 const _navigationDestinations = [
   AppDestination.library,
   AppDestination.chat,
@@ -642,6 +832,14 @@ const _navigationDestinations = [
 
 const _drawerDestinations = [
   ..._navigationDestinations,
+  AppDestination.settings,
+];
+
+const _mobileNavigationDestinations = [
+  AppDestination.library,
+  AppDestination.chat,
+  AppDestination.notes,
+  AppDestination.statistics,
   AppDestination.settings,
 ];
 
