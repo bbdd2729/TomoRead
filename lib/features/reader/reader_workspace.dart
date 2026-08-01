@@ -949,7 +949,7 @@ class _ReaderToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      color: Theme.of(context).colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
@@ -2109,7 +2109,7 @@ class _ReaderFooter extends StatelessWidget {
         : (chapterIndex + chapterProgress.clamp(0, 1)) / chapterCount;
     return Material(
       key: const Key('reader-footer'),
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      color: Theme.of(context).colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
         child: Row(

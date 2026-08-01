@@ -193,7 +193,7 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                 visible: controlsVisible.value,
                 hiddenOffset: const Offset(0, -1),
                 child: Material(
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  color: Theme.of(context).colorScheme.surface,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -262,7 +262,7 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                 hiddenOffset: const Offset(0, 1),
                 child: Material(
                   key: const Key('pdf-reader-footer'),
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  color: Theme.of(context).colorScheme.surface,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,

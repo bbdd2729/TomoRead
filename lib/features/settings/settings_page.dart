@@ -41,7 +41,7 @@ class SettingsPage extends HookWidget {
         final compact = constraints.maxWidth < 840;
         if (compact) {
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+            padding: const EdgeInsets.fromLTRB(20, 28, 20, 40),
             children: [
               const PageHeader(title: '设置', subtitle: '调整应用外观和默认阅读偏好。'),
               const SizedBox(height: 24),
@@ -71,7 +71,7 @@ class SettingsPage extends HookWidget {
         return Row(
           children: [
             SizedBox(
-              width: 232,
+              width: 248,
               child: Material(
                 color: Theme.of(context).colorScheme.surface,
                 child: _SettingsNavigation(
@@ -83,7 +83,7 @@ class SettingsPage extends HookWidget {
             const VerticalDivider(width: 1),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
+                padding: const EdgeInsets.fromLTRB(40, 36, 40, 56),
                 children: [
                   PageHeader(
                     title: _sectionTitle(section.value),
@@ -151,10 +151,10 @@ class _NavigationItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 140),
+      duration: const Duration(milliseconds: 160),
       margin: const EdgeInsets.symmetric(vertical: 2),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         border: Border(
           left: BorderSide(
             color: selected ? colorScheme.primary : Colors.transparent,
@@ -164,7 +164,7 @@ class _NavigationItem extends StatelessWidget {
       ),
       child: Material(
         color: selected ? colorScheme.surfaceContainerLow : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         child: ListTile(
           selected: false,
           leading: Icon(icon, color: selected ? colorScheme.primary : null),
