@@ -240,7 +240,10 @@ void main() {
           home: ReaderWorkspace(
             bookId: 'book-a',
             title: 'Test book',
-            readingSettings: ReadingSettings(),
+            readingSettings: ReadingSettings(
+              layoutMode: ReaderLayoutMode.paginated,
+              doubleColumn: false,
+            ),
             initialControlsVisible: true,
           ),
         ),
@@ -254,7 +257,13 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('book-reading-margin')), findsOneWidget);
-    expect(find.byKey(const Key('book-reading-double-column')), findsOneWidget);
+    final doubleColumn = find.byKey(const Key('book-reading-double-column'));
+    expect(doubleColumn, findsOneWidget);
+    final doubleColumnTile = tester.widget<SwitchListTile>(doubleColumn);
+    expect(doubleColumnTile.onChanged, isNotNull);
+    doubleColumnTile.onChanged!(true);
+    await tester.pump();
+    expect(tester.widget<SwitchListTile>(doubleColumn).value, isTrue);
   });
 
   testWidgets('filters the library by title or author', (tester) async {

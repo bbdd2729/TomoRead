@@ -91,7 +91,7 @@ void main() {
         await File(
           path.join(session.runtimeDirectoryPath, '.runtime-version'),
         ).readAsString(),
-        '22',
+        '23',
       );
     },
   );
@@ -102,6 +102,15 @@ void main() {
     );
 
     expect(license, contains('MIT License'));
+  });
+
+  test('bundles the safe annotation locator parser', () async {
+    final runtime = await rootBundle.loadString(
+      'assets/epub_reader_runtime/tomoread-reader.js',
+    );
+
+    expect(runtime, contains('rangeForCfi(doc, locator.slice(4))'));
+    expect(runtime, isNot(contains('annotation.loc.slice')));
   });
 }
 

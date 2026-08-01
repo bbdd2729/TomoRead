@@ -2285,17 +2285,11 @@ class _BookReadingSettingsDialog extends HookWidget {
                 key: const Key('book-reading-double-column'),
                 contentPadding: EdgeInsets.zero,
                 value: settings.value.doubleColumn,
-                onChanged: settings.value.layoutMode == ReaderLayoutMode.scroll
-                    ? (value) => settings.value = settings.value.copyWith(
-                        doubleColumn: value,
-                      )
-                    : null,
-                title: const Text('双栏阅读'),
-                subtitle: Text(
-                  settings.value.layoutMode == ReaderLayoutMode.scroll
-                      ? '宽屏时显示双栏排版。'
-                      : '分页模式固定使用单栏排版。',
+                onChanged: (value) => settings.value = settings.value.copyWith(
+                  doubleColumn: value,
                 ),
+                title: const Text('宽屏双栏'),
+                subtitle: const Text('分页阅读在宽屏显示双栏，窄屏自动使用单栏。'),
               ),
               SwitchListTile(
                 key: const Key('book-reading-tap-to-turn-pages'),
@@ -2304,7 +2298,7 @@ class _BookReadingSettingsDialog extends HookWidget {
                 onChanged: (value) => settings.value = settings.value.copyWith(
                   tapToTurnPages: value,
                 ),
-                title: const Text('点击区域翻页（实验性）'),
+                title: const Text('点击正文翻页'),
                 subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
               ),
             ],

@@ -368,15 +368,9 @@ class _ReadingDefaultsSettings extends StatelessWidget {
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: settings.doubleColumn,
-        onChanged: settings.layoutMode == ReaderLayoutMode.scroll
-            ? (value) => onChanged(settings.copyWith(doubleColumn: value))
-            : null,
-        title: const Text('双栏阅读'),
-        subtitle: Text(
-          settings.layoutMode == ReaderLayoutMode.scroll
-              ? '宽屏时使用双栏排版。'
-              : '分页模式固定使用单栏排版。',
-        ),
+        onChanged: (value) => onChanged(settings.copyWith(doubleColumn: value)),
+        title: const Text('宽屏双栏'),
+        subtitle: const Text('分页阅读在宽屏显示双栏，窄屏自动使用单栏。'),
       ),
       const SizedBox(height: 8),
       SwitchListTile(

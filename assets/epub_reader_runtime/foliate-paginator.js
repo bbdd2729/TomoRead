@@ -386,7 +386,14 @@ const setStylesImportant = (el, styles) => {
 }
 
 class View {
-    #observer = new ResizeObserver(() => this.expand())
+    #expandFrame = 0
+    #observer = new ResizeObserver(() => {
+        if (this.#expandFrame) return
+        this.#expandFrame = requestAnimationFrame(() => {
+            this.#expandFrame = 0
+            this.expand()
+        })
+    })
     #element = document.createElement('div')
     #iframe = document.createElement('iframe')
     #contentRange = document.createRange()
@@ -399,6 +406,7 @@ class View {
     #layout = {}
     #contentPages = 0
     #bgImageSize = null
+    #loaded = false
     fontReady = Promise.resolve()
     constructor({ container, onExpand }) {
         this.container = container
@@ -435,11 +443,26 @@ class View {
     get contentPages() {
         return this.#contentPages
     }
+    get loaded() {
+        return this.#loaded
+    }
     async load(src, data, afterLoad, beforeRender) {
         if (typeof src !== 'string') throw new Error(`${src} is not string`)
-        return new Promise(resolve => {
-            this.#iframe.addEventListener('load', async () => {
-                const doc = this.document
+        this.#loaded = false
+        return new Promise((resolve, reject) => {
+            let loadTimer
+            const onLoad = () => {
+                const loadedDocument = this.document
+                // A newly-connected iframe can emit its initial about:blank
+                // load after this listener is registered. Keep waiting for the
+                // EPUB resource instead of consuming that event as the chapter.
+                if (!data && loadedDocument?.URL === 'about:blank'
+                    && src !== 'about:blank') return
+                this.#iframe.removeEventListener('load', onLoad)
+                clearTimeout(loadTimer)
+                void (async () => {
+                const doc = loadedDocument
+                this.#loaded = true
                 afterLoad?.(doc)
 
                 this.#iframe.setAttribute('aria-label', doc.title)
@@ -493,7 +516,10 @@ class View {
                 // Awaiting the background image yields control, so the view may
                 // have been torn down or reloaded meanwhile — don't render into
                 // a stale document.
-                if (this.document !== doc) return resolve()
+                if (this.document !== doc) {
+                    this.#loaded = false
+                    return
+                }
                 this.#iframe.style.display = 'none'
 
                 this.#vertical = vertical
@@ -511,8 +537,21 @@ class View {
                 // until the bug is fixed we can at least account for font load
                 this.fontReady = doc.fonts.ready.then(() => this.expand())
 
-                resolve()
-            }, { once: true })
+                })().then(resolve, error => {
+                    this.#loaded = false
+                    reject(error)
+                })
+            }
+            this.#iframe.addEventListener('load', onLoad)
+            loadTimer = setTimeout(() => {
+                this.#iframe.removeEventListener('load', onLoad)
+                this.#loaded = false
+                reject(new Error(`Timed out loading EPUB section: ${src}`))
+            }, 10000)
+            // Some embedded Chromium builds defer loading display:none
+            // iframes. The paginator container is hidden during primary
+            // navigation, so making the iframe loadable cannot flash content.
+            this.#iframe.style.display = 'block'
             if (data) {
                 this.#iframe.srcdoc = data
             } else {
@@ -724,12 +763,21 @@ class View {
             // which seem to be supported only by WebKit and only for horizontal writing
             const contentStart = this.#vertical ? 0
                 : this.#rtl ? rootRect.right - contentRect.right : contentRect.left - rootRect.left
-            const contentSize = (contentStart + contentRect[side]) * this.#zoom
+            const rangeSize = (contentStart + contentRect[side]) * this.#zoom
+            const body = this.document.body
+            const scrollSize = side === 'width'
+                ? Math.max(documentElement.scrollWidth, body?.scrollWidth ?? 0)
+                : Math.max(documentElement.scrollHeight, body?.scrollHeight ?? 0)
+            // Chromium can return only the first visible column for a Range.
+            // The document overflow size is the authoritative fallback used by
+            // Lumina as well, after the column styles have been applied.
+            const contentSize = Math.max(rangeSize, scrollSize)
             // Size content by individual columns, not full spreads.
             // This allows adjacent sections to share a spread when a
             // section doesn't fill all available columns.
             const columnSize = this.#size / this.#columnCount
-            const pageCount = Math.ceil(contentSize / columnSize)
+            const pageCount = Math.max(
+                1, Math.ceil(Math.max(0, contentSize - 0.5) / columnSize))
             this.#contentPages = pageCount
             const expandedSize = pageCount * columnSize
             this.#element.style.padding = '0'
@@ -946,6 +994,8 @@ class View {
     }
     destroy() {
         if (this.document?.body) this.#observer.unobserve(this.document.body)
+        if (this.#expandFrame) cancelAnimationFrame(this.#expandFrame)
+        this.#loaded = false
         this.destroyLoupe()
     }
 }
@@ -1936,7 +1986,7 @@ export class Paginator extends HTMLElement {
             rtl: this.#rtl,
         })
         for (const [, view] of this.#views) {
-            if (view.document) view.render(layout)
+            if (view.loaded) view.render(layout)
         }
         // Scroll synchronously to prevent visible layout shift during resize.
         // RAF deferral is only needed for initial display and mode switches
@@ -1996,6 +2046,17 @@ export class Paginator extends HTMLElement {
         if (!primaryView) return 0
         const viewSize = primaryView.element.getBoundingClientRect()[this.sideProp]
         return Math.round(viewSize / this.size)
+    }
+    get sectionPageCount() {
+        if (this.scrolled) return 1
+        const textPages = this.#primaryView?.contentPages ?? 0
+        return Math.max(1, Math.ceil(textPages / this.columnCount))
+    }
+    get sectionPageIndex() {
+        if (this.scrolled || !this.#primaryView) return 0
+        const pagesBeforePrimary = this.#getPagesBeforeView(this.#primaryIndex)
+        const localPage = Math.max(0, this.#renderedPage - pagesBeforePrimary)
+        return Math.min(this.sectionPageCount - 1, localPage)
     }
     get containerPosition() {
         return this.#container[this.scrollProp]
@@ -2417,9 +2478,8 @@ export class Paginator extends HTMLElement {
         const pagesBeforePrimary = this.#getPagesBeforeView(this.#primaryIndex)
         const textPages = primaryView.contentPages
         if (!textPages) return
-        // textPages is in column units; convert to spread page for scrolling
-        const newColumn = Math.round(anchor * (textPages - 1))
-        const newSpreadPage = Math.floor(newColumn / this.columnCount)
+        const spreadCount = Math.max(1, Math.ceil(textPages / this.columnCount))
+        const newSpreadPage = Math.round(anchor * (spreadCount - 1))
         await this.#scrollToPage(pagesBeforePrimary + newSpreadPage, reason, smooth)
     }
     // Get the pixel offset of a view within the container
@@ -2548,8 +2608,8 @@ export class Paginator extends HTMLElement {
             const pageCount = Math.max(1, Math.ceil(textPages / this.columnCount))
             pageDetail = {
                 index: this.#primaryIndex,
-                fraction: textPages > 0
-                    ? Math.max(0, Math.min(1, (localPage * this.columnCount) / textPages))
+                fraction: pageCount > 1
+                    ? Math.max(0, Math.min(1, localPage / (pageCount - 1)))
                     : 0,
                 pageIndex: Math.min(pageCount - 1, localPage),
                 pageCount,
@@ -2567,27 +2627,34 @@ export class Paginator extends HTMLElement {
         const index = visibleIndex ?? this.#primaryIndex
         const detail = { reason, range, index }
         if (this.scrolled) {
-            const primaryOffset = this.#getViewOffset(index)
-            const primarySize = primaryView
-                ? primaryView.element.getBoundingClientRect()[this.sideProp] : this.#renderedViewSize
-            detail.fraction = primarySize > 0
-                ? Math.max(0, Math.min(1, (this.#renderedStart - primaryOffset) / primarySize)) : 0
+            const activeOffset = this.#getViewOffset(index)
+            const activeView = this.#views.get(index) ?? primaryView
+            const activeSize = activeView
+                ? activeView.element.getBoundingClientRect()[this.sideProp] : this.#renderedViewSize
+            detail.fraction = activeSize > 0
+                ? Math.max(0, Math.min(1, (this.#renderedStart - activeOffset) / activeSize)) : 0
         } else if (this.#renderedPages > 0 && primaryView) {
             const page = this.#renderedPage
             const pagesBeforePrimary = this.#getPagesBeforeView(index)
-            const textPages = primaryView.contentPages
+            const activeView = this.#views.get(index) ?? primaryView
+            const textPages = activeView.contentPages
             this.#header.style.visibility = page > 0 ? 'visible' : 'hidden'
             // page is in spread units, textPages is in column units
             const localPage = page - pagesBeforePrimary
-            const localColumn = localPage * this.columnCount
-            detail.fraction = textPages > 0 ? Math.max(0, Math.min(1, localColumn / textPages)) : 0
+            const pageCount = Math.max(1, Math.ceil(textPages / this.columnCount))
+            detail.fraction = pageCount > 1
+                ? Math.max(0, Math.min(1, localPage / (pageCount - 1))) : 0
             detail.size = textPages > 0 ? this.columnCount / textPages : 1
             // `page` and `pages` below are public convenience getters. They
             // can describe the entire currently-rendered strip when adjacent
             // sections are preloaded, so expose the exact primary-section
             // spread position for host reader chrome instead.
-            detail.pageIndex = pageDetail?.pageIndex ?? Math.max(0, localPage)
-            detail.pageCount = pageDetail?.pageCount ?? Math.max(1, Math.ceil(textPages / this.columnCount))
+            detail.pageIndex = index === this.#primaryIndex
+                ? pageDetail?.pageIndex ?? Math.max(0, localPage)
+                : Math.max(0, Math.min(pageCount - 1, localPage))
+            detail.pageCount = index === this.#primaryIndex
+                ? pageDetail?.pageCount ?? pageCount
+                : pageCount
             if (reason === 'container-scroll' && localPage === 0) return
         }
         // Update per-column backgrounds for the current scroll position

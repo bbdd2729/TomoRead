@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '22'
+const runtimeVersion = '23'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -12,6 +12,7 @@ let focusedAnnotationId
 let searchQuery = ''
 let pageTransition = 'slide'
 let tapNavigationEnabled = false
+let readingDirection = 'ltr'
 let turnLocked = false
 let currentSectionIndex = 0
 let currentRatio = 0
@@ -50,6 +51,7 @@ const applySettings = settings => {
   if (!paginator) return
   pageTransition = settings.pageTransition ?? 'slide'
   tapNavigationEnabled = settings.tapNavigationEnabled === true
+  readingDirection = settings.direction === 'rtl' ? 'rtl' : 'ltr'
   paginator.setAttribute('flow', settings.flow ?? 'paginated')
   paginator.setAttribute('max-column-count', String(settings.columnCount ?? 1))
   paginator.setAttribute('max-inline-size', `${settings.maxInlineSize ?? 760}px`)
@@ -95,6 +97,7 @@ const runPageTransition = async (direction, operation) => {
 }
 
 const turnUnsafe = async direction => {
+  const relocationRevisionAtStart = measuredRelocationRevision
   await runPageTransition(
     direction,
     () => direction === 'previous' ? paginator.prev() : paginator.next(),
@@ -103,7 +106,7 @@ const turnUnsafe = async direction => {
   // scrolls. Sending a synthetic snapshot here can report the old ratio and
   // snap Flutter's progress slider back to the chapter start.
   if (paginator?.getAttribute('flow') !== 'scrolled') {
-    await reportPaginatorPosition()
+    await reportPaginatorPosition({ relocationRevisionAtStart })
   }
 }
 
@@ -293,11 +296,14 @@ const emitRelocation = detail => {
     cfi: cfiFor(detail.range),
   }
   if (message.flow !== 'scrolled') {
-    const fallbackPageCount = Math.max(1, paginator.pages || 1)
+    const fallbackPageCount = Math.max(
+      1,
+      paginator.sectionPageCount || paginator.pages || 1,
+    )
     const pageCount = Math.max(1, detail.pageCount ?? fallbackPageCount)
     const pageIndex = Math.max(0, Math.min(
       pageCount - 1,
-      detail.pageIndex ?? paginator.page ?? 0,
+      detail.pageIndex ?? paginator.sectionPageIndex ?? paginator.page ?? 0,
     ))
     currentPageIndex = pageIndex
     currentPageCount = pageCount
@@ -328,7 +334,17 @@ const emitPagePosition = detail => {
   })
 }
 
-const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve))
+const nextFrame = () => new Promise(resolve => {
+  let completed = false
+  const finish = () => {
+    if (completed) return
+    completed = true
+    window.clearTimeout(timeout)
+    resolve()
+  }
+  const timeout = window.setTimeout(finish, 80)
+  requestAnimationFrame(finish)
+})
 
 const reportPaginatorPosition = async ({
   fallbackIndex,
@@ -345,10 +361,12 @@ const reportPaginatorPosition = async ({
     : fallbackIndex ?? currentSectionIndex
   const section = getSections()[index]
   if (!section) return
+  // Preserve the exact Range/CFI relocation emitted by Foliate. A synthetic
+  // page snapshot would otherwise overwrite annotation navigation with a
+  // locator that has the right page but no CFI.
+  if (relocationRevisionAtStart != null
+      && measuredRelocationRevision > relocationRevisionAtStart) return
   if (paginator.getAttribute('flow') === 'scrolled') {
-    // CFI navigation emits an exact relocation from Foliate. Do not overwrite
-    // that measured chapter ratio with the command's default ratio (usually 0).
-    if (measuredRelocationRevision > (relocationRevisionAtStart ?? -1)) return
     emitRelocation({
       index,
       fraction: fallbackRatio ?? currentRatio,
@@ -356,12 +374,15 @@ const reportPaginatorPosition = async ({
     })
     return
   }
-  const size = paginator.size || 0
-  const measuredPages = size > 0 ? Math.ceil(paginator.viewSize / size) : 0
-  const pageCount = Math.max(1, paginator.pages || 0, measuredPages)
+  const pageCount = Math.max(
+    1,
+    paginator.sectionPageCount || paginator.pages || 0,
+  )
   const pageIndex = Math.max(0, Math.min(
     pageCount - 1,
-    Number.isFinite(paginator.page) ? paginator.page : currentPageIndex,
+    Number.isFinite(paginator.sectionPageIndex)
+      ? paginator.sectionPageIndex
+      : currentPageIndex,
   ))
   const ratio = pageCount > 1
     ? pageIndex / (pageCount - 1)
@@ -396,15 +417,20 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
       return
     }
     if (doc.getSelection()?.toString().trim()) return
-    const ratio = event.clientX / doc.defaultView.innerWidth
+    const readerRect = paginator?.getBoundingClientRect()
+    const frameRect = doc.defaultView?.frameElement?.getBoundingClientRect()
+    const viewportX = (frameRect?.left ?? readerRect?.left ?? 0) + event.clientX
+    const ratio = readerRect?.width > 0
+      ? Math.max(0, Math.min(1, (viewportX - readerRect.left) / readerRect.width))
+      : .5
     if (!tapNavigationEnabled) {
       if (ratio >= 0.25 && ratio <= 0.75) postMessage({ type: 'readerControls' })
       return
     }
     const direction = ratio <= 0.25
-      ? 'previousPage'
+      ? readingDirection === 'rtl' ? 'nextPage' : 'previousPage'
       : ratio >= 0.75
-        ? 'nextPage'
+        ? readingDirection === 'rtl' ? 'previousPage' : 'nextPage'
         : null
     if (!direction) {
       postMessage({ type: 'readerControls' })
@@ -519,10 +545,10 @@ const goToHrefUnsafe = async (href, ratio = 0, anchor, cfi) => {
 
 const goToPageUnsafe = async pageIndex => {
   if (!paginator) return
-  const pages = Math.max(1, paginator.pages || 1)
+  const pages = Math.max(1, paginator.sectionPageCount || paginator.pages || 1)
   const fraction = pages <= 1 ? 0 : Math.max(0, Math.min(1, pageIndex / (pages - 1)))
   await runPageTransition(
-    pageIndex < paginator.page ? 'previous' : 'next',
+    pageIndex < (paginator.sectionPageIndex ?? 0) ? 'previous' : 'next',
     () => paginator.goTo({ index: currentSectionIndex, anchor: fraction }),
   )
 }
@@ -560,7 +586,9 @@ const executeCommand = command => {
       }
       postMessage({ type: 'commandCompleted', id, command: type })
     } catch (error) {
-      postMessage({ type: 'commandFailed', id, command: type, message: String(error?.message ?? error) })
+      const message = String(error?.message ?? error)
+      postMessage({ type: 'commandFailed', id, command: type, message })
+      if (type === 'open') postMessage({ type: 'runtimeError', message })
     }
   })
   return commandTail
