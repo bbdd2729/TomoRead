@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '20'
+const runtimeVersion = '21'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -17,6 +17,7 @@ let currentSectionIndex = 0
 let currentRatio = 0
 let currentPageIndex = 0
 let currentPageCount = 1
+let measuredRelocationRevision = 0
 let commandTail = Promise.resolve()
 let nextCommandId = 1
 
@@ -275,6 +276,7 @@ const applySelectionListener = (doc, index) => {
 const emitRelocation = detail => {
   const section = getSections()[detail.index]
   if (!section || !paginator) return
+  measuredRelocationRevision += 1
   currentSectionIndex = detail.index
   currentRatio = Number.isFinite(detail.fraction) ? detail.fraction : 0
   const message = {
@@ -324,7 +326,11 @@ const emitPagePosition = detail => {
 
 const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve))
 
-const reportPaginatorPosition = async ({ fallbackIndex, fallbackRatio } = {}) => {
+const reportPaginatorPosition = async ({
+  fallbackIndex,
+  fallbackRatio,
+  relocationRevisionAtStart,
+} = {}) => {
   // The paginator updates its iframe dimensions after the page animation.
   // Wait two frames so this snapshot reflects the final rendered spread.
   await nextFrame()
@@ -336,6 +342,9 @@ const reportPaginatorPosition = async ({ fallbackIndex, fallbackRatio } = {}) =>
   const section = getSections()[index]
   if (!section) return
   if (paginator.getAttribute('flow') === 'scrolled') {
+    // CFI navigation emits an exact relocation from Foliate. Do not overwrite
+    // that measured chapter ratio with the command's default ratio (usually 0).
+    if (measuredRelocationRevision > (relocationRevisionAtStart ?? -1)) return
     emitRelocation({
       index,
       fraction: fallbackRatio ?? currentRatio,
@@ -492,8 +501,13 @@ const goToHrefUnsafe = async (href, ratio = 0, anchor, cfi) => {
   // back to the first spine item in that case.
   currentSectionIndex = index
   const fragment = anchor || href.split('#')[1]
+  const relocationRevisionAtStart = measuredRelocationRevision
   await paginator.goTo({ index, anchor: anchorFor(fragment, ratio, cfi) })
-  await reportPaginatorPosition({ fallbackIndex: index, fallbackRatio: ratio })
+  await reportPaginatorPosition({
+    fallbackIndex: index,
+    fallbackRatio: ratio,
+    relocationRevisionAtStart,
+  })
 }
 
 const goToPageUnsafe = async pageIndex => {
