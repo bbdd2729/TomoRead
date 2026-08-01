@@ -57,6 +57,24 @@ void main() {
     expect(saved.locator, isNull);
   });
 
+  test('loads the saved progress and last update time', () async {
+    final book = _book();
+    await repository.saveImportedPdfBook(book);
+    await repository.updateReadingPosition(
+      bookId: book.id,
+      chapterIndex: 3,
+      progress: 0.35,
+      locator: 'pdf:4',
+    );
+
+    final saved = await repository.findById(book.id);
+
+    expect(saved!.chapterIndex, 3);
+    expect(saved.progress, 0.35);
+    expect(saved.locator, 'pdf:4');
+    expect(saved.updatedAt, isNotNull);
+  });
+
   test('updates favorite and category values for multiple books', () async {
     final first = _book();
     final second = _book(id: 'book-second', hash: 'hash-second');

@@ -10,6 +10,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../app/providers.dart';
 import '../../domain/models/epub_manifest.dart';
+import '../../domain/models/epub_location.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_settings.dart';
@@ -182,16 +183,21 @@ class AndroidEpubWebView extends HookConsumerWidget {
         runtimeMessage['type'] == 'runtimeRelocate') {
       final messageHref = runtimeMessage['href'];
       final ratio = runtimeMessage['ratio'];
+      final pageIndex = runtimeMessage['pageIndex'];
+      final pageCount = runtimeMessage['pageCount'];
       if (messageHref is String && ratio is num) {
         onScrollPositionChanged(
           messageHref,
-          ratio.toDouble(),
+          EpubLocation.normalizedRelocationRatio(
+            reportedRatio: ratio.toDouble(),
+            paginated: runtimeMessage['flow'] != 'scrolled',
+            pageIndex: pageIndex is num ? pageIndex.toInt() : null,
+            pageCount: pageCount is num ? pageCount.toInt() : null,
+          ),
           runtimeMessage['anchor'] as String?,
           runtimeMessage['cfi'] as String?,
         );
       }
-      final pageIndex = runtimeMessage['pageIndex'];
-      final pageCount = runtimeMessage['pageCount'];
       if (runtimeMessage['flow'] != 'scrolled' &&
           pageIndex is num &&
           pageCount is num) {

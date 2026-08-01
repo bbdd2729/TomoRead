@@ -28,4 +28,25 @@ void main() {
     bookmarks = await repository.listForBook(bookmark.bookId);
     expect(bookmarks.single.label, isNull);
   });
+
+  test('stores multiple locations for the same book', () async {
+    await repository.add(
+      bookId: 'book-id',
+      locator: 'epub:v3|0|0.00000||',
+      chapterTitle: 'Chapter 1',
+    );
+    await repository.add(
+      bookId: 'book-id',
+      locator: 'epub:v3|0|0.25000||',
+      chapterTitle: 'Chapter 1',
+    );
+
+    final bookmarks = await repository.listForBook('book-id');
+
+    expect(bookmarks, hasLength(2));
+    expect(
+      bookmarks.map((bookmark) => bookmark.locator),
+      containsAll(['epub:v3|0|0.00000||', 'epub:v3|0|0.25000||']),
+    );
+  });
 }

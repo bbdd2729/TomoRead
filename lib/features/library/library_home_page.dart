@@ -212,6 +212,7 @@ class LibraryHomePage extends HookConsumerWidget {
           tag: tagFilter.value,
           favoritesOnly: favoritesOnly.value,
         );
+        final continueReadingBook = _continueReadingBook(visibleBooks);
         return LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 600;
@@ -301,8 +302,8 @@ class LibraryHomePage extends HookConsumerWidget {
                   const _NoMatchingBooks()
                 else ...[
                   _ContinueReadingCard(
-                    book: visibleBooks.first,
-                    onOpenReader: () => onOpenReader(visibleBooks.first),
+                    book: continueReadingBook!,
+                    onOpenReader: () => onOpenReader(continueReadingBook),
                   ),
                   const SizedBox(height: 24),
                   Row(
@@ -448,6 +449,18 @@ List<LibraryBook> _filterAndSortBooks(
     ),
   });
   return filtered;
+}
+
+LibraryBook? _continueReadingBook(List<LibraryBook> books) {
+  if (books.isEmpty) return null;
+  final startedBooks =
+      books.where((book) => book.progress > 0 || book.locator != null).toList()
+        ..sort(
+          (first, second) => (second.updatedAt ?? second.importedAt).compareTo(
+            first.updatedAt ?? first.importedAt,
+          ),
+        );
+  return startedBooks.isEmpty ? books.first : startedBooks.first;
 }
 
 const _allCategories = '__all_categories__';
@@ -852,6 +865,7 @@ class _ContinueReadingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Material(
+      key: Key('continue-reading-${book.id}'),
       color: colors.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),

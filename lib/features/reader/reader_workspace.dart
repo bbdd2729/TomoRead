@@ -43,6 +43,18 @@ enum _SelectionContextAction {
 
 void _noopReaderAction() {}
 
+class _PendingReaderProgress {
+  const _PendingReaderProgress({
+    required this.chapterIndex,
+    required this.progress,
+    required this.locator,
+  });
+
+  final int chapterIndex;
+  final double progress;
+  final String locator;
+}
+
 class _ReaderPreviousIntent extends Intent {
   const _ReaderPreviousIntent();
 }
@@ -111,6 +123,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final focusedAnnotationId = useState<String?>(null);
     final annotationFocusRevision = useState(0);
     final progressWriteTimer = useRef<Timer?>(null);
+    final pendingProgressWrite = useRef<_PendingReaderProgress?>(null);
     final selectedText = useState<ReaderTextSelection?>(null);
     final searchQuery = useState<String?>(null);
     final override = readingOverride.value;
@@ -185,12 +198,6 @@ class ReaderWorkspace extends HookConsumerWidget {
       return null;
     }, [lifecycleState]);
 
-    useEffect(
-      () =>
-          () => progressWriteTimer.value?.cancel(),
-      [bookId],
-    );
-
     useEffect(() {
       // A new book or reader-mode switch has no valid runtime page position.
       pageIndex.value = 0;
@@ -198,33 +205,56 @@ class ReaderWorkspace extends HookConsumerWidget {
       return null;
     }, [bookId, isPaginated]);
 
+    final bookRepository = ref.read(bookRepositoryProvider);
+
+    Future<void> persistProgress(_PendingReaderProgress pending) async {
+      await bookRepository.updateReadingPosition(
+        bookId: bookId,
+        chapterIndex: pending.chapterIndex,
+        progress: pending.progress,
+        locator: pending.locator,
+      );
+      if (context.mounted) ref.invalidate(libraryBooksProvider);
+    }
+
+    Future<void> flushPendingProgress() async {
+      progressWriteTimer.value?.cancel();
+      progressWriteTimer.value = null;
+      final pending = pendingProgressWrite.value;
+      pendingProgressWrite.value = null;
+      if (pending != null) await persistProgress(pending);
+    }
+
     void scheduleProgressWrite({
       required int index,
       required double chapterRatio,
       String? anchor,
       String? cfi,
     }) {
-      progressWriteTimer.value?.cancel();
-      progressWriteTimer.value = Timer(
-        const Duration(milliseconds: 600),
-        () async {
-          await ref
-              .read(bookRepositoryProvider)
-              .updateReadingPosition(
-                bookId: bookId,
-                chapterIndex: index,
-                progress: sectionProgress.overallProgress(index, chapterRatio),
-                locator: EpubLocation(
-                  chapterIndex: index,
-                  scrollRatio: chapterRatio,
-                  anchor: anchor,
-                  cfi: cfi,
-                ).toLocator(),
-              );
-          if (context.mounted) ref.invalidate(libraryBooksProvider);
-        },
+      pendingProgressWrite.value = _PendingReaderProgress(
+        chapterIndex: index,
+        progress: sectionProgress.overallProgress(index, chapterRatio),
+        locator: EpubLocation(
+          chapterIndex: index,
+          scrollRatio: chapterRatio,
+          anchor: anchor,
+          cfi: cfi,
+        ).toLocator(),
       );
+      progressWriteTimer.value?.cancel();
+      progressWriteTimer.value = Timer(const Duration(milliseconds: 600), () {
+        progressWriteTimer.value = null;
+        final pending = pendingProgressWrite.value;
+        pendingProgressWrite.value = null;
+        if (pending != null) unawaited(persistProgress(pending));
+      });
     }
+
+    useEffect(
+      () =>
+          () => unawaited(flushPendingProgress()),
+      [bookId],
+    );
 
     Future<void> selectChapter(
       int index, {
@@ -235,7 +265,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
       final target = manifest.value?.spine[index];
       if (target == null) return;
-      progressWriteTimer.value?.cancel();
+      await flushPendingProgress();
       navigationCommand.value = ReaderNavigationCommand.goToLocation(
         id: ++navigationSequence.value,
         href: target.href,
@@ -293,6 +323,9 @@ class ReaderWorkspace extends HookConsumerWidget {
       String? note,
     }) async {
       final normalizedNote = note?.trim();
+      final selectionChapterIndex = manifest.value == null
+          ? null
+          : epubSpineIndexForHref(manifest.value!, selection.href);
       await ref
           .read(annotationControllerProvider)
           .add(
@@ -302,7 +335,7 @@ class ReaderWorkspace extends HookConsumerWidget {
             selectedText: selection.text,
             color: color,
             note: normalizedNote?.isEmpty ?? true ? null : normalizedNote,
-            chapterIndex: activeChapterIndex,
+            chapterIndex: selectionChapterIndex ?? activeChapterIndex,
             chapterTitle: chapterTitle,
           );
       if (selectedText.value?.locator == selection.locator) {
@@ -474,10 +507,10 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     void selectAnnotation(ReadingAnnotation annotation) {
-      final nextIndex = manifest.value?.spine.indexWhere(
-        (item) => item.href == annotation.href,
-      );
-      if (nextIndex == null || nextIndex < 0) return;
+      final currentManifest = manifest.value;
+      if (currentManifest == null) return;
+      final nextIndex = epubSpineIndexForHref(currentManifest, annotation.href);
+      if (nextIndex == null) return;
       focusedAnnotationId.value = annotation.id;
       annotationFocusRevision.value += 1;
       unawaited(
@@ -509,10 +542,11 @@ class ReaderWorkspace extends HookConsumerWidget {
       final targetAnchor = target?.fragment.isEmpty ?? true
           ? null
           : target!.fragment;
-      final nextIndex = manifest.value?.spine.indexWhere(
-        (item) => item.href == targetPath,
-      );
-      if (nextIndex != null && nextIndex >= 0) {
+      final currentManifest = manifest.value;
+      final nextIndex = currentManifest == null
+          ? null
+          : epubSpineIndexForHref(currentManifest, targetPath);
+      if (nextIndex != null) {
         unawaited(selectChapter(nextIndex, anchor: targetAnchor));
       }
     }
@@ -747,12 +781,15 @@ class ReaderWorkspace extends HookConsumerWidget {
                               onScrollPositionChanged:
                                   (href, ratio, anchor, cfi) {
                                     runtimeController.reportRelocation();
-                                    final relocatedIndex = manifest.value?.spine
-                                        .indexWhere(
-                                          (item) => item.href == href,
-                                        );
-                                    if (relocatedIndex == null ||
-                                        relocatedIndex < 0) {
+                                    final currentManifest = manifest.value;
+                                    final relocatedIndex =
+                                        currentManifest == null
+                                        ? null
+                                        : epubSpineIndexForHref(
+                                            currentManifest,
+                                            href,
+                                          );
+                                    if (relocatedIndex == null) {
                                       return;
                                     }
                                     final clampedRatio = ratio
@@ -918,7 +955,10 @@ class ReaderWorkspace extends HookConsumerWidget {
                   mobileReaderControls: isMobile,
                   bookmarked: isBookmarked,
                   canCreateAnnotation: selectedText.value != null,
-                  onExitReader: onExitReader,
+                  onExitReader: () {
+                    unawaited(flushPendingProgress());
+                    onExitReader();
+                  },
                   onToggleToc: isMobile
                       ? () => unawaited(openMobileToc())
                       : toggleToc,

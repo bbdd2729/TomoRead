@@ -102,20 +102,20 @@ class PdfReaderWorkspace extends HookConsumerWidget {
         Future<void> savePage(int? pageNumber) async {
           if (pageNumber == null || pageNumber < 1) return;
           currentPage.value = pageNumber;
+          final progress = pageCount <= 1
+              ? 0.0
+              : (pageNumber - 1) / (pageCount - 1);
           await ref
               .read(bookRepositoryProvider)
               .updateReadingPosition(
                 bookId: bookId,
                 chapterIndex: pageNumber - 1,
-                progress: pageCount == 0 ? 0 : pageNumber / pageCount,
+                progress: progress,
                 locator: 'page:$pageNumber',
               );
           ref.invalidate(libraryBooksProvider);
           activityTracker.recordInteraction(
-            ReaderPosition(
-              progress: pageCount == 0 ? 0 : pageNumber / pageCount,
-              locator: 'page:$pageNumber',
-            ),
+            ReaderPosition(progress: progress, locator: 'page:$pageNumber'),
             ReadingInteraction.pageTurn,
           );
         }

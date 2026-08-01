@@ -49,4 +49,42 @@ void main() {
       isTrue,
     );
   });
+
+  test('uses measured page position for paginated relocation progress', () {
+    expect(
+      EpubLocation.normalizedRelocationRatio(
+        reportedRatio: 0,
+        paginated: true,
+        pageIndex: 2,
+        pageCount: 5,
+      ),
+      0.5,
+    );
+    expect(
+      EpubLocation.normalizedRelocationRatio(
+        reportedRatio: 0.35,
+        paginated: false,
+        pageIndex: 2,
+        pageCount: 5,
+      ),
+      0.35,
+    );
+  });
+
+  test('does not match bookmarks from different pages in one chapter', () {
+    const secondPage = EpubLocation(
+      chapterIndex: 0,
+      scrollRatio: 0.25,
+      cfi: 'epubcfi(/6/4!/4/2/2)',
+    );
+
+    expect(
+      EpubLocation.matchesLocator(
+        'epub:v3|0|0.00000||',
+        secondPage,
+        fallbackChapterIndex: 0,
+      ),
+      isFalse,
+    );
+  });
 }

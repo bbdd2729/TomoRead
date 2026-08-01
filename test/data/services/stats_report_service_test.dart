@@ -24,7 +24,9 @@ void main() {
   tearDown(() => database.close());
 
   test('builds a daily report from completed reading activity', () async {
-    final end = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+    final timezoneOffsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
+    final localEnd = DateTime.utc(2026, 6, 15, 12);
+    final end = localEnd.subtract(Duration(minutes: timezoneOffsetMinutes));
     final start = end.subtract(const Duration(minutes: 10));
     await sessions.start(
       id: 'activity-a',
@@ -35,7 +37,7 @@ void main() {
       ),
       position: const ReaderPosition(progress: .1, locator: 'page:1'),
       nowUtc: start,
-      timezoneOffsetMinutes: DateTime.now().timeZoneOffset.inMinutes,
+      timezoneOffsetMinutes: timezoneOffsetMinutes,
     );
     await sessions.checkpoint(
       id: 'activity-a',
@@ -47,7 +49,10 @@ void main() {
     );
 
     final report = await service.loadReport(
-      StatsSelection(dimension: StatsDimension.day, anchor: DateTime.now()),
+      StatsSelection(
+        dimension: StatsDimension.day,
+        anchor: DateTime(2026, 6, 15),
+      ),
     );
 
     expect(

@@ -36,6 +36,28 @@ class EpubManifest {
   );
 }
 
+int? epubSpineIndexForHref(EpubManifest manifest, String href) {
+  final withoutFragment = href.split('#').first.split('?').first;
+  final exactIndex = manifest.spine.indexWhere(
+    (item) => item.href.split('#').first.split('?').first == withoutFragment,
+  );
+  if (exactIndex >= 0) return exactIndex;
+
+  final targetPath = _normalizedEpubPath(href);
+  final normalizedIndex = manifest.spine.indexWhere(
+    (item) => _normalizedEpubPath(item.href) == targetPath,
+  );
+  return normalizedIndex < 0 ? null : normalizedIndex;
+}
+
+String _normalizedEpubPath(String href) {
+  final uri = Uri.tryParse(href);
+  final path = uri?.path.isNotEmpty == true
+      ? uri!.path
+      : href.split('#').first.split('?').first;
+  return path.replaceAll('\\', '/').replaceFirst(RegExp(r'^/+'), '');
+}
+
 enum ReadingDirection { ltr, rtl }
 
 class EpubSpineItem {

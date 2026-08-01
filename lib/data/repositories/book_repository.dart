@@ -253,6 +253,7 @@ class BookRepository {
     isFavorite: (row['is_favorite'] as int? ?? 0) == 1,
     progress: (row['progress']! as num).toDouble(),
     importedAt: DateTime.fromMillisecondsSinceEpoch(row['created_at']! as int),
+    updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at']! as int),
     format: row['format'] as String? ?? 'epub',
     chapterCount: row['chapter_count'] as int? ?? 0,
     chapterIndex: row['chapter_index'] as int? ?? 0,

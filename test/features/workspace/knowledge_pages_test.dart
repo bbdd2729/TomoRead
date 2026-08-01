@@ -3,8 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:hooks_riverpod/misc.dart' show Override;
 import 'package:tomoread/app/providers.dart';
+import 'package:tomoread/data/database/app_database.dart';
+import 'package:tomoread/data/repositories/book_repository.dart';
 import 'package:tomoread/domain/models/annotation_query.dart';
+import 'package:tomoread/domain/models/epub_location.dart';
+import 'package:tomoread/domain/models/epub_manifest.dart';
 import 'package:tomoread/domain/models/library_book.dart';
+import 'package:tomoread/domain/models/reading_annotation.dart';
 import 'package:tomoread/domain/models/stats_models.dart';
 import 'package:tomoread/features/chat/chat_controller.dart';
 import 'package:tomoread/features/chat/chat_page.dart';
@@ -50,6 +55,88 @@ void main() {
     expect(find.text('还没有符合条件的笔记'), findsOneWidget);
   });
 
+  testWidgets('opens an annotation at the chapter resolved from its href', (
+    tester,
+  ) async {
+    const manifest = EpubManifest(
+      opfPath: 'OEBPS/content.opf',
+      version: '3.0',
+      direction: ReadingDirection.ltr,
+      spine: [
+        EpubSpineItem(
+          id: 'cover',
+          href: 'OEBPS/Text/cover.xhtml',
+          linear: true,
+        ),
+        EpubSpineItem(
+          id: 'chapter-1',
+          href: 'OEBPS/Text/chapter-1.xhtml',
+          linear: true,
+        ),
+      ],
+      toc: [],
+    );
+    final book = LibraryBook(
+      id: 'book-a',
+      fileHash: 'hash-a',
+      title: 'Book A',
+      author: 'Author',
+      filePath: 'book.epub',
+      progress: 0,
+      importedAt: DateTime(2026),
+      format: 'epub',
+      chapterCount: 2,
+      direction: ReadingDirection.ltr,
+    );
+    final repository = _CapturingBookRepository(manifest);
+    final item = AnnotationListItem(
+      annotation: ReadingAnnotation(
+        id: 'annotation-a',
+        bookId: book.id,
+        href: 'OEBPS/Text/chapter-1.xhtml',
+        locator: 'cfi:epubcfi(/6/4!/4/2/2)',
+        selectedText: 'Selected text',
+        color: AnnotationColor.yellow,
+        createdAt: DateTime(2026),
+        chapterIndex: 0,
+        chapterTitle: 'Chapter 1',
+      ),
+      book: book,
+    );
+    LibraryBook? openedBook;
+
+    await _pumpPage(
+      tester,
+      NotesPage(onOpenReader: (book) => openedBook = book),
+      [
+        bookRepositoryProvider.overrideWithValue(repository),
+        annotationItemsProvider.overrideWith((ref) async => [item]),
+        annotationFacetsProvider.overrideWith(
+          (ref) async =>
+              const AnnotationFacets(totalCount: 1, noteCount: 0, tags: []),
+        ),
+        libraryBooksProvider.overrideWith(_EmptyLibraryBooksNotifier.new),
+      ],
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Selected text').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.open_in_new));
+    for (var attempt = 0; attempt < 20 && openedBook == null; attempt++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    final location = EpubLocation.fromLocator(
+      repository.locator,
+      fallbackChapterIndex: 0,
+    );
+    expect(openedBook?.id, book.id);
+    expect(repository.chapterIndex, 1);
+    expect(location.chapterIndex, 1);
+    expect(location.cfi, 'epubcfi(/6/4!/4/2/2)');
+  });
+
   testWidgets('statistics page reports that the selected period is empty', (
     tester,
   ) async {
@@ -73,6 +160,28 @@ class _EmptyChatController extends ChatController {
 class _EmptyLibraryBooksNotifier extends LibraryBooksNotifier {
   @override
   Future<List<LibraryBook>> build() async => const [];
+}
+
+class _CapturingBookRepository extends BookRepository {
+  _CapturingBookRepository(this.manifest) : super(AppDatabase.inMemory());
+
+  final EpubManifest manifest;
+  int? chapterIndex;
+  String? locator;
+
+  @override
+  Future<EpubManifest?> loadManifest(String bookId) async => manifest;
+
+  @override
+  Future<void> updateReadingPosition({
+    required String bookId,
+    required int chapterIndex,
+    required double progress,
+    String? locator,
+  }) async {
+    this.chapterIndex = chapterIndex;
+    this.locator = locator;
+  }
 }
 
 const _emptyStatsReport = StatsReport(

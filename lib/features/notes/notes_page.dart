@@ -12,6 +12,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../app/providers.dart';
 import '../../domain/models/annotation_query.dart';
 import '../../domain/models/epub_location.dart';
+import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/library_book.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../shared/widgets/page_header.dart';
@@ -40,17 +41,12 @@ class NotesPage extends HookConsumerWidget {
     );
 
     final items = itemsState.value ?? const <AnnotationListItem>[];
-    final selected = items
-        .where((item) => item.annotation.id == selectedId.value)
-        .firstOrNull;
-    useEffect(() {
-      if (items.isEmpty) {
-        selectedId.value = null;
-      } else if (selected == null) {
-        selectedId.value = items.first.annotation.id;
-      }
-      return null;
-    }, [itemsState.value]);
+    final selected =
+        items
+            .where((item) => item.annotation.id == selectedId.value)
+            .firstOrNull ??
+        items.firstOrNull;
+    final effectiveSelectedId = selected?.annotation.id;
 
     void updateQuery(AnnotationQuery value) {
       ref.read(annotationQueryProvider.notifier).update(value);
@@ -66,26 +62,26 @@ class NotesPage extends HookConsumerWidget {
         }
         return;
       }
-      var chapterIndex = item.annotation.chapterIndex;
-      if (chapterIndex == null && book.format == 'epub') {
-        final manifest = await ref
-            .read(bookRepositoryProvider)
-            .loadManifest(book.id);
-        chapterIndex = manifest?.spine.indexWhere(
-          (entry) =>
-              _stripFragment(entry.href) ==
-              _stripFragment(item.annotation.href),
-        );
-        if (chapterIndex != null && chapterIndex < 0) chapterIndex = null;
-      }
-      final index = chapterIndex ?? book.chapterIndex;
+      final manifest = book.format == 'epub'
+          ? await ref.read(bookRepositoryProvider).loadManifest(book.id)
+          : null;
+      final hrefChapterIndex = manifest == null
+          ? null
+          : epubSpineIndexForHref(manifest, item.annotation.href);
+      final index =
+          hrefChapterIndex ?? item.annotation.chapterIndex ?? book.chapterIndex;
       final cfi = item.annotation.locator.startsWith('cfi:')
           ? item.annotation.locator.substring(4)
+          : null;
+      final annotationUri = Uri.tryParse(item.annotation.href);
+      final anchor = annotationUri?.fragment.isNotEmpty == true
+          ? annotationUri!.fragment
           : null;
       final locator = book.format == 'epub'
           ? EpubLocation(
               chapterIndex: index,
               scrollRatio: 0,
+              anchor: anchor,
               cfi: cfi,
             ).toLocator()
           : item.annotation.locator;
@@ -158,7 +154,7 @@ class NotesPage extends HookConsumerWidget {
 
     final list = _AnnotationResultList(
       itemsState: itemsState,
-      selectedId: selectedId.value,
+      selectedId: effectiveSelectedId,
       onSelected: (item) async {
         selectedId.value = item.annotation.id;
         if (MediaQuery.sizeOf(context).width < 760) {
@@ -745,5 +741,3 @@ Color _annotationColor(BuildContext context, AnnotationColor color) {
     AnnotationColor.pink => const Color(0xFFD76D8C),
   };
 }
-
-String _stripFragment(String href) => href.split('#').first;

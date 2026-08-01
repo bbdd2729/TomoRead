@@ -12,6 +12,7 @@ class LibraryBook {
     required this.format,
     required this.chapterCount,
     required this.direction,
+    this.updatedAt,
     this.chapterIndex = 0,
     this.locator,
     this.coverPath,
@@ -33,6 +34,7 @@ class LibraryBook {
   final bool isFavorite;
   final double progress;
   final DateTime importedAt;
+  final DateTime? updatedAt;
   final String format;
   final int chapterCount;
   final int chapterIndex;
@@ -50,6 +52,7 @@ class LibraryBook {
     bool? isFavorite,
     double? progress,
     int? chapterIndex,
+    DateTime? updatedAt,
     bool clearDescription = false,
     bool clearCategory = false,
     bool clearLocator = false,
@@ -61,6 +64,7 @@ class LibraryBook {
     filePath: filePath,
     progress: progress ?? this.progress,
     importedAt: importedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
     format: format,
     chapterCount: chapterCount,
     chapterIndex: chapterIndex ?? this.chapterIndex,

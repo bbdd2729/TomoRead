@@ -312,6 +312,51 @@ void main() {
     expect(find.byKey(const Key('book-pdf-book')), findsOneWidget);
   });
 
+  testWidgets('continue reading prefers the latest started book', (
+    tester,
+  ) async {
+    configureDesktop(tester);
+    final unreadImport = LibraryBook(
+      id: 'unread-import',
+      fileHash: 'unread-import',
+      title: 'Recently imported',
+      author: 'Author',
+      filePath: 'C:/books/unread.epub',
+      progress: 0,
+      importedAt: DateTime(2026, 7),
+      updatedAt: DateTime(2026, 7),
+      format: 'epub',
+      chapterCount: 5,
+      direction: ReadingDirection.ltr,
+    );
+    final startedBook = LibraryBook(
+      id: 'started-book',
+      fileHash: 'started-book',
+      title: 'Started book',
+      author: 'Reader',
+      filePath: 'C:/books/started.epub',
+      progress: 0.4,
+      importedAt: DateTime(2026, 1),
+      updatedAt: DateTime(2026, 8),
+      format: 'epub',
+      chapterCount: 5,
+      chapterIndex: 2,
+      locator: 'epub:v3|2|0.25000||',
+      direction: ReadingDirection.ltr,
+    );
+
+    await pumpShell(tester, books: [unreadImport, startedBook]);
+
+    expect(
+      find.byKey(const Key('continue-reading-started-book')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('continue-reading-unread-import')),
+      findsNothing,
+    );
+  });
+
   testWidgets('filters by favorite, category, and tag and enters selection', (
     tester,
   ) async {

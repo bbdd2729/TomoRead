@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '23'
+const runtimeVersion = '24'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -285,17 +285,17 @@ const emitRelocation = detail => {
   if (!section || !paginator) return
   measuredRelocationRevision += 1
   currentSectionIndex = detail.index
-  currentRatio = Number.isFinite(detail.fraction) ? detail.fraction : 0
+  const flow = paginator.getAttribute('flow') ?? 'paginated'
+  let ratio = Number.isFinite(detail.fraction) ? detail.fraction : 0
   const message = {
     type: 'runtimeRelocate',
-    flow: paginator.getAttribute('flow') ?? 'paginated',
+    flow,
     href: section.href,
     chapterIndex: detail.index,
-    ratio: Number.isFinite(detail.fraction) ? detail.fraction : 0,
     anchor: nearestAnchor(detail.range),
     cfi: cfiFor(detail.range),
   }
-  if (message.flow !== 'scrolled') {
+  if (flow !== 'scrolled') {
     const fallbackPageCount = Math.max(
       1,
       paginator.sectionPageCount || paginator.pages || 1,
@@ -307,9 +307,12 @@ const emitRelocation = detail => {
     ))
     currentPageIndex = pageIndex
     currentPageCount = pageCount
+    ratio = pageCount > 1 ? pageIndex / (pageCount - 1) : ratio
     message.pageIndex = pageIndex
     message.pageCount = pageCount
   }
+  currentRatio = Math.max(0, Math.min(1, ratio))
+  message.ratio = currentRatio
   postMessage(message)
 }
 

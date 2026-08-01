@@ -11,6 +11,20 @@ class EpubLocation {
   final String? anchor;
   final String? cfi;
 
+  static double normalizedRelocationRatio({
+    required double reportedRatio,
+    required bool paginated,
+    int? pageIndex,
+    int? pageCount,
+  }) {
+    if (paginated && pageIndex != null && pageCount != null && pageCount > 1) {
+      return (pageIndex.clamp(0, pageCount - 1) / (pageCount - 1))
+          .clamp(0, 1)
+          .toDouble();
+    }
+    return reportedRatio.clamp(0, 1).toDouble();
+  }
+
   String toLocator() {
     final encodedAnchor = anchor == null ? '' : Uri.encodeComponent(anchor!);
     final encodedCfi = cfi == null ? '' : Uri.encodeComponent(cfi!);

@@ -9,6 +9,7 @@ import 'package:webview_flutter_windows/webview_flutter_windows.dart';
 
 import '../../app/providers.dart';
 import '../../domain/models/epub_manifest.dart';
+import '../../domain/models/epub_location.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_annotation.dart';
@@ -298,7 +299,12 @@ class EpubWebView extends HookConsumerWidget {
             if (href is String && ratio is num) {
               onScrollPositionChanged(
                 href,
-                ratio.toDouble(),
+                EpubLocation.normalizedRelocationRatio(
+                  reportedRatio: ratio.toDouble(),
+                  paginated: message['flow'] != 'scrolled',
+                  pageIndex: pageIndex is num ? pageIndex.toInt() : null,
+                  pageCount: pageCount is num ? pageCount.toInt() : null,
+                ),
                 anchor is String && anchor.isNotEmpty ? anchor : null,
                 cfi is String && cfi.isNotEmpty ? cfi : null,
               );
