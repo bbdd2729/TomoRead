@@ -2084,7 +2084,7 @@ class _ReaderFooter extends StatelessWidget {
                   ? '正在读取目录'
                   : layoutMode == ReaderLayoutMode.paginated
                   ? '全书 ${(progress * 100).round()}% · 第 ${pageIndex + 1} / $pageCount 页 · 第 ${chapterIndex + 1} / $chapterCount 章'
-                  : '全书 ${(progress * 100).round()}% · 第 ${chapterIndex + 1} / $chapterCount 章',
+                  : '连续滚动 · 全书 ${(progress * 100).round()}% · 第 ${chapterIndex + 1} / $chapterCount 章',
             ),
             const SizedBox(width: 8),
             IconButton(
@@ -2296,6 +2296,16 @@ class _BookReadingSettingsDialog extends HookWidget {
                       ? '宽屏时显示双栏排版。'
                       : '分页模式固定使用单栏排版。',
                 ),
+              ),
+              SwitchListTile(
+                key: const Key('book-reading-tap-to-turn-pages'),
+                contentPadding: EdgeInsets.zero,
+                value: settings.value.tapToTurnPages,
+                onChanged: (value) => settings.value = settings.value.copyWith(
+                  tapToTurnPages: value,
+                ),
+                title: const Text('点击区域翻页（实验性）'),
+                subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
               ),
             ],
           ],

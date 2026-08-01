@@ -2024,6 +2024,16 @@ export class Paginator extends HTMLElement {
 
     scrollBy(dx, dy) {
         const delta = this.#vertical ? dy : dx
+        if (this.scrolled) {
+            // Continuous scrolling is not limited to the last page-turn
+            // bounds. Those bounds only describe one paginated viewport and
+            // would otherwise trap wheel input on the first screen.
+            const maxOffset = Math.max(0, this.#renderedViewSize - this.size)
+            const nextOffset = Math.max(0, Math.min(
+                maxOffset, this.#renderedStart + delta))
+            this.containerPosition = this.#vertical ? -nextOffset : nextOffset
+            return
+        }
         const [offset, a, b] = this.#scrollBounds
         const rtl = this.#rtl
         const min = rtl ? offset - b : offset - a

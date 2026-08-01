@@ -29,6 +29,7 @@ class ReadingSettings {
     this.doubleColumn = true,
     this.layoutMode = ReaderLayoutMode.scroll,
     this.pageTransition = ReaderPageTransition.slide,
+    this.tapToTurnPages = false,
   });
 
   final FontChoice font;
@@ -38,6 +39,7 @@ class ReadingSettings {
   final bool doubleColumn;
   final ReaderLayoutMode layoutMode;
   final ReaderPageTransition pageTransition;
+  final bool tapToTurnPages;
 
   ReadingSettings copyWith({
     FontChoice? font,
@@ -47,6 +49,7 @@ class ReadingSettings {
     bool? doubleColumn,
     ReaderLayoutMode? layoutMode,
     ReaderPageTransition? pageTransition,
+    bool? tapToTurnPages,
   }) {
     return ReadingSettings(
       font: font ?? this.font,
@@ -56,6 +59,7 @@ class ReadingSettings {
       doubleColumn: doubleColumn ?? this.doubleColumn,
       layoutMode: layoutMode ?? this.layoutMode,
       pageTransition: pageTransition ?? this.pageTransition,
+      tapToTurnPages: tapToTurnPages ?? this.tapToTurnPages,
     );
   }
 }

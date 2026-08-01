@@ -303,7 +303,9 @@ class EpubWebView extends HookConsumerWidget {
                 cfi is String && cfi.isNotEmpty ? cfi : null,
               );
             }
-            if (pageIndex is num && pageCount is num) {
+            if (message['flow'] != 'scrolled' &&
+                pageIndex is num &&
+                pageCount is num) {
               onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
             }
           } else if (message['type'] == 'runtimeError') {
@@ -950,6 +952,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
       'fontSize': settings.fontSize,
       'lineHeight': settings.lineHeight,
       'pageTransition': settings.pageTransition.name,
+      'tapNavigationEnabled': settings.tapToTurnPages,
       'foreground': _cssColor(scheme.onSurface),
       'background': _cssColor(scheme.surface),
       'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr',

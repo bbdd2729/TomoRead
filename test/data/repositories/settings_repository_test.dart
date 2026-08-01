@@ -52,6 +52,7 @@ void main() {
         pageMargin: 40,
         doubleColumn: false,
         layoutMode: ReaderLayoutMode.paginated,
+        tapToTurnPages: true,
       ),
     );
     await settings.saveBookOverride(
@@ -63,6 +64,7 @@ void main() {
           pageMargin: 48,
           doubleColumn: false,
           layoutMode: ReaderLayoutMode.paginated,
+          tapToTurnPages: true,
         ),
       ),
     );
@@ -82,11 +84,13 @@ void main() {
     expect(stored.readingSettings.font, FontChoice.serif);
     expect(stored.readingSettings.doubleColumn, isFalse);
     expect(stored.readingSettings.layoutMode, ReaderLayoutMode.paginated);
+    expect(stored.readingSettings.tapToTurnPages, isTrue);
     expect(override?.settings.font, FontChoice.monospace);
     expect(override?.settings.fontSize, 18);
     expect(override?.settings.pageMargin, 48);
     expect(override?.settings.doubleColumn, isFalse);
     expect(override?.settings.layoutMode, ReaderLayoutMode.paginated);
+    expect(override?.settings.tapToTurnPages, isTrue);
 
     await settings.clearBookOverride('book-a');
     expect(await settings.loadBookOverride('book-a'), isNull);

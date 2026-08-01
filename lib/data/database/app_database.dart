@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 6,
+        version: 7,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -52,6 +52,9 @@ class AppDatabase {
           }
           if (oldVersion < 6) {
             await _upgradeToVersion6(database);
+          }
+          if (oldVersion < 7) {
+            await _upgradeToVersion7(database);
           }
         },
       ),
@@ -107,6 +110,7 @@ class AppDatabase {
               double_column INTEGER NOT NULL,
               layout_mode TEXT NOT NULL DEFAULT 'scroll',
               page_transition TEXT NOT NULL DEFAULT 'slide',
+              tap_to_turn_pages INTEGER NOT NULL DEFAULT 0,
               updated_at INTEGER NOT NULL
             )
           ''');
@@ -182,6 +186,10 @@ class AppDatabase {
 
   Future<void> _upgradeToVersion6(Database database) => database.execute(
     "ALTER TABLE book_reading_overrides ADD COLUMN page_transition TEXT NOT NULL DEFAULT 'slide'",
+  );
+
+  Future<void> _upgradeToVersion7(Database database) => database.execute(
+    'ALTER TABLE book_reading_overrides ADD COLUMN tap_to_turn_pages INTEGER NOT NULL DEFAULT 0',
   );
 
   Future<void> _createBooksIndexes(Database database) async {

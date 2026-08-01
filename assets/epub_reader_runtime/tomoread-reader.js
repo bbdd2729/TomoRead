@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '18'
+const runtimeVersion = '20'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -11,6 +11,7 @@ let annotations = []
 let focusedAnnotationId
 let searchQuery = ''
 let pageTransition = 'slide'
+let tapNavigationEnabled = false
 let turnLocked = false
 let currentSectionIndex = 0
 let currentRatio = 0
@@ -47,6 +48,7 @@ const findSection = href => {
 const applySettings = settings => {
   if (!paginator) return
   pageTransition = settings.pageTransition ?? 'slide'
+  tapNavigationEnabled = settings.tapNavigationEnabled === true
   paginator.setAttribute('flow', settings.flow ?? 'paginated')
   paginator.setAttribute('max-column-count', String(settings.columnCount ?? 1))
   paginator.setAttribute('max-inline-size', `${settings.maxInlineSize ?? 760}px`)
@@ -96,7 +98,12 @@ const turnUnsafe = async direction => {
     direction,
     () => direction === 'previous' ? paginator.prev() : paginator.next(),
   )
-  await reportPaginatorPosition()
+  // A continuous paginator already emits its measured relocation as it
+  // scrolls. Sending a synthetic snapshot here can report the old ratio and
+  // snap Flutter's progress slider back to the chapter start.
+  if (paginator?.getAttribute('flow') !== 'scrolled') {
+    await reportPaginatorPosition()
+  }
 }
 
 const anchorFor = (fragment, fraction, cfi) => {
@@ -269,28 +276,33 @@ const emitRelocation = detail => {
   const section = getSections()[detail.index]
   if (!section || !paginator) return
   currentSectionIndex = detail.index
-  const fallbackPageCount = Math.max(1, paginator.pages || 1)
-  const pageCount = Math.max(1, detail.pageCount ?? fallbackPageCount)
-  const pageIndex = Math.max(0, Math.min(
-    pageCount - 1,
-    detail.pageIndex ?? paginator.page ?? 0,
-  ))
   currentRatio = Number.isFinite(detail.fraction) ? detail.fraction : 0
-  currentPageIndex = pageIndex
-  currentPageCount = pageCount
-  postMessage({
+  const message = {
     type: 'runtimeRelocate',
+    flow: paginator.getAttribute('flow') ?? 'paginated',
     href: section.href,
     chapterIndex: detail.index,
     ratio: Number.isFinite(detail.fraction) ? detail.fraction : 0,
     anchor: nearestAnchor(detail.range),
     cfi: cfiFor(detail.range),
-    pageIndex,
-    pageCount,
-  })
+  }
+  if (message.flow !== 'scrolled') {
+    const fallbackPageCount = Math.max(1, paginator.pages || 1)
+    const pageCount = Math.max(1, detail.pageCount ?? fallbackPageCount)
+    const pageIndex = Math.max(0, Math.min(
+      pageCount - 1,
+      detail.pageIndex ?? paginator.page ?? 0,
+    ))
+    currentPageIndex = pageIndex
+    currentPageCount = pageCount
+    message.pageIndex = pageIndex
+    message.pageCount = pageCount
+  }
+  postMessage(message)
 }
 
 const emitPagePosition = detail => {
+  if (paginator?.getAttribute('flow') === 'scrolled') return
   const section = getSections()[detail.index]
   if (!section) return
   currentSectionIndex = detail.index
@@ -299,6 +311,7 @@ const emitPagePosition = detail => {
   currentPageCount = Math.max(1, detail.pageCount ?? 1)
   postMessage({
     type: 'runtimeRelocate',
+    flow: paginator?.getAttribute('flow') ?? 'paginated',
     href: section.href,
     chapterIndex: detail.index,
     ratio: currentRatio,
@@ -322,6 +335,14 @@ const reportPaginatorPosition = async ({ fallbackIndex, fallbackRatio } = {}) =>
     : fallbackIndex ?? currentSectionIndex
   const section = getSections()[index]
   if (!section) return
+  if (paginator.getAttribute('flow') === 'scrolled') {
+    emitRelocation({
+      index,
+      fraction: fallbackRatio ?? currentRatio,
+      range: null,
+    })
+    return
+  }
   const size = paginator.size || 0
   const measuredPages = size > 0 ? Math.ceil(paginator.viewSize / size) : 0
   const pageCount = Math.max(1, paginator.pages || 0, measuredPages)
@@ -363,7 +384,7 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     }
     if (doc.getSelection()?.toString().trim()) return
     const ratio = event.clientX / doc.defaultView.innerWidth
-    if (paginator?.getAttribute('flow') === 'scrolled') {
+    if (!tapNavigationEnabled) {
       if (ratio >= 0.25 && ratio <= 0.75) postMessage({ type: 'readerControls' })
       return
     }
@@ -380,8 +401,8 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     // reader locked while the paginator is animating or loading a chapter.
     if (tapNavigationPending) return
     tapNavigationPending = true
-    window.setTimeout(() => { tapNavigationPending = false }, 80)
-    void executeCommand({ type: direction })
+    const command = executeCommand({ type: direction })
+    void command.finally(() => { tapNavigationPending = false })
   })
   doc.addEventListener('wheel', event => {
     if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return

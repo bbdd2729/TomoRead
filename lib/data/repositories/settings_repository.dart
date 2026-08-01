@@ -142,6 +142,8 @@ class SettingsRepository {
       pageTransition: ReaderPageTransition.values.byName(
         value['page_transition'] as String? ?? ReaderPageTransition.slide.name,
       ),
+      tapToTurnPages:
+          value['tap_to_turn_pages'] == true || value['tap_to_turn_pages'] == 1,
     );
   }
 
@@ -153,5 +155,6 @@ class SettingsRepository {
     'double_column': settings.doubleColumn ? 1 : 0,
     'layout_mode': settings.layoutMode.name,
     'page_transition': settings.pageTransition.name,
+    'tap_to_turn_pages': settings.tapToTurnPages ? 1 : 0,
   };
 }

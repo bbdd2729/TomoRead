@@ -378,6 +378,15 @@ class _ReadingDefaultsSettings extends StatelessWidget {
               : '分页模式固定使用单栏排版。',
         ),
       ),
+      const SizedBox(height: 8),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: settings.tapToTurnPages,
+        onChanged: (value) =>
+            onChanged(settings.copyWith(tapToTurnPages: value)),
+        title: const Text('点击区域翻页（实验性）'),
+        subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
+      ),
     ],
   );
 }

@@ -192,7 +192,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
       }
       final pageIndex = runtimeMessage['pageIndex'];
       final pageCount = runtimeMessage['pageCount'];
-      if (pageIndex is num && pageCount is num) {
+      if (runtimeMessage['flow'] != 'scrolled' &&
+          pageIndex is num &&
+          pageCount is num) {
         onPaginationChanged(pageIndex.toInt(), pageCount.toInt());
       }
       return;
@@ -318,6 +320,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
             '#${scheme.surface.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
         'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr',
         'pageTransition': settings.pageTransition.name,
+        'tapNavigationEnabled': settings.tapToTurnPages,
       },
     });
     return '''(() => {
@@ -357,7 +360,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
       if (runtime) void runtime.command(${jsonEncode({
       'type': 'setSettings',
       'payload': {
-        'settings': {'flow': settings.layoutMode == ReaderLayoutMode.paginated ? 'paginated' : 'scrolled', 'columnCount': settings.doubleColumn ? 2 : 1, 'maxInlineSize': 760, 'margin': settings.pageMargin, 'fontFamily': settings.font.fontFamily, 'fontSize': settings.fontSize, 'lineHeight': settings.lineHeight, 'foreground': _cssColor(scheme.onSurface), 'background': _cssColor(scheme.surface), 'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr', 'pageTransition': settings.pageTransition.name},
+        'settings': {'flow': settings.layoutMode == ReaderLayoutMode.paginated ? 'paginated' : 'scrolled', 'columnCount': settings.doubleColumn ? 2 : 1, 'maxInlineSize': 760, 'margin': settings.pageMargin, 'fontFamily': settings.font.fontFamily, 'fontSize': settings.fontSize, 'lineHeight': settings.lineHeight, 'foreground': _cssColor(scheme.onSurface), 'background': _cssColor(scheme.surface), 'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr', 'pageTransition': settings.pageTransition.name, 'tapNavigationEnabled': settings.tapToTurnPages},
       },
     })});
     })();''';
