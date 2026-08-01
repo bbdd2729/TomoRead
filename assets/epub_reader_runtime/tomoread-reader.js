@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '21'
+const runtimeVersion = '22'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -184,10 +184,14 @@ const applyAnnotations = (doc, index) => {
   const href = getSections()[index]?.href
   for (const annotation of annotations) {
     if (annotation.href !== href) continue
-    const range = annotation.locator.startsWith('cfi:')
-      ? rangeForCfi(doc, annotation.loc.slice(4))
+    const locator = typeof annotation.locator === 'string'
+      ? annotation.locator
+      : ''
+    if (!locator) continue
+    const range = locator.startsWith('cfi:')
+      ? rangeForCfi(doc, locator.slice(4))
       : (() => {
-          const [start, end] = annotation.locator.split(':').map(Number)
+          const [start, end] = locator.split(':').map(Number)
           return Number.isFinite(start) && Number.isFinite(end)
             ? rangeForOffsets(doc, start, end)
             : null
@@ -464,6 +468,9 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
 const createPaginator = () => {
   paginator?.destroy()
   paginator = document.createElement('foliate-paginator')
+  // Flutter's Chromium accessibility bridge is not stable when preloaded
+  // iframe subtrees repeatedly enter and leave the AX tree.
+  paginator.setAttribute('no-a11y-pruning', '')
   stage.replaceChildren(paginator)
   paginator.addEventListener('relocate', ({ detail }) => emitRelocation(detail))
   paginator.addEventListener('pagechange', ({ detail }) => emitPagePosition(detail))

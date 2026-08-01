@@ -749,7 +749,12 @@ class View {
         } else {
             const side = this.#vertical ? 'width' : 'height'
             const otherSide = this.#vertical ? 'height' : 'width'
-            const contentSize = documentElement.getBoundingClientRect()[side]
+            const rectSize = documentElement.getBoundingClientRect()[side]
+            const body = this.document.body
+            const scrollSize = this.#vertical
+                ? Math.max(documentElement.scrollWidth, body?.scrollWidth ?? 0)
+                : Math.max(documentElement.scrollHeight, body?.scrollHeight ?? 0)
+            const contentSize = Math.max(rectSize, scrollSize)
             let expandedSize = contentSize
             // If the section has a background image, ensure the view is
             // at least as large as the image scaled to fit the cross axis
@@ -1675,6 +1680,11 @@ export class Paginator extends HTMLElement {
     // Visible non-primary views stay exposed to assistive tech because a
     // sighted user can read them on the same spread.
     #syncA11y() {
+        if (this.hasAttribute('no-a11y-pruning')) {
+            for (const [, view] of this.#views)
+                view.element.removeAttribute('aria-hidden')
+            return
+        }
         const containerRect = this.#container.getBoundingClientRect()
         for (const [index, view] of this.#views) {
             const isPrimary = index === this.#primaryIndex
@@ -2029,9 +2039,12 @@ export class Paginator extends HTMLElement {
             // bounds. Those bounds only describe one paginated viewport and
             // would otherwise trap wheel input on the first screen.
             const maxOffset = Math.max(0, this.#renderedViewSize - this.size)
+            const targetOffset = this.#renderedStart + delta
             const nextOffset = Math.max(0, Math.min(
-                maxOffset, this.#renderedStart + delta))
+                maxOffset, targetOffset))
             this.containerPosition = this.#vertical ? -nextOffset : nextOffset
+            if (delta > 0 && nextOffset >= maxOffset - 1)
+                this.#loadForwardAtScrollBoundary(targetOffset)
             return
         }
         const [offset, a, b] = this.#scrollBounds
@@ -2040,6 +2053,27 @@ export class Paginator extends HTMLElement {
         const max = rtl ? offset + a : offset + b
         this.containerPosition = Math.max(min, Math.min(max,
             this.containerPosition + delta))
+    }
+
+    #loadForwardAtScrollBoundary(targetOffset) {
+        if (this.noPreload || this.noContinuousScroll
+            || this.#filling || this.#stabilizing) return
+        const sorted = this.#sortedViews
+        const lastIndex = sorted[sorted.length - 1]?.[0]
+        if (lastIndex == null) return
+        const nextIndex = this.#adjacentIndex(1, lastIndex)
+        if (nextIndex == null || !this.#isSameDirection(nextIndex)) return
+        this.#filling = true
+        void this.#loadAdjacentSection(nextIndex)
+            .then(() => {
+                const maxOffset = Math.max(0, this.#renderedViewSize - this.size)
+                const nextOffset = Math.max(0, Math.min(maxOffset, targetOffset))
+                this.containerPosition = this.#vertical ? -nextOffset : nextOffset
+            })
+            .finally(() => {
+                this.#filling = false
+                this.dispatchEvent(new Event('stabilized'))
+            })
     }
 
     // vx, vy: velocity at the end of the swipe (pixels per ms)
