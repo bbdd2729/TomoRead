@@ -1,5 +1,14 @@
 enum AnnotationColor { yellow, green, blue, pink }
 
+enum AnnotationRenderStyle { highlight, underline }
+
+extension AnnotationRenderStyleLabel on AnnotationRenderStyle {
+  String get label => switch (this) {
+    AnnotationRenderStyle.highlight => '高亮',
+    AnnotationRenderStyle.underline => '划线',
+  };
+}
+
 extension AnnotationColorLabel on AnnotationColor {
   String get label => switch (this) {
     AnnotationColor.yellow => '黄色',
@@ -18,6 +27,7 @@ class ReadingAnnotation {
     required this.selectedText,
     required this.color,
     required this.createdAt,
+    this.renderStyle = AnnotationRenderStyle.highlight,
     this.note,
     DateTime? updatedAt,
     this.chapterIndex,
@@ -32,6 +42,7 @@ class ReadingAnnotation {
   final String selectedText;
   final String? note;
   final AnnotationColor color;
+  final AnnotationRenderStyle renderStyle;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int? chapterIndex;

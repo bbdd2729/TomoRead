@@ -338,7 +338,7 @@ class _AnnotationFilterPanel extends StatelessWidget {
         segments: const [
           ButtonSegment(value: null, label: Text('全部')),
           ButtonSegment(value: true, label: Text('有笔记')),
-          ButtonSegment(value: false, label: Text('仅高亮')),
+          ButtonSegment(value: false, label: Text('无笔记')),
         ],
         selected: {query.hasNote},
         onSelectionChanged: (value) => onChanged(
@@ -474,7 +474,9 @@ class _AnnotationResultList extends StatelessWidget {
               ),
             ),
             trailing: annotation.note == null
-                ? null
+                ? annotation.renderStyle == AnnotationRenderStyle.underline
+                      ? const Icon(Icons.format_underlined, size: 18)
+                      : null
                 : const Icon(Icons.sticky_note_2_outlined, size: 18),
             onTap: () => onSelected(item),
           );
@@ -592,6 +594,19 @@ class _AnnotationDetailPane extends HookConsumerWidget {
           ],
         ),
         const SizedBox(height: 22),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Chip(
+            avatar: Icon(
+              annotation.renderStyle == AnnotationRenderStyle.underline
+                  ? Icons.format_underlined
+                  : Icons.highlight_outlined,
+              size: 18,
+            ),
+            label: Text(annotation.renderStyle.label),
+          ),
+        ),
+        const SizedBox(height: 10),
         DecoratedBox(
           decoration: BoxDecoration(
             color: _annotationColor(

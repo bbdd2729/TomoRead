@@ -29,6 +29,7 @@ class AnnotationExportService {
           ..writeln();
       }
       final metadata = <String>[
+        'style: ${annotation.renderStyle.name}',
         if (annotation.chapterTitle != null) annotation.chapterTitle!,
         if (annotation.tags.isNotEmpty)
           annotation.tags.map((tag) => '#$tag').join(' '),
@@ -44,7 +45,7 @@ class AnnotationExportService {
   Future<String> buildJson(AnnotationQuery query) async {
     final items = await _repository.query(query.copyWith(limit: 500));
     return const JsonEncoder.withIndent('  ').convert({
-      'schemaVersion': 1,
+      'schemaVersion': 2,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'annotations': items
           .map(
@@ -59,6 +60,7 @@ class AnnotationExportService {
               'selectedText': item.annotation.selectedText,
               'note': item.annotation.note,
               'color': item.annotation.color.name,
+              'style': item.annotation.renderStyle.name,
               'tags': item.annotation.tags,
               'createdAt': item.annotation.createdAt.toUtc().toIso8601String(),
               'updatedAt': item.annotation.updatedAt.toUtc().toIso8601String(),

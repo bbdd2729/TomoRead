@@ -183,8 +183,17 @@ const applyAnnotations = (doc, index) => {
     ::highlight(tomoread-green) { background: #80c78399; }
     ::highlight(tomoread-blue) { background: #7db8f299; }
     ::highlight(tomoread-pink) { background: #ec91b699; }
+    ::highlight(tomoread-underline-yellow) { color: #b8860b; text-decoration: underline 2px #d2a72c; text-underline-offset: .16em; }
+    ::highlight(tomoread-underline-green) { color: #397a48; text-decoration: underline 2px #53a56b; text-underline-offset: .16em; }
+    ::highlight(tomoread-underline-blue) { color: #397fbd; text-decoration: underline 2px #5a9bd5; text-underline-offset: .16em; }
+    ::highlight(tomoread-underline-pink) { color: #b95373; text-decoration: underline 2px #d76d8c; text-underline-offset: .16em; }
   `
-  const groups = new Map(['yellow', 'green', 'blue', 'pink'].map(color => [color, new Highlight()]))
+  for (const name of Array.from(highlights.keys())) {
+    if (/^tomoread-(underline-)?(yellow|green|blue|pink)$/.test(name)) {
+      highlights.delete(name)
+    }
+  }
+  const groups = new Map()
   const href = getSections()[index]?.href
   for (const annotation of annotations) {
     if (annotation.href !== href) continue
@@ -201,7 +210,11 @@ const applyAnnotations = (doc, index) => {
             : null
         })()
     if (!range) continue
-    groups.get(annotation.color)?.add(range)
+    const key = annotation.style === 'underline'
+      ? `underline-${annotation.color}`
+      : annotation.color
+    if (!groups.has(key)) groups.set(key, new Highlight())
+    groups.get(key).add(range)
   }
   for (const [color, ranges] of groups) highlights.set(`tomoread-${color}`, ranges)
   // The caller navigates to a focused annotation before this method runs.

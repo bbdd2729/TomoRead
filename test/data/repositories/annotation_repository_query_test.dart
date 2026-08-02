@@ -37,6 +37,13 @@ void main() {
       locator: 'cfi:/6/4',
       selectedText: '另一个摘录',
       color: AnnotationColor.yellow,
+      renderStyle: AnnotationRenderStyle.underline,
+    );
+
+    final persisted = await annotations.listForBook('book-a');
+    expect(
+      persisted.singleWhere((item) => item.locator == 'cfi:/6/4').renderStyle,
+      AnnotationRenderStyle.underline,
     );
 
     final result = await annotations.query(

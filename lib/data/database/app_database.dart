@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 12,
+        version: 13,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -70,6 +70,9 @@ class AppDatabase {
           }
           if (oldVersion < 12) {
             await _upgradeToVersion12(database);
+          }
+          if (oldVersion < 13) {
+            await _upgradeToVersion13(database);
           }
         },
       ),
@@ -308,6 +311,13 @@ class AppDatabase {
   Future<void> _upgradeToVersion12(Database database) =>
       _createTextColoringTables(database);
 
+  Future<void> _upgradeToVersion13(Database database) => _addColumnIfMissing(
+    database,
+    table: 'reading_annotations',
+    column: 'render_style',
+    definition: "TEXT NOT NULL DEFAULT 'highlight'",
+  );
+
   Future<void> _createBooksIndexes(Database database) async {
     await database.execute(
       'CREATE INDEX IF NOT EXISTS books_category ON books(category)',
@@ -327,6 +337,7 @@ class AppDatabase {
         selected_text TEXT NOT NULL,
         note TEXT,
         color TEXT NOT NULL,
+        render_style TEXT NOT NULL DEFAULT 'highlight',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         chapter_index INTEGER,

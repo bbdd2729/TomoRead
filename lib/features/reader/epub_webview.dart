@@ -563,6 +563,10 @@ a { color: ${_cssColor(colorScheme.primary)}; }
 ::highlight(tomoread-green) { background: #80c78399; }
 ::highlight(tomoread-blue) { background: #7db8f299; }
 ::highlight(tomoread-pink) { background: #ec91b699; }
+::highlight(tomoread-underline-yellow) { color: #b8860b; text-decoration: underline 2px #d2a72c; text-underline-offset: .16em; }
+::highlight(tomoread-underline-green) { color: #397a48; text-decoration: underline 2px #53a56b; text-underline-offset: .16em; }
+::highlight(tomoread-underline-blue) { color: #397fbd; text-decoration: underline 2px #5a9bd5; text-underline-offset: .16em; }
+::highlight(tomoread-underline-pink) { color: #b95373; text-decoration: underline 2px #d76d8c; text-underline-offset: .16em; }
 ''';
     return '''(() => {
       let style = document.getElementById('tomoread-reader-style');
@@ -792,6 +796,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
             'start': int.tryParse(offsets.first) ?? -1,
             'end': offsets.length == 2 ? int.tryParse(offsets.last) ?? -1 : -1,
             'color': annotation.color.name,
+            'style': annotation.renderStyle.name,
             'id': annotation.id,
           };
         })
@@ -801,7 +806,9 @@ a { color: ${_cssColor(colorScheme.primary)}; }
       const supportsHighlights = window.CSS?.highlights && typeof Highlight !== 'undefined';
       if (supportsHighlights) {
         for (const name of Array.from(CSS.highlights.keys())) {
-          if (name.startsWith('tomoread-')) CSS.highlights.delete(name);
+          if (/^tomoread-(underline-)?(yellow|green|blue|pink)\$/.test(name)) {
+            CSS.highlights.delete(name);
+          }
         }
       }
       const annotations = ${jsonEncode(values)};
@@ -829,9 +836,12 @@ a { color: ${_cssColor(colorScheme.primary)}; }
         const range = document.createRange();
         range.setStart(start.node, start.offset);
         range.setEnd(end.node, end.offset);
-        const ranges = grouped.get(annotation.color) || [];
+        const groupKey = annotation.style === 'underline'
+          ? `underline-\${annotation.color}`
+          : annotation.color;
+        const ranges = grouped.get(groupKey) || [];
         ranges.push(range);
-        grouped.set(annotation.color, ranges);
+        grouped.set(groupKey, ranges);
         if (annotation.id === focusedAnnotationId) focusedRange = range;
       }
       if (supportsHighlights) {
@@ -947,6 +957,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
             'href': annotation.href,
             'locator': annotation.locator,
             'color': annotation.color.name,
+            'style': annotation.renderStyle.name,
           },
         )
         .toList();

@@ -134,6 +134,7 @@ class AnnotationRepository {
     required String locator,
     required String selectedText,
     required AnnotationColor color,
+    AnnotationRenderStyle renderStyle = AnnotationRenderStyle.highlight,
     String? note,
     int? chapterIndex,
     String? chapterTitle,
@@ -148,6 +149,7 @@ class AnnotationRepository {
       selectedText: selectedText,
       note: _normalizeNote(note),
       color: color,
+      renderStyle: renderStyle,
       createdAt: now,
       updatedAt: now,
       chapterIndex: chapterIndex,
@@ -164,6 +166,7 @@ class AnnotationRepository {
         'selected_text': annotation.selectedText,
         'note': annotation.note,
         'color': annotation.color.name,
+        'render_style': annotation.renderStyle.name,
         'created_at': annotation.createdAt.millisecondsSinceEpoch,
         'updated_at': annotation.updatedAt.millisecondsSinceEpoch,
         'chapter_index': annotation.chapterIndex,
@@ -316,6 +319,9 @@ class AnnotationRepository {
       selectedText: row['selected_text']! as String,
       note: row['note'] as String?,
       color: AnnotationColor.values.byName(row['color']! as String),
+      renderStyle: AnnotationRenderStyle.values.byName(
+        row['render_style'] as String? ?? AnnotationRenderStyle.highlight.name,
+      ),
       createdAt: createdAt,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(
         row['updated_at'] as int? ?? row['created_at']! as int,

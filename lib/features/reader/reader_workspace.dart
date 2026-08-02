@@ -38,6 +38,7 @@ enum _SelectionContextAction {
   green,
   blue,
   pink,
+  underline,
   note,
   textColor,
   askAi,
@@ -364,6 +365,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       ReaderTextSelection selection,
       AnnotationColor color, {
       String? note,
+      AnnotationRenderStyle renderStyle = AnnotationRenderStyle.highlight,
     }) async {
       final normalizedNote = note?.trim();
       final selectionChapterIndex = manifest.value == null
@@ -377,6 +379,7 @@ class ReaderWorkspace extends HookConsumerWidget {
             locator: selection.locator,
             selectedText: selection.text,
             color: color,
+            renderStyle: renderStyle,
             note: normalizedNote?.isEmpty ?? true ? null : normalizedNote,
             chapterIndex: selectionChapterIndex ?? activeChapterIndex,
             chapterTitle: chapterTitle,
@@ -451,6 +454,14 @@ class ReaderWorkspace extends HookConsumerWidget {
           ),
           PopupMenuDivider(),
           PopupMenuItem(
+            value: _SelectionContextAction.underline,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.format_underlined),
+              title: Text('划线'),
+            ),
+          ),
+          PopupMenuItem(
             value: _SelectionContextAction.note,
             child: ListTile(
               contentPadding: EdgeInsets.zero,
@@ -503,6 +514,18 @@ class ReaderWorkspace extends HookConsumerWidget {
           await saveAnnotation(menu.selection, AnnotationColor.blue);
         case _SelectionContextAction.pink:
           await saveAnnotation(menu.selection, AnnotationColor.pink);
+        case _SelectionContextAction.underline:
+          final color = await showDialog<AnnotationColor>(
+            context: context,
+            builder: (context) => const _UnderlineColorDialog(),
+          );
+          if (color != null && context.mounted) {
+            await saveAnnotation(
+              menu.selection,
+              color,
+              renderStyle: AnnotationRenderStyle.underline,
+            );
+          }
         case _SelectionContextAction.note:
           await createAnnotation(menu.selection);
         case _SelectionContextAction.textColor:
@@ -2364,6 +2387,41 @@ class _BookSettingsResult {
 
   final BookReadingOverride? bookOverride;
   final bool? textColoringOverride;
+}
+
+class _UnderlineColorDialog extends StatelessWidget {
+  const _UnderlineColorDialog();
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('选择划线颜色'),
+    content: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: AnnotationColor.values
+          .map(
+            (color) => ActionChip(
+              avatar: CircleAvatar(backgroundColor: _annotationSwatch(color)),
+              label: Text(color.label),
+              onPressed: () => Navigator.pop(context, color),
+            ),
+          )
+          .toList(),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+    ],
+  );
+
+  Color _annotationSwatch(AnnotationColor color) => switch (color) {
+    AnnotationColor.yellow => Colors.amber,
+    AnnotationColor.green => Colors.green,
+    AnnotationColor.blue => Colors.lightBlue,
+    AnnotationColor.pink => Colors.pink,
+  };
 }
 
 enum _BookTextColoringMode { followGlobal, enabled, disabled }

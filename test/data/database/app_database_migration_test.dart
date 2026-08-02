@@ -18,6 +18,21 @@ void main() {
         version: 10,
         onCreate: (database, _) async {
           await database.execute('''
+            CREATE TABLE reading_annotations (
+              id TEXT PRIMARY KEY,
+              book_id TEXT NOT NULL,
+              href TEXT NOT NULL,
+              locator TEXT NOT NULL,
+              selected_text TEXT NOT NULL,
+              note TEXT,
+              color TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER,
+              chapter_index INTEGER,
+              chapter_title TEXT
+            )
+          ''');
+          await database.execute('''
             CREATE TABLE ai_provider_profiles (
               id TEXT PRIMARY KEY,
               name TEXT NOT NULL,
@@ -83,7 +98,7 @@ void main() {
     addTearDown(appDatabase.close);
     final database = await appDatabase.database;
 
-    expect(await database.getVersion(), 12);
+    expect(await database.getVersion(), 13);
     final parts = await database.query('chat_message_parts');
     expect(parts.single['type'], 'text');
     expect(parts.single['text_content'], 'Legacy answer');
@@ -100,5 +115,12 @@ void main() {
         AND name IN ('book_text_coloring_overrides', 'text_color_terms')
     ''');
     expect(textColoringTables, hasLength(2));
+    final annotationColumns = await database.rawQuery(
+      'PRAGMA table_info(reading_annotations)',
+    );
+    expect(
+      annotationColumns.map((column) => column['name']),
+      contains('render_style'),
+    );
   });
 }
