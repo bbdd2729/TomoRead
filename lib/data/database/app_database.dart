@@ -20,7 +20,168 @@ class AppDatabase {
   final Future<String> Function() _pathProvider;
   Future<Database>? _database;
 
+  static const schemaVersion = 21;
+
   Future<Database> get database => _database ??= _open();
+
+  Future<String> get databasePath => _pathProvider();
+
+  Future<void> createSnapshot(String destinationPath) async {
+    final destination = File(destinationPath);
+    await destination.parent.create(recursive: true);
+    if (await destination.exists()) await destination.delete();
+    final escapedPath = destination.path.replaceAll("'", "''");
+    await (await database).execute("VACUUM INTO '$escapedPath'");
+  }
+
+  Future<DatabaseSnapshotInfo> inspectSnapshot(String snapshotPath) async {
+    final snapshotFile = File(snapshotPath);
+    if (!await snapshotFile.exists()) {
+      throw const FormatException('数据库快照不存在。');
+    }
+    Database? snapshot;
+    try {
+      snapshot = await _databaseFactory.openDatabase(
+        snapshotFile.path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      final integrityRows = await snapshot.rawQuery('PRAGMA quick_check');
+      final integrity = integrityRows.isEmpty
+          ? null
+          : integrityRows.first.values.first.toString();
+      if (integrity != 'ok') {
+        throw const FormatException('数据库完整性校验失败。');
+      }
+      final versionRows = await snapshot.rawQuery('PRAGMA user_version');
+      final version = versionRows.isEmpty
+          ? null
+          : versionRows.first.values.first;
+      if (version is! int || version <= 0) {
+        throw const FormatException('数据库 schema 版本无效。');
+      }
+      final booksTable = await snapshot.rawQuery('''
+        SELECT name FROM sqlite_master
+        WHERE type = 'table' AND name = 'books'
+      ''');
+      if (booksTable.isEmpty) {
+        throw const FormatException('数据库缺少书库表。');
+      }
+      final bookRows = await snapshot.query('books', columns: ['id']);
+      final fontRows = await snapshot.query(
+        'imported_fonts',
+        columns: ['id'],
+      );
+      return DatabaseSnapshotInfo(
+        schemaVersion: version,
+        bookIds: bookRows.map((row) => row['id']! as String).toSet(),
+        fontIds: fontRows.map((row) => row['id']! as String).toSet(),
+      );
+    } finally {
+      await snapshot?.close();
+    }
+  }
+
+  Future<void> prepareSnapshotForBackup({
+    required String snapshotPath,
+    required Map<String, String> bookPaths,
+    required Map<String, String> coverPaths,
+    required Map<String, String> fontPaths,
+  }) async {
+    Database? snapshot;
+    try {
+      snapshot = await _databaseFactory.openDatabase(
+        snapshotPath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      await snapshot.transaction((transaction) async {
+        final books = await transaction.query('books', columns: ['id']);
+        for (final row in books) {
+          final id = row['id']! as String;
+          await transaction.update(
+            'books',
+            {
+              'file_path': bookPaths[id] == null
+                  ? null
+                  : 'backup://${bookPaths[id]}',
+              'cover_path': coverPaths[id] == null
+                  ? null
+                  : 'backup://${coverPaths[id]}',
+            },
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
+        final fonts = await transaction.query(
+          'imported_fonts',
+          columns: ['id'],
+        );
+        for (final row in fonts) {
+          final id = row['id']! as String;
+          await transaction.update(
+            'imported_fonts',
+            {
+              'file_path': fontPaths[id] == null
+                  ? 'backup://unavailable/$id'
+                  : 'backup://${fontPaths[id]}',
+              'source': 'backup',
+            },
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
+      });
+    } finally {
+      await snapshot?.close();
+    }
+  }
+
+  Future<void> rewriteManagedPaths({
+    required Directory supportRoot,
+    required Map<String, String> bookPaths,
+    required Map<String, String> coverPaths,
+    required Map<String, String> fontPaths,
+  }) async {
+    final root = path.normalize(supportRoot.path);
+    final liveDatabase = await database;
+    await liveDatabase.transaction((transaction) async {
+      for (final entry in bookPaths.entries) {
+        final target = path.normalize(path.join(root, entry.value));
+        if (!path.isWithin(root, target)) {
+          throw const FormatException('书籍恢复路径越界。');
+        }
+        await transaction.update(
+          'books',
+          {'file_path': target},
+          where: 'id = ?',
+          whereArgs: [entry.key],
+        );
+      }
+      for (final entry in coverPaths.entries) {
+        final target = path.normalize(path.join(root, entry.value));
+        if (!path.isWithin(root, target)) {
+          throw const FormatException('封面恢复路径越界。');
+        }
+        await transaction.update(
+          'books',
+          {'cover_path': target},
+          where: 'id = ?',
+          whereArgs: [entry.key],
+        );
+      }
+      for (final entry in fontPaths.entries) {
+        final target = path.normalize(path.join(root, entry.value));
+        if (!path.isWithin(root, target)) {
+          throw const FormatException('字体恢复路径越界。');
+        }
+        await transaction.update(
+          'imported_fonts',
+          {'file_path': target, 'source': 'restored-backup'},
+          where: 'id = ?',
+          whereArgs: [entry.key],
+        );
+      }
+    });
+  }
 
   Future<void> close() async {
     final database = _database;
@@ -34,7 +195,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 21,
+        version: schemaVersion,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -903,4 +1064,16 @@ class AppDatabase {
     }
     return path.join(databaseDirectory.path, 'tomoread.db');
   }
+}
+
+class DatabaseSnapshotInfo {
+  const DatabaseSnapshotInfo({
+    required this.schemaVersion,
+    required this.bookIds,
+    required this.fontIds,
+  });
+
+  final int schemaVersion;
+  final Set<String> bookIds;
+  final Set<String> fontIds;
 }
