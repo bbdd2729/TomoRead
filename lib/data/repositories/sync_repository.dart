@@ -9,12 +9,12 @@ import '../services/sync_merge_service.dart';
 class SyncRepository {
   SyncRepository(
     this._database, {
-    SyncMergeService mergeService = const SyncMergeService(),
+    this.mergeService = const SyncMergeService(),
     this.tombstoneRetention = const Duration(days: 90),
-  }) : _mergeService = mergeService;
+  });
 
   final AppDatabase _database;
-  final SyncMergeService _mergeService;
+  final SyncMergeService mergeService;
   final Duration tombstoneRetention;
 
   Future<void> registerDevice({
@@ -52,7 +52,7 @@ class SyncRepository {
     return database.transaction((transaction) async {
       final current = await _readRecord(transaction, entityType, entityId);
       final revision = (current?.revision ?? 0) + 1;
-      final envelope = _mergeService.createUpsert(
+      final envelope = mergeService.createUpsert(
         entityType: entityType,
         entityId: entityId,
         revision: revision,
@@ -74,7 +74,7 @@ class SyncRepository {
     final database = await _database.database;
     return database.transaction((transaction) async {
       final current = await _readRecord(transaction, entityType, entityId);
-      final envelope = _mergeService.createDelete(
+      final envelope = mergeService.createDelete(
         entityType: entityType,
         entityId: entityId,
         revision: (current?.revision ?? 0) + 1,
@@ -99,7 +99,7 @@ class SyncRepository {
         incoming.entityType,
         incoming.entityId,
       );
-      final outcome = _mergeService.merge(local, incoming);
+      final outcome = mergeService.merge(local, incoming);
       if (outcome.disposition == SyncMergeDisposition.conflict) {
         await _insertConflict(transaction, outcome.conflict!);
       } else if (outcome.disposition == SyncMergeDisposition.applied) {
@@ -181,7 +181,7 @@ class SyncRepository {
         conflict.entityId,
       );
       final timestamp = (resolvedAt ?? DateTime.now()).toUtc();
-      final envelope = _mergeService.createUpsert(
+      final envelope = mergeService.createUpsert(
         entityType: conflict.entityType,
         entityId: conflict.entityId,
         revision: (current?.revision ?? 0) + 1,
