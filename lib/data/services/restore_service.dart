@@ -83,7 +83,12 @@ class RestoreService {
     onProgress?.call(
       const RestoreProgress(phase: RestorePhase.validating),
     );
-    final manifest = await backupService.validate(archivePath);
+    final BackupManifest manifest;
+    try {
+      manifest = await backupService.validate(archivePath);
+    } on BackupException catch (error) {
+      throw RestoreException(error.message);
+    }
     token.throwIfCancelled();
     final root = rootProvider == null
         ? await getApplicationSupportDirectory()

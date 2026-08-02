@@ -19,6 +19,7 @@ jobs:
   verify:
     name: Verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - name: Set up Flutter
@@ -30,7 +31,7 @@ jobs:
           pub-cache: true
       - run: flutter pub get
       - run: flutter analyze lib test
-      - run: flutter test
+      - run: timeout 5m flutter test --timeout 2m
 
   linux:
     name: Linux

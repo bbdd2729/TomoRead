@@ -39,15 +39,8 @@ void main() {
     WidgetTester tester, {
     ValueChanged<AppAppearance>? onAppearanceChanged,
     List<LibraryBook> books = const [],
+    bool includeStorageDiagnostics = false,
   }) async {
-    final storageRoot = await Directory.systemTemp.createTemp(
-      'tomoread_widget_storage_',
-    );
-    addTearDown(() async {
-      if (await storageRoot.exists()) {
-        await storageRoot.delete(recursive: true);
-      }
-    });
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -61,9 +54,15 @@ void main() {
             _FakeAnnotationRepository(),
           ),
           bookRepositoryProvider.overrideWithValue(_FakeBookRepository(books)),
-          storageDiagnosticsServiceProvider.overrideWithValue(
-            StorageDiagnosticsService(rootProvider: () async => storageRoot),
-          ),
+          if (includeStorageDiagnostics)
+            storageDiagnosticsServiceProvider.overrideWithValue(
+              StorageDiagnosticsService(
+                rootProvider: () async => Directory(
+                  '${Directory.systemTemp.path}${Platform.pathSeparator}'
+                  'tomoread-widget-storage-missing',
+                ),
+              ),
+            ),
         ],
         child: MaterialApp(
           home: AppShell(
@@ -112,7 +111,7 @@ void main() {
     tester,
   ) async {
     configureDesktop(tester);
-    await pumpShell(tester);
+    await pumpShell(tester, includeStorageDiagnostics: true);
 
     await tester.tap(find.byKey(const Key('settings-navigation')));
     await tester.pump();
