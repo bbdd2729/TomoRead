@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -18,10 +17,15 @@ import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_position_metrics.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_chapter.dart';
+import '../../domain/models/text_coloring.dart';
+import '../../domain/models/text_coloring_layout.dart';
 import '../../domain/models/visual_artifact.dart';
 import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
 import 'content_search_dialog.dart';
+import 'text_coloring_controller.dart';
+import 'text_coloring_text.dart';
+import 'text_coloring_widgets.dart';
 import '../text_import/text_content_controller.dart';
 import '../text_import/text_projection_controller.dart';
 import '../text_import/text_projection_dialog.dart';
@@ -62,6 +66,13 @@ class TextReaderWorkspace extends HookConsumerWidget {
     final projectionConfigState = ref.watch(
       textProjectionConfigProvider(bookId),
     );
+    final textColoringState = ref.watch(resolvedTextColoringProvider(bookId));
+    final textColoringOverride = ref.watch(
+      bookTextColoringOverrideProvider(bookId),
+    );
+    final disabledTextColoring = useMemoized(ResolvedTextColoring.disabled);
+    final textColoring = textColoringState.value ?? disabledTextColoring;
+    final selectedColorText = useState<String?>(null);
     final lifecycle = useAppLifecycleState();
     final pomodoro = ref.watch(pomodoroControllerProvider).value;
     final breakActive = pomodoro?.isBreak == true && pomodoro?.isRunning == true;
@@ -102,10 +113,36 @@ class TextReaderWorkspace extends HookConsumerWidget {
       [bookId, rawChapterText, projectionConfig],
     );
     final projectionSnapshot = useFuture(projectionJob.result);
+    final fallbackProjection = useMemoized(
+      () => DisplayProjection.identity(rawChapterText),
+      [rawChapterText],
+    );
+    final effectiveProjection = projectionSnapshot.data?.rawText == rawChapterText
+        ? projectionSnapshot.data!
+        : fallbackProjection;
+    final markdown = document?.book.format == 'markdown';
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final coloringLayoutJob = useMemoized(
+      () => ref.read(textColoringLayoutServiceProvider).startLayout(
+        projection: effectiveProjection,
+        coloring: textColoring,
+        markdown: markdown,
+        dark: dark,
+      ),
+      [effectiveProjection, textColoring, markdown, dark],
+    );
+    final coloringLayoutSnapshot = useFuture(
+      coloringLayoutJob.result,
+      preserveState: false,
+    );
 
     useEffect(
       () => () => unawaited(projectionJob.cancel()),
       [projectionJob],
+    );
+    useEffect(
+      () => () => unawaited(coloringLayoutJob.cancel()),
+      [coloringLayoutJob],
     );
 
     useEffect(() {
@@ -621,6 +658,49 @@ class TextReaderWorkspace extends HookConsumerWidget {
       );
     }
 
+    Future<void> addSelectedTextColor() async {
+      final selection = selectedColorText.value;
+      if (selection == null || selection.trim().isEmpty) return;
+      final draft = await showDialog<TextColorTermDraft>(
+        context: context,
+        builder: (context) => TextColorTermChoiceDialog(
+          text: selection,
+          settings: textColoring.settings,
+        ),
+      );
+      if (draft == null || !context.mounted) return;
+      try {
+        await ref
+            .read(textColoringControllerProvider)
+            .assignTerm(
+              term: selection,
+              tone: draft.tone,
+              bookId: draft.global ? null : bookId,
+            );
+        selectedColorText.value = null;
+      } on TextColoringException catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
+    }
+
+    Future<void> openTextColoringSettings() async {
+      final result = await showDialog<_TextColoringOverrideResult>(
+        context: context,
+        builder: (context) => _TextColoringBookDialog(
+          bookId: bookId,
+          settings: textColoring.settings,
+          override: textColoringOverride.value,
+        ),
+      );
+      if (result == null || !context.mounted) return;
+      await ref
+          .read(textColoringControllerProvider)
+          .saveBookOverride(bookId, result.value);
+    }
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -660,6 +740,18 @@ class TextReaderWorkspace extends HookConsumerWidget {
               builder: (context) => TextProjectionDialog(bookId: bookId),
             ),
             icon: const Icon(Icons.translate),
+          ),
+          IconButton(
+            tooltip: '将选中文字设为前景色',
+            onPressed: selectedColorText.value == null
+                ? null
+                : addSelectedTextColor,
+            icon: const Icon(Icons.format_color_text_outlined),
+          ),
+          IconButton(
+            tooltip: '本书文字前景色设置',
+            onPressed: openTextColoringSettings,
+            icon: const Icon(Icons.palette_outlined),
           ),
           IconButton(
             tooltip: '阅读助手',
@@ -707,10 +799,11 @@ class TextReaderWorkspace extends HookConsumerWidget {
               final positionMetrics = textPositionIndex.metricsForOffset(
                 rawOffset,
               );
-              final projection = projectionSnapshot.data;
-              final content = projection?.rawText == rawContent
-                  ? projection!.displayText
-                  : rawContent;
+              final projection = effectiveProjection.rawText == rawContent
+                  ? effectiveProjection
+                  : DisplayProjection.identity(rawContent);
+              final layout = coloringLayoutSnapshot.data ??
+                  TextColoringLayout.plain(projection.displayText);
               final textStyle = TextStyle(
                 fontFamily: settings.font.fontFamily,
                 fontSize: settings.fontSize,
@@ -723,12 +816,19 @@ class TextReaderWorkspace extends HookConsumerWidget {
                       content: Text('显示转换失败，已回退原文：${projectionSnapshot.error}'),
                       actions: const [SizedBox.shrink()],
                     )
-                  else if (projection?.hasAmbiguousRanges == true)
+                  else if (projection.hasAmbiguousRanges)
                     const MaterialBanner(
                       content: Text(
-                        '本章含无法精确映射的转换区段；这些区段不会创建可回跳标注。',
+                        '本章含无法精确映射的转换区段；这些区段不会创建可回跳标注或文字颜色。',
                       ),
                       actions: [SizedBox.shrink()],
+                    ),
+                  if (coloringLayoutSnapshot.hasError)
+                    MaterialBanner(
+                      content: Text(
+                        '文字前景色计算失败，已显示无颜色正文：${coloringLayoutSnapshot.error}',
+                      ),
+                      actions: const [SizedBox.shrink()],
                     ),
                   Expanded(
                     child: SingleChildScrollView(
@@ -741,52 +841,52 @@ class TextReaderWorkspace extends HookConsumerWidget {
                       child: Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 820),
-                          child: value.book.format == 'markdown'
-                              ? SelectionArea(
-                                  child: MarkdownBody(
-                                    data: content,
-                                    styleSheet: MarkdownStyleSheet(
-                                      p: textStyle,
-                                      blockquote: textStyle,
-                                      listBullet: textStyle,
-                                    ),
-                                  ),
-                                )
-                              : SelectableText(
-                                  content,
-                                  style: textStyle,
-                                  onSelectionChanged: (selection, _) {
-                                    if (selection.isCollapsed ||
-                                        projection == null) {
-                                      selectedContext.value = null;
-                                      return;
-                                    }
-                                    final range = projection.displayToRaw(
-                                      selection.start,
-                                      selection.end,
-                                    );
-                                    if (!range.isExact) {
-                                      selectedContext.value = null;
-                                      return;
-                                    }
-                                    final rawStart = start + range.start;
-                                    final rawEnd = start + range.end;
-                                    selectedContext.value =
-                                        ReadingContextSelection(
-                                          text: value.rawText.substring(
-                                            rawStart,
-                                            rawEnd,
-                                          ),
-                                          href: 'text:${chapter.id}',
-                                          locator: chapter.locator(
-                                            start: rawStart,
-                                            end: rawEnd,
-                                          ),
-                                          chapterIndex: index,
-                                          chapterTitle: chapter.title,
-                                        );
-                                  },
+                          child: TextColoringSelectableText(
+                            key: const Key('text-reader-selectable-content'),
+                            layout: layout,
+                            style: textStyle,
+                            onSelectionChanged: (selection, _) {
+                              if (selection.isCollapsed) {
+                                selectedContext.value = null;
+                                selectedColorText.value = null;
+                                return;
+                              }
+                              final displayRange = layout.visibleToDisplay(
+                                selection.start,
+                                selection.end,
+                              );
+                              if (!displayRange.isExact) {
+                                selectedContext.value = null;
+                                selectedColorText.value = null;
+                                return;
+                              }
+                              final range = projection.displayToRaw(
+                                displayRange.start,
+                                displayRange.end,
+                              );
+                              if (!range.isExact) {
+                                selectedContext.value = null;
+                                selectedColorText.value = null;
+                                return;
+                              }
+                              final rawStart = start + range.start;
+                              final rawEnd = start + range.end;
+                              selectedColorText.value = layout.text.substring(
+                                selection.start,
+                                selection.end,
+                              );
+                              selectedContext.value = ReadingContextSelection(
+                                text: value.rawText.substring(rawStart, rawEnd),
+                                href: 'text:${chapter.id}',
+                                locator: chapter.locator(
+                                  start: rawStart,
+                                  end: rawEnd,
                                 ),
+                                chapterIndex: index,
+                                chapterTitle: chapter.title,
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),
@@ -835,6 +935,109 @@ class TextReaderWorkspace extends HookConsumerWidget {
       ),
     );
   }
+}
+
+enum _TextColoringBookMode { followGlobal, enabled, disabled }
+
+class _TextColoringOverrideResult {
+  const _TextColoringOverrideResult(this.value);
+
+  final bool? value;
+}
+
+class _TextColoringBookDialog extends StatefulWidget {
+  const _TextColoringBookDialog({
+    required this.bookId,
+    required this.settings,
+    required this.override,
+  });
+
+  final String bookId;
+  final TextColoringSettings settings;
+  final bool? override;
+
+  @override
+  State<_TextColoringBookDialog> createState() =>
+      _TextColoringBookDialogState();
+}
+
+class _TextColoringBookDialogState extends State<_TextColoringBookDialog> {
+  late _TextColoringBookMode _mode = switch (widget.override) {
+    true => _TextColoringBookMode.enabled,
+    false => _TextColoringBookMode.disabled,
+    null => _TextColoringBookMode.followGlobal,
+  };
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('本书文字前景色'),
+    content: SizedBox(
+      width: 440,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SegmentedButton<_TextColoringBookMode>(
+            segments: const [
+              ButtonSegment(
+                value: _TextColoringBookMode.followGlobal,
+                label: Text('跟随全局'),
+              ),
+              ButtonSegment(
+                value: _TextColoringBookMode.enabled,
+                label: Text('开启'),
+              ),
+              ButtonSegment(
+                value: _TextColoringBookMode.disabled,
+                label: Text('关闭'),
+              ),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (value) => setState(() => _mode = value.first),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            widget.settings.enabled
+                ? '全局文字前景色当前已开启；本书设置可覆盖全局开关。'
+                : '全局文字前景色当前已关闭；可仅为本书开启。',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (context) => TextColorTermsManagerDialog(
+                settings: widget.settings,
+                title: '本书文字词条',
+                bookId: widget.bookId,
+              ),
+            ),
+            icon: const Icon(Icons.format_color_text_outlined),
+            label: const Text('管理本书词条'),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(
+          context,
+          _TextColoringOverrideResult(
+            switch (_mode) {
+              _TextColoringBookMode.followGlobal => null,
+              _TextColoringBookMode.enabled => true,
+              _TextColoringBookMode.disabled => false,
+            },
+          ),
+        ),
+        child: const Text('保存'),
+      ),
+    ],
+  );
 }
 
 int _safeSplitOffset(String text) {
