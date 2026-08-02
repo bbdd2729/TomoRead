@@ -11,6 +11,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../domain/models/annotation_query.dart';
+import '../../domain/models/document_locator.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/library_book.dart';
@@ -65,26 +66,49 @@ class NotesPage extends HookConsumerWidget {
       final manifest = book.format == 'epub'
           ? await ref.read(bookRepositoryProvider).loadManifest(book.id)
           : null;
-      final hrefChapterIndex = manifest == null
-          ? null
-          : epubSpineIndexForHref(manifest, item.annotation.href);
-      final index =
-          hrefChapterIndex ?? item.annotation.chapterIndex ?? book.chapterIndex;
-      final cfi = item.annotation.locator.startsWith('cfi:')
-          ? item.annotation.locator.substring(4)
-          : null;
-      final annotationUri = Uri.tryParse(item.annotation.href);
-      final anchor = annotationUri?.fragment.isNotEmpty == true
-          ? annotationUri!.fragment
-          : null;
-      final locator = book.format == 'epub'
-          ? EpubLocation(
-              chapterIndex: index,
-              scrollRatio: 0,
-              anchor: anchor,
-              cfi: cfi,
-            ).toLocator()
-          : item.annotation.locator;
+      late final int index;
+      late final String locator;
+      if (book.format == 'epub') {
+        final hrefChapterIndex = manifest == null
+            ? null
+            : epubSpineIndexForHref(manifest, item.annotation.href);
+        index =
+            hrefChapterIndex ??
+            item.annotation.chapterIndex ??
+            book.chapterIndex;
+        final cfi = item.annotation.locator.startsWith('cfi:')
+            ? item.annotation.locator.substring(4)
+            : null;
+        final annotationUri = Uri.tryParse(item.annotation.href);
+        final anchor = annotationUri?.fragment.isNotEmpty == true
+            ? annotationUri!.fragment
+            : null;
+        locator = EpubLocation(
+          chapterIndex: index,
+          scrollRatio: 0,
+          anchor: anchor,
+          cfi: cfi,
+        ).toLocator();
+      } else if (book.format == 'pdf') {
+        final pdfLocator = PdfDocumentLocator.tryParse(
+          item.annotation.locator,
+        );
+        if (pdfLocator == null ||
+            (book.chapterCount > 0 &&
+                pdfLocator.pageNumber > book.chapterCount)) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('这条笔记没有有效的 PDF 页内定位。')),
+            );
+          }
+          return;
+        }
+        index = pdfLocator.pageNumber - 1;
+        locator = pdfLocator.serialize();
+      } else {
+        index = item.annotation.chapterIndex ?? book.chapterIndex;
+        locator = item.annotation.locator;
+      }
       await ref
           .read(bookRepositoryProvider)
           .updateReadingPosition(

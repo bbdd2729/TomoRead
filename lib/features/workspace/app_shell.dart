@@ -523,6 +523,7 @@ class _WorkspaceContent extends StatelessWidget {
                 bookId: readerBookId ?? '',
                 title: readerTitle,
                 onExitReader: onExitReader,
+                onOpenChat: onOpenChat,
               )
             : readerFormat == 'txt' || readerFormat == 'markdown'
             ? TextReaderWorkspace(
