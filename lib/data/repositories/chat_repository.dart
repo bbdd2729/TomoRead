@@ -432,6 +432,17 @@ class ChatRepository {
           'chapterTitle': part.citation.chapterTitle,
         },
       ),
+      ChatArtifactPart() => (
+        'artifact',
+        null,
+        <String, Object?>{
+          'artifactType': part.artifactType,
+          'title': part.title,
+          'payloadJson': part.payloadJson,
+          'artifactId': part.artifactId,
+          'bookId': part.bookId,
+        },
+      ),
       ChatNoticePart() => (
         'notice',
         part.message,
@@ -639,6 +650,19 @@ class ChatRepository {
           chapterTitle: payload['chapterTitle'] as String?,
           quote: text,
         ),
+      ),
+      'artifact' => ChatArtifactPart(
+        id: id,
+        messageId: messageId,
+        ordinal: ordinal,
+        status: status,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        artifactType: payload['artifactType'] as String? ?? 'unknown',
+        title: payload['title'] as String? ?? '结构化结果',
+        payloadJson: payload['payloadJson'] as String? ?? '{}',
+        artifactId: payload['artifactId'] as String?,
+        bookId: payload['bookId'] as String?,
       ),
       'aborted' => ChatAbortedPart(
         id: id,

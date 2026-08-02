@@ -330,6 +330,28 @@ class ChatCitationPart extends ChatMessagePart {
   final ChatCitation citation;
 }
 
+class ChatArtifactPart extends ChatMessagePart {
+  const ChatArtifactPart({
+    required super.id,
+    required super.messageId,
+    required super.ordinal,
+    required super.status,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.artifactType,
+    required this.title,
+    required this.payloadJson,
+    this.artifactId,
+    this.bookId,
+  });
+
+  final String artifactType;
+  final String title;
+  final String payloadJson;
+  final String? artifactId;
+  final String? bookId;
+}
+
 class ChatNoticePart extends ChatMessagePart {
   const ChatNoticePart({
     required super.id,

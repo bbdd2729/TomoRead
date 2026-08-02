@@ -118,6 +118,7 @@ class AiAgentRunner {
                 controller.add(event);
               case AiToolCallStartedEvent() ||
                   AiToolArgumentsDeltaEvent() ||
+                  AiArtifactEvent() ||
                   AiUsageEvent():
                 controller.add(event);
               case AiToolCallReadyEvent():

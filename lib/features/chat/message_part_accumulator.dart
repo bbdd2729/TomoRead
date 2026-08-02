@@ -180,6 +180,23 @@ class MessagePartAccumulator {
             citation: citation,
           ),
         );
+      case AiArtifactEvent():
+        _completeStreamingParts(now);
+        _parts.add(
+          ChatArtifactPart(
+            id: _partId('artifact'),
+            messageId: messageId,
+            ordinal: _parts.length,
+            status: ChatPartStatus.completed,
+            createdAt: now,
+            updatedAt: now,
+            artifactType: event.artifactType,
+            title: event.title,
+            payloadJson: event.payloadJson,
+            artifactId: event.artifactId,
+            bookId: event.bookId,
+          ),
+        );
       case AiUsageEvent():
         usage = (usage ?? const AiUsage()).merge(event.usage);
       case AiRunCompletedEvent():

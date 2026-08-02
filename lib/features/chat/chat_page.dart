@@ -12,6 +12,8 @@ import '../../domain/models/ai_provider_preset.dart';
 import '../../domain/models/chat_models.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/library_book.dart';
+import '../../domain/models/visual_artifact.dart';
+import '../visualization/visual_artifact_widgets.dart';
 import 'chat_controller.dart';
 
 class ChatPage extends HookConsumerWidget {
@@ -669,9 +671,87 @@ class _MessagePartView extends StatelessWidget {
         citation: value.citation,
         onOpen: onOpenCitation,
       ),
+      ChatArtifactPart() => _ArtifactPartView(
+        part: value,
+        onOpenCitation: onOpenCitation,
+      ),
       ChatNoticePart() => _NoticePartView(part: value),
       ChatAbortedPart() => _AbortedPartView(part: value),
     };
+  }
+}
+
+class _ArtifactPartView extends StatelessWidget {
+  const _ArtifactPartView({
+    required this.part,
+    required this.onOpenCitation,
+  });
+
+  final ChatArtifactPart part;
+  final ValueChanged<ChatCitation> onOpenCitation;
+
+  @override
+  Widget build(BuildContext context) {
+    VisualArtifactKind? kind;
+    for (final value in VisualArtifactKind.values) {
+      if (value.name == part.artifactType) kind = value;
+    }
+    if (kind == null) {
+      return ListTile(
+        leading: const Icon(Icons.data_object),
+        title: Text(part.title),
+        subtitle: Text('暂不支持的 Artifact 类型：${part.artifactType}'),
+      );
+    }
+    final artifact = VisualArtifact(
+      id: part.artifactId ?? part.id,
+      bookId: part.bookId ?? '',
+      kind: kind,
+      scope: VisualArtifactScope.currentChapter,
+      title: part.title,
+      contentHash: '',
+      payloadJson: part.payloadJson,
+      createdAt: part.createdAt,
+    );
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        initiallyExpanded: true,
+        leading: const Icon(Icons.account_tree_outlined),
+        title: Text(part.title),
+        subtitle: Text(
+          kind == VisualArtifactKind.wordCloud ? '词云 Artifact' : '思维导图 Artifact',
+        ),
+        children: [
+          SizedBox(
+            height: 420,
+            child: VisualArtifactView(
+              artifact: artifact,
+              onOpenCitation: (citation) => onOpenCitation(
+                ChatCitation(
+                  id: 'artifact-${part.id}-${citation.locator}',
+                  messageId: part.messageId,
+                  ordinal: 1,
+                  bookId: citation.bookId,
+                  href: citation.href,
+                  locator: citation.locator,
+                  chapterIndex: citation.chapterIndex,
+                  chapterTitle: citation.chapterTitle,
+                  quote: citation.quote,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

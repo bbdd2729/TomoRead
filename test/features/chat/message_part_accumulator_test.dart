@@ -93,4 +93,22 @@ void main() {
     expect(tools[0].result, 'first');
     expect(tools[1].result, 'second');
   });
+
+  test('turns validated artifact events into structured message parts', () {
+    final accumulator = MessagePartAccumulator(messageId: 'assistant-artifact');
+    accumulator.apply(
+      const AiArtifactEvent(
+        artifactType: 'mindMap',
+        title: '人物关系',
+        payloadJson: '{"title":"人物关系","nodes":[]}',
+        artifactId: 'visual-a',
+        bookId: 'book-a',
+      ),
+    );
+
+    final part = accumulator.parts.whereType<ChatArtifactPart>().single;
+    expect(part.artifactType, 'mindMap');
+    expect(part.artifactId, 'visual-a');
+    expect(part.bookId, 'book-a');
+  });
 }

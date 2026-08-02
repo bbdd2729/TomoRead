@@ -58,4 +58,48 @@ void main() {
     await repository.deleteThread(thread.id);
     expect(await repository.listMessages(thread.id), isEmpty);
   });
+
+  test('round-trips structured artifact parts without executable markup', () async {
+    final thread = await repository.createThread(
+      scope: ChatScope.general,
+      title: '结构化结果',
+    );
+    final now = DateTime.now();
+    await repository.insertMessage(
+      ChatMessage(
+        id: 'artifact-message',
+        threadId: thread.id,
+        role: ChatRole.assistant,
+        content: '',
+        status: ChatMessageStatus.complete,
+        createdAt: now,
+        completedAt: now,
+        parts: [
+          ChatArtifactPart(
+            id: 'artifact-part',
+            messageId: 'artifact-message',
+            ordinal: 0,
+            status: ChatPartStatus.completed,
+            createdAt: now,
+            updatedAt: now,
+            artifactType: 'mindMap',
+            title: '人物关系',
+            payloadJson: '{"title":"人物关系","nodes":[]}',
+            artifactId: 'visual-a',
+            bookId: 'book-a',
+          ),
+        ],
+      ),
+    );
+
+    final part = (await repository.listMessages(thread.id))
+        .single
+        .parts
+        .whereType<ChatArtifactPart>()
+        .single;
+    expect(part.artifactType, 'mindMap');
+    expect(part.title, '人物关系');
+    expect(part.payloadJson, contains('"nodes"'));
+    expect(part.artifactId, 'visual-a');
+  });
 }
