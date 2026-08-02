@@ -6,16 +6,19 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-import '../../domain/models/library_book.dart';
+import '../../domain/models/book_import.dart';
 import '../../domain/models/epub_manifest.dart';
+import '../../domain/models/library_book.dart';
 import '../../domain/models/text_content_profile.dart';
 import '../repositories/book_repository.dart';
 import '../repositories/content_chunk_repository.dart';
 import '../repositories/text_content_repository.dart';
+import 'book_import_scan_service.dart';
 import 'chapter_parser_service.dart';
 import 'content_chunk_service.dart';
 import 'epub_content_service.dart';
 import 'epub_parser.dart';
+import 'import_cancellation_token.dart';
 import 'text_decoder_service.dart';
 
 enum BookImportStatus { imported, duplicate, needsEncoding, failed }
@@ -80,6 +83,7 @@ class BookImportService {
     ChapterParserService? chapterParser,
     TextContentRepository? textContentRepository,
     ContentChunkService? contentChunkService,
+    BookImportScanService? scanService,
     this.libraryRootProvider,
   }) : parser = epubParser ?? const EpubParser(),
        textDecoder = textDecoder ?? const TextDecoderService(),
@@ -91,7 +95,8 @@ class BookImportService {
            ContentChunkService(
              repository: ContentChunkRepository(repository.database),
              epubContent: const EpubContentService(),
-           );
+           ),
+       scanService = scanService ?? const BookImportScanService();
 
   final BookRepository repository;
   final EpubParser parser;
@@ -99,20 +104,121 @@ class BookImportService {
   final ChapterParserService chapterParser;
   final TextContentRepository textContentRepository;
   final ContentChunkService contentChunkService;
+  final BookImportScanService scanService;
   final Future<Directory> Function()? libraryRootProvider;
 
-  Future<List<BookImportResult>> pickAndImportBooks() async {
+  Future<List<ImportSource>> pickImportSources() async {
     final selection = await FilePicker.pickFiles(
       allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: const ['epub', 'pdf', 'txt', 'md', 'markdown'],
     );
     if (selection == null) return const [];
+    return selection.files
+        .map((file) => file.path)
+        .whereType<String>()
+        .map(
+          (value) => ImportSource(
+            kind: ImportSourceKind.filePicker,
+            location: value,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<ImportSource?> pickImportDirectorySource() async {
+    final selected = await FilePicker.getDirectoryPath();
+    if (selected == null) return null;
+    return ImportSource(
+      kind: ImportSourceKind.directoryPicker,
+      location: selected,
+    );
+  }
+
+  Future<ImportScanPreview> previewSources(
+    Iterable<ImportSource> sources, {
+    ImportScanLimits limits = const ImportScanLimits(),
+    ImportCancellationToken? cancellationToken,
+    void Function(int processed, int total)? onHashProgress,
+  }) async {
+    final directories = await _libraryDirectories();
+    final scanned = await scanService.scan(
+      sources,
+      limits: limits,
+      cancellationToken: cancellationToken,
+      excludedRoots: [directories.library.path],
+    );
+    if (scanned.cancelled) return scanned;
+
+    final items = List<ImportScanItem>.from(scanned.items);
+    final hashes = <String, String>{};
+    final supportedIndexes = <int>[
+      for (var index = 0; index < items.length; index++)
+        if (items[index].disposition == ImportScanDisposition.supported) index,
+    ];
+    var processed = 0;
+    for (final index in supportedIndexes) {
+      if (cancellationToken?.isCancelled == true) {
+        return scanned.copyWith(items: List.unmodifiable(items), cancelled: true);
+      }
+      final item = items[index];
+      final request = item.request!;
+      try {
+        final hash = await _hashFile(
+          File(request.sourcePath),
+          cancellationToken: cancellationToken,
+        );
+        final firstPath = hashes[hash];
+        if (firstPath != null) {
+          items[index] = item.copyWith(
+            disposition: ImportScanDisposition.duplicate,
+            reason: '与本次扫描中的 ${path.basename(firstPath)} 内容重复',
+          );
+        } else {
+          hashes[hash] = request.sourcePath;
+          final duplicate = await repository.findByHash(hash);
+          if (duplicate != null) {
+            items[index] = item.copyWith(
+              disposition: ImportScanDisposition.duplicate,
+              reason: '书库中已存在相同内容',
+              duplicateBookId: duplicate.id,
+            );
+          }
+        }
+      } on ImportCancelledException {
+        return scanned.copyWith(items: List.unmodifiable(items), cancelled: true);
+      } on FileSystemException catch (error) {
+        items[index] = item.copyWith(
+          disposition: ImportScanDisposition.failed,
+          reason: error.message,
+        );
+      }
+      processed++;
+      onHashProgress?.call(processed, supportedIndexes.length);
+    }
+    return scanned.copyWith(items: List.unmodifiable(items));
+  }
+
+  Future<List<BookImportResult>> importPreview(
+    ImportScanPreview preview, {
+    ImportCancellationToken? cancellationToken,
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    final requests = preview.requests;
+    final results = <BookImportResult>[];
+    for (final request in requests) {
+      if (cancellationToken?.isCancelled == true) break;
+      results.add(await importBookFile(request.sourcePath));
+      onProgress?.call(results.length, requests.length);
+    }
+    return List.unmodifiable(results);
+  }
+
+  Future<List<BookImportResult>> pickAndImportBooks() async {
+    final sources = await pickImportSources();
+    if (sources.isEmpty) return const [];
     return Future.wait(
-      selection.files
-          .map((file) => file.path)
-          .whereType<String>()
-          .map(importBookFile),
+      sources.map((source) => importBookFile(source.location)),
     );
   }
 
@@ -376,6 +482,23 @@ class BookImportService {
     }
   }
 
+  Future<String> _hashFile(
+    File source, {
+    ImportCancellationToken? cancellationToken,
+  }) async {
+    final digestSink = _DigestSink();
+    final hashSink = sha256.startChunkedConversion(digestSink);
+    await for (final chunk in source.openRead()) {
+      if (cancellationToken?.isCancelled == true) {
+        hashSink.close();
+        throw const ImportCancelledException();
+      }
+      hashSink.add(chunk);
+    }
+    hashSink.close();
+    return digestSink.digest.toString();
+  }
+
   Future<_LibraryDirectories> _libraryDirectories() async {
     final root = libraryRootProvider == null
         ? await getApplicationSupportDirectory()
@@ -387,7 +510,12 @@ class BookImportService {
     for (final directory in [books, covers, imports]) {
       if (!await directory.exists()) await directory.create(recursive: true);
     }
-    return _LibraryDirectories(books: books, covers: covers, imports: imports);
+    return _LibraryDirectories(
+      library: library,
+      books: books,
+      covers: covers,
+      imports: imports,
+    );
   }
 
   String _safeCoverExtension(String? source) {
@@ -401,11 +529,13 @@ class BookImportService {
 
 class _LibraryDirectories {
   const _LibraryDirectories({
+    required this.library,
     required this.books,
     required this.covers,
     required this.imports,
   });
 
+  final Directory library;
   final Directory books;
   final Directory covers;
   final Directory imports;

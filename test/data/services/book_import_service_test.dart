@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tomoread/data/database/app_database.dart';
 import 'package:tomoread/data/repositories/book_repository.dart';
 import 'package:tomoread/data/services/book_import_service.dart';
+import 'package:tomoread/domain/models/book_import.dart';
 
 void main() {
   late AppDatabase database;
@@ -70,6 +71,38 @@ void main() {
     );
     expect(profile.single['encoding'], 'utf-8');
     expect(chapters.map((row) => row['title']), ['序章', '第一章 起点', '第二章 继续']);
+  });
+
+  test('preview identifies library and in-batch duplicates before import', () async {
+    final first = File('${root.path}${Platform.pathSeparator}first.txt');
+    final second = File('${root.path}${Platform.pathSeparator}second.txt');
+    final existing = File('${root.path}${Platform.pathSeparator}existing.txt');
+    await first.writeAsString('same batch content');
+    await second.writeAsString('same batch content');
+    await existing.writeAsString('already imported content');
+    final service = BookImportService(
+      repository: repository,
+      libraryRootProvider: () async => root,
+    );
+    expect(
+      (await service.importTextFile(existing.path)).status,
+      BookImportStatus.imported,
+    );
+
+    final preview = await service.previewSources([
+      ImportSource(kind: ImportSourceKind.desktopDrop, location: first.path),
+      ImportSource(kind: ImportSourceKind.desktopDrop, location: second.path),
+      ImportSource(kind: ImportSourceKind.desktopDrop, location: existing.path),
+    ]);
+
+    expect(preview.supportedCount, 1);
+    expect(preview.duplicateCount, 2);
+    expect(
+      preview.items.where(
+        (item) => item.reason == '书库中已存在相同内容',
+      ),
+      hasLength(1),
+    );
   });
 }
 

@@ -24,6 +24,7 @@ import '../data/services/ai_provider_probe_service.dart';
 import '../data/services/ai_secret_store.dart';
 import '../data/services/ai_tool_registry.dart';
 import '../data/services/book_import_service.dart';
+import '../data/services/book_import_scan_service.dart';
 import '../data/services/book_storage_service.dart';
 import '../data/services/chapter_parser_service.dart';
 import '../data/services/content_chunk_service.dart';
@@ -335,7 +336,12 @@ final bookImportServiceProvider = Provider<BookImportService>(
     chapterParser: ref.watch(chapterParserServiceProvider),
     textContentRepository: ref.watch(textContentRepositoryProvider),
     contentChunkService: ref.watch(contentChunkServiceProvider),
+    scanService: ref.watch(bookImportScanServiceProvider),
   ),
+);
+
+final bookImportScanServiceProvider = Provider<BookImportScanService>(
+  (ref) => const BookImportScanService(),
 );
 
 final textDecoderServiceProvider = Provider<TextDecoderService>(
