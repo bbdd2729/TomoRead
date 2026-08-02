@@ -12,6 +12,7 @@ import '../data/repositories/content_chunk_repository.dart';
 import '../data/repositories/font_repository.dart';
 import '../data/repositories/reading_session_repository.dart';
 import '../data/repositories/pomodoro_repository.dart';
+import '../data/repositories/reader_command_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/repositories/skill_repository.dart';
 import '../data/repositories/text_coloring_repository.dart';
@@ -39,6 +40,7 @@ import '../data/services/storage_diagnostics_service.dart';
 import '../data/services/font_catalog_service.dart';
 import '../data/services/reading_activity_tracker.dart';
 import '../data/services/reading_context_assembler.dart';
+import '../data/services/reader_shortcut_service.dart';
 import '../data/services/pomodoro_timer_service.dart';
 import '../data/services/stats_report_service.dart';
 import '../data/services/text_coloring_layout_service.dart';
@@ -94,6 +96,14 @@ final skillRepositoryProvider = Provider<SkillRepository>(
 
 final textColoringRepositoryProvider = Provider<TextColoringRepository>(
   (ref) => TextColoringRepository(ref.watch(appDatabaseProvider)),
+);
+
+final readerCommandRepositoryProvider = Provider<ReaderCommandRepository>(
+  (ref) => ReaderCommandRepository(ref.watch(appDatabaseProvider)),
+);
+
+final readerShortcutServiceProvider = Provider<ReaderShortcutService>(
+  (ref) => const ReaderShortcutService(),
 );
 
 final textContentRepositoryProvider = Provider<TextContentRepository>(

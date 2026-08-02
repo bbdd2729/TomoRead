@@ -10,6 +10,7 @@ import '../../domain/models/text_coloring.dart';
 import '../../shared/widgets/page_header.dart';
 import '../reader/text_coloring_controller.dart';
 import '../reader/text_coloring_widgets.dart';
+import '../reader/reader_shortcut_settings.dart';
 import 'backup_restore_page.dart';
 import 'font_catalog_controller.dart';
 import 'storage_diagnostics_page.dart';
@@ -541,6 +542,10 @@ class _ReadingDefaultsSettings extends StatelessWidget {
         loading: textColoringLoading,
         onChanged: onTextColoringChanged,
       ),
+      const SizedBox(height: 32),
+      const Divider(),
+      const SizedBox(height: 24),
+      const ReaderShortcutSettingsPanel(),
     ],
   );
 }
