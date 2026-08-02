@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tomoread/app/appearance.dart';
@@ -7,6 +9,7 @@ import 'package:tomoread/data/repositories/annotation_repository.dart';
 import 'package:tomoread/data/repositories/bookmark_repository.dart';
 import 'package:tomoread/data/repositories/book_repository.dart';
 import 'package:tomoread/data/repositories/settings_repository.dart';
+import 'package:tomoread/data/services/storage_diagnostics_service.dart';
 import 'package:tomoread/domain/models/bookmark.dart';
 import 'package:tomoread/domain/models/epub_manifest.dart';
 import 'package:tomoread/domain/models/library_book.dart';
@@ -37,6 +40,14 @@ void main() {
     ValueChanged<AppAppearance>? onAppearanceChanged,
     List<LibraryBook> books = const [],
   }) async {
+    final storageRoot = await Directory.systemTemp.createTemp(
+      'tomoread_widget_storage_',
+    );
+    addTearDown(() async {
+      if (await storageRoot.exists()) {
+        await storageRoot.delete(recursive: true);
+      }
+    });
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -50,6 +61,9 @@ void main() {
             _FakeAnnotationRepository(),
           ),
           bookRepositoryProvider.overrideWithValue(_FakeBookRepository(books)),
+          storageDiagnosticsServiceProvider.overrideWithValue(
+            StorageDiagnosticsService(rootProvider: () async => storageRoot),
+          ),
         ],
         child: MaterialApp(
           home: AppShell(
@@ -92,6 +106,22 @@ void main() {
       tester.widget<NavigationRail>(find.byType(NavigationRail)).extended,
       isFalse,
     );
+  });
+
+  testWidgets('opens backup and storage tools from data settings', (
+    tester,
+  ) async {
+    configureDesktop(tester);
+    await pumpShell(tester);
+
+    await tester.tap(find.byKey(const Key('settings-navigation')));
+    await tester.pump();
+    await tester.tap(find.text('数据与隐私'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('create-library-backup')), findsOneWidget);
+    expect(find.byKey(const Key('restore-library-backup')), findsOneWidget);
+    expect(find.text('存储诊断'), findsOneWidget);
   });
 
   testWidgets('adds a bookmark and toggles the reader toc', (tester) async {

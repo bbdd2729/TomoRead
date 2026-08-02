@@ -10,9 +10,11 @@ import '../../domain/models/text_coloring.dart';
 import '../../shared/widgets/page_header.dart';
 import '../reader/text_coloring_controller.dart';
 import '../reader/text_coloring_widgets.dart';
+import 'backup_restore_page.dart';
 import 'font_catalog_controller.dart';
+import 'storage_diagnostics_page.dart';
 
-enum _SettingsSection { appearance, reading }
+enum _SettingsSection { appearance, reading, dataPrivacy }
 
 class SettingsPage extends HookConsumerWidget {
   const SettingsPage({
@@ -133,6 +135,7 @@ class SettingsPage extends HookConsumerWidget {
             .read(textColoringSettingsProvider.notifier)
             .saveSettings(value),
       ),
+      _SettingsSection.dataPrivacy => const _DataPrivacySettings(),
     };
 
     return LayoutBuilder(
@@ -155,6 +158,11 @@ class SettingsPage extends HookConsumerWidget {
                     value: _SettingsSection.reading,
                     icon: Icon(Icons.menu_book_outlined),
                     label: Text('阅读'),
+                  ),
+                  ButtonSegment(
+                    value: _SettingsSection.dataPrivacy,
+                    icon: Icon(Icons.shield_outlined),
+                    label: Text('数据'),
                   ),
                 ],
                 selected: {section.value},
@@ -228,6 +236,12 @@ class _SettingsNavigation extends StatelessWidget {
         label: '默认阅读',
         selected: selected == _SettingsSection.reading,
         onTap: () => onSelected(_SettingsSection.reading),
+      ),
+      _NavigationItem(
+        icon: Icons.shield_outlined,
+        label: '数据与隐私',
+        selected: selected == _SettingsSection.dataPrivacy,
+        onTap: () => onSelected(_SettingsSection.dataPrivacy),
       ),
     ],
   );
@@ -543,9 +557,26 @@ class _SettingsHeading extends StatelessWidget {
   );
 }
 
+class _DataPrivacySettings extends StatelessWidget {
+  const _DataPrivacySettings();
+
+  @override
+  Widget build(BuildContext context) => const Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      BackupRestorePage(),
+      SizedBox(height: 32),
+      Divider(),
+      SizedBox(height: 28),
+      StorageDiagnosticsPage(),
+    ],
+  );
+}
+
 String _sectionTitle(_SettingsSection section) => switch (section) {
   _SettingsSection.appearance => '应用外观',
   _SettingsSection.reading => '默认阅读',
+  _SettingsSection.dataPrivacy => '数据与隐私',
 };
 
 List<ReadingFontRef> _availableReadingFonts(
@@ -569,4 +600,5 @@ List<ReadingFontRef> _availableReadingFonts(
 String _sectionSubtitle(_SettingsSection section) => switch (section) {
   _SettingsSection.appearance => '调整主题、颜色、字体和界面缩放。',
   _SettingsSection.reading => '为新打开的 EPUB 书籍设置默认排版。',
+  _SettingsSection.dataPrivacy => '创建可验证备份，安全恢复并清理可重建缓存。',
 };

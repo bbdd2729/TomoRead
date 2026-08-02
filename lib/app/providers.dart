@@ -31,6 +31,10 @@ import '../data/services/epub_content_service.dart';
 import '../data/services/epub_extraction_service.dart';
 import '../data/services/epub_reader_session_service.dart';
 import '../data/services/epub_section_progress_service.dart';
+import '../data/services/backup_service.dart';
+import '../data/services/installation_identity_service.dart';
+import '../data/services/restore_service.dart';
+import '../data/services/storage_diagnostics_service.dart';
 import '../data/services/font_catalog_service.dart';
 import '../data/services/reading_activity_tracker.dart';
 import '../data/services/reading_context_assembler.dart';
@@ -141,6 +145,34 @@ typedef ContentSearchRequest = ({
   int? maxChapterIndex,
   int limit,
 });
+
+final installationIdentityServiceProvider = Provider<InstallationIdentityService>(
+  (ref) => InstallationIdentityService(),
+);
+
+final installationIdProvider = FutureProvider<String>(
+  (ref) => ref.watch(installationIdentityServiceProvider).getOrCreate(),
+);
+
+final backupServiceProvider = FutureProvider<BackupService>((ref) async {
+  final installationId = await ref.watch(installationIdProvider.future);
+  return BackupService(
+    database: ref.watch(appDatabaseProvider),
+    appVersion: '1.0.0+1',
+    deviceId: installationId,
+  );
+});
+
+final restoreServiceProvider = FutureProvider<RestoreService>((ref) async {
+  return RestoreService(
+    database: ref.watch(appDatabaseProvider),
+    backupService: await ref.watch(backupServiceProvider.future),
+  );
+});
+
+final storageDiagnosticsServiceProvider = Provider<StorageDiagnosticsService>(
+  (ref) => StorageDiagnosticsService(database: ref.watch(appDatabaseProvider)),
+);
 
 final contentSearchProvider = FutureProvider.autoDispose
     .family<List<ContentSearchResult>, ContentSearchRequest>((ref, request) {
