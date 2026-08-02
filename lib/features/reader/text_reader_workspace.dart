@@ -8,7 +8,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/services/text_decoder_service.dart';
 import '../../domain/models/pomodoro.dart';
-import '../../domain/models/font_choice.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_chapter.dart';
@@ -37,6 +36,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
     final documentState = ref.watch(textBookDocumentProvider(bookId));
     final readingOverride = ref.watch(bookReadingOverrideProvider(bookId)).value;
     final settings = readingOverride?.settings ?? readingSettings;
+    ref.watch(readingFontReadyProvider(settings.font));
     final chapterIndex = useState(0);
     final lifecycle = useAppLifecycleState();
     final pomodoro = ref.watch(pomodoroControllerProvider).value;

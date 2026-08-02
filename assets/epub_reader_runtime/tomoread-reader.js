@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '26'
+const runtimeVersion = '27'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -59,6 +59,7 @@ const applySettings = settings => {
   paginator.setAttribute('margin', `${settings.margin ?? 32}px`)
   paginator.toggleAttribute('animated', pageTransition !== 'none')
   paginator.setStyles(`
+    ${settings.fontFaceCss ?? ''}
     html {
       color: ${settings.foreground};
       background: ${settings.background};

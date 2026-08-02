@@ -4,11 +4,13 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/appearance.dart';
 import '../../domain/models/font_choice.dart';
+import '../../domain/models/reading_font.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_coloring.dart';
 import '../../shared/widgets/page_header.dart';
 import '../reader/text_coloring_controller.dart';
 import '../reader/text_coloring_widgets.dart';
+import 'font_catalog_controller.dart';
 
 enum _SettingsSection { appearance, reading }
 
@@ -30,6 +32,11 @@ class SettingsPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final section = useState(_SettingsSection.appearance);
     final textColoringState = ref.watch(textColoringSettingsProvider);
+    final fontCatalogState = ref.watch(fontCatalogControllerProvider);
+    final availableFonts = _availableReadingFonts(
+      readingSettings.font,
+      fontCatalogState.value,
+    );
     final textColoring =
         textColoringState.value ?? TextColoringSettings.defaults();
     final sectionContent = switch (section.value) {
@@ -40,6 +47,86 @@ class SettingsPage extends HookConsumerWidget {
       _SettingsSection.reading => _ReadingDefaultsSettings(
         settings: readingSettings,
         onChanged: onReadingSettingsChanged,
+        fonts: availableFonts,
+        fontsLoading: fontCatalogState.isLoading,
+        onImportFont: () async {
+          final accepted = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('导入阅读字体'),
+              content: const Text(
+                '字体文件会复制到应用数据目录。请确认你有权使用该字体；'
+                'TomoRead 不会替你取得或验证字体许可证。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('选择文件'),
+                ),
+              ],
+            ),
+          );
+          if (accepted != true || !context.mounted) return;
+          try {
+            final font = await ref
+                .read(fontCatalogControllerProvider.notifier)
+                .importFromPicker();
+            if (font != null && context.mounted) {
+              onReadingSettingsChanged(readingSettings.copyWith(font: font.ref));
+            }
+          } on Object catch (error) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('字体导入失败：$error')),
+              );
+            }
+          }
+        },
+        onDeleteFont: readingSettings.font.importedFontId == null
+            ? null
+            : () async {
+                final accepted = await showDialog<bool>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const Text('删除已导入字体？'),
+                    content: const Text(
+                      '所有引用该字体的全局及单本书设置会先替换为系统默认字体。',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: const Text('取消'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        child: const Text('替换并删除'),
+                      ),
+                    ],
+                  ),
+                );
+                if (accepted != true) return;
+                try {
+                  await ref
+                      .read(fontCatalogControllerProvider.notifier)
+                      .delete(
+                        readingSettings.font.importedFontId!,
+                        replacement: ReadingFontRef.system,
+                      );
+                  onReadingSettingsChanged(
+                    readingSettings.copyWith(font: ReadingFontRef.system),
+                  );
+                } on Object catch (error) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('字体删除失败：$error')),
+                    );
+                  }
+                }
+              },
         textColoring: textColoring,
         textColoringLoading: textColoringState.isLoading,
         onTextColoringChanged: (value) => ref
@@ -296,6 +383,10 @@ class _ReadingDefaultsSettings extends StatelessWidget {
   const _ReadingDefaultsSettings({
     required this.settings,
     required this.onChanged,
+    required this.fonts,
+    required this.fontsLoading,
+    required this.onImportFont,
+    required this.onDeleteFont,
     required this.textColoring,
     required this.textColoringLoading,
     required this.onTextColoringChanged,
@@ -303,6 +394,10 @@ class _ReadingDefaultsSettings extends StatelessWidget {
 
   final ReadingSettings settings;
   final ValueChanged<ReadingSettings> onChanged;
+  final List<ReadingFontRef> fonts;
+  final bool fontsLoading;
+  final Future<void> Function() onImportFont;
+  final Future<void> Function()? onDeleteFont;
   final TextColoringSettings textColoring;
   final bool textColoringLoading;
   final ValueChanged<TextColoringSettings> onTextColoringChanged;
@@ -312,11 +407,11 @@ class _ReadingDefaultsSettings extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const _SettingsHeading('默认书本字体'),
-      DropdownButtonFormField<FontChoice>(
+      DropdownButtonFormField<ReadingFontRef>(
         initialValue: settings.font,
         decoration: const InputDecoration(border: OutlineInputBorder()),
         items: [
-          for (final font in FontChoice.values)
+          for (final font in fonts)
             DropdownMenuItem(value: font, child: Text(font.label)),
         ],
         onChanged: (font) {
@@ -399,6 +494,30 @@ class _ReadingDefaultsSettings extends StatelessWidget {
         title: const Text('点击区域翻页（实验性）'),
         subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
       ),
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          TextButton.icon(
+            onPressed: fontsLoading ? null : onImportFont,
+            icon: const Icon(Icons.font_download_outlined),
+            label: const Text('导入字体'),
+          ),
+          if (onDeleteFont != null)
+            TextButton.icon(
+              onPressed: onDeleteFont,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('删除当前字体'),
+            ),
+          if (fontsLoading) ...[
+            const SizedBox(width: 12),
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ],
+        ],
+      ),
       const SizedBox(height: 32),
       const Divider(),
       const SizedBox(height: 24),
@@ -428,6 +547,24 @@ String _sectionTitle(_SettingsSection section) => switch (section) {
   _SettingsSection.appearance => '应用外观',
   _SettingsSection.reading => '默认阅读',
 };
+
+List<ReadingFontRef> _availableReadingFonts(
+  ReadingFontRef selected,
+  FontCatalogState? catalog,
+) {
+  final fonts = <ReadingFontRef>[
+    ReadingFontRef.system,
+    ReadingFontRef.serif,
+    ReadingFontRef.sansSerif,
+    ReadingFontRef.monospace,
+    ...?catalog?.systemFonts.map(
+      (font) => ReadingFontRef.systemFamily(font.family),
+    ),
+    ...?catalog?.importedFonts.map((font) => font.ref),
+  ];
+  if (!fonts.contains(selected)) fonts.add(selected);
+  return fonts.toSet().toList();
+}
 
 String _sectionSubtitle(_SettingsSection section) => switch (section) {
   _SettingsSection.appearance => '调整主题、颜色、字体和界面缩放。',

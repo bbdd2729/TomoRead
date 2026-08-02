@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 17,
+        version: 18,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -85,6 +85,9 @@ class AppDatabase {
           }
           if (oldVersion < 17) {
             await _upgradeToVersion17(database);
+          }
+          if (oldVersion < 18) {
+            await _upgradeToVersion18(database);
           }
         },
       ),
@@ -174,6 +177,7 @@ class AppDatabase {
     await _createTextColoringTables(database);
     await _createPomodoroSessionsTable(database);
     await _createTextContentTables(database);
+    await _createImportedFontsTable(database);
   }
 
   Future<void> _upgradeToVersion2(Database database) async {
@@ -388,6 +392,29 @@ class AppDatabase {
       FROM reading_sessions_v16
     ''');
     await database.execute('DROP TABLE reading_sessions_v16');
+  }
+
+  Future<void> _upgradeToVersion18(Database database) =>
+      _createImportedFontsTable(database);
+
+  Future<void> _createImportedFontsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS imported_fonts (
+        id TEXT PRIMARY KEY,
+        family TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_hash TEXT NOT NULL UNIQUE,
+        format TEXT NOT NULL CHECK(format IN ('ttf', 'otf', 'woff', 'woff2')),
+        source TEXT NOT NULL,
+        license_label TEXT,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS imported_fonts_family
+      ON imported_fonts(family COLLATE NOCASE)
+    ''');
   }
 
   Future<void> _createBooksIndexes(Database database) async {

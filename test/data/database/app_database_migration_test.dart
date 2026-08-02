@@ -98,7 +98,7 @@ void main() {
     addTearDown(appDatabase.close);
     final database = await appDatabase.database;
 
-    expect(await database.getVersion(), 17);
+    expect(await database.getVersion(), 18);
     final parts = await database.query('chat_message_parts');
     expect(parts.single['type'], 'text');
     expect(parts.single['text_content'], 'Legacy answer');
@@ -146,5 +146,10 @@ void main() {
         AND name IN ('text_content_profiles', 'text_chapters')
     ''');
     expect(textTables, hasLength(2));
+    final fontTables = await database.rawQuery('''
+      SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name = 'imported_fonts'
+    ''');
+    expect(fontTables, hasLength(1));
   });
 }

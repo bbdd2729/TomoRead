@@ -10,7 +10,6 @@ import 'package:webview_flutter_windows/webview_flutter_windows.dart';
 import '../../app/providers.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
-import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
@@ -99,11 +98,12 @@ class EpubWebView extends HookConsumerWidget {
       );
     }
     final readerSession = ref.watch(epubReaderSessionProvider(bookId));
+    final fontFaceCss = ref.watch(epubFontFaceCssProvider(settings.font)).value;
     final controller = useMemoized(WebviewController.new);
     final initialized = useState(false);
     final initializationError = useState<Object?>(null);
     final runtimeLoaded = useRef(false);
-    final styleScript = _styleScript(context, settings);
+    final styleScript = _styleScript(context, settings, fontFaceCss);
     final annotationScript = _annotationScript(
       annotations,
       href,
@@ -115,7 +115,11 @@ class EpubWebView extends HookConsumerWidget {
       focusedAnnotationId,
     );
     final runtimeSearchScript = _runtimeSearchScript(searchQuery);
-    final runtimeSettingsScript = _runtimeSettingsScript(context, settings);
+    final runtimeSettingsScript = _runtimeSettingsScript(
+      context,
+      settings,
+      fontFaceCss,
+    );
     final runtimeTextColoringScript = _runtimeTextColoringScript(
       context,
       textColoring,
@@ -181,6 +185,7 @@ class EpubWebView extends HookConsumerWidget {
             initialScrollRatio,
             initialAnchor,
             initialCfi,
+            fontFaceCss,
           ),
         );
       } catch (_) {
@@ -490,7 +495,11 @@ class EpubWebView extends HookConsumerWidget {
   String _chapterUrl(String chapterHref) =>
       Uri(scheme: 'https', host: _hostName, path: chapterHref).toString();
 
-  String _styleScript(BuildContext context, ReadingSettings settings) {
+  String _styleScript(
+    BuildContext context,
+    ReadingSettings settings,
+    String? fontFaceCss,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
     final isPaginated = settings.layoutMode == ReaderLayoutMode.paginated;
     final readingDirection = direction == ReadingDirection.rtl ? 'rtl' : 'ltr';
@@ -550,6 +559,7 @@ body { margin: 0 !important; padding: 0 !important; }
 ''';
     final css =
         '''
+${fontFaceCss ?? ''}
 html { color-scheme: ${Theme.of(context).brightness == Brightness.dark ? 'dark' : 'light'}; }
 html, body { background: ${_cssColor(colorScheme.surface)} !important; color: ${_cssColor(colorScheme.onSurface)} !important; direction: $readingDirection !important; }
 body { box-sizing: border-box; font-family: ${jsonEncode(settings.font.fontFamily)} !important; font-size: ${settings.fontSize}px !important; line-height: ${settings.lineHeight} !important; }
@@ -904,13 +914,14 @@ a { color: ${_cssColor(colorScheme.primary)}; }
     double ratio,
     String? anchor,
     String? cfi,
+    String? fontFaceCss,
   ) {
     final payload = jsonEncode({
       'href': href,
       'ratio': ratio.clamp(0, 1),
       'anchor': anchor,
       'cfi': cfi,
-      'settings': _runtimeSettings(context, settings),
+      'settings': _runtimeSettings(context, settings, fontFaceCss),
     });
     return _runtimeCall(
       "runtime.command({ id: 0, type: 'open', payload: $payload })",
@@ -920,8 +931,9 @@ a { color: ${_cssColor(colorScheme.primary)}; }
   String _runtimeSettingsScript(
     BuildContext context,
     ReadingSettings settings,
+    String? fontFaceCss,
   ) => _runtimeCall(
-    "runtime.command({ type: 'setSettings', payload: { settings: ${jsonEncode(_runtimeSettings(context, settings))} } })",
+    "runtime.command({ type: 'setSettings', payload: { settings: ${jsonEncode(_runtimeSettings(context, settings, fontFaceCss))} } })",
   );
 
   String _runtimeTextColoringScript(
@@ -986,6 +998,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
   Map<String, Object?> _runtimeSettings(
     BuildContext context,
     ReadingSettings settings,
+    [String? fontFaceCss],
   ) {
     final scheme = Theme.of(context).colorScheme;
     return {
@@ -996,6 +1009,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
       'maxInlineSize': 760,
       'margin': settings.pageMargin,
       'fontFamily': settings.font.fontFamily,
+      'fontFaceCss': fontFaceCss,
       'fontSize': settings.fontSize,
       'lineHeight': settings.lineHeight,
       'pageTransition': settings.pageTransition.name,

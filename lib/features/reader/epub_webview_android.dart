@@ -11,7 +11,6 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../app/providers.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
-import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_coloring.dart';
@@ -66,8 +65,13 @@ class AndroidEpubWebView extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final readerSession = ref.watch(epubReaderSessionProvider(bookId));
     final epubManifest = ref.watch(readerManifestProvider(bookId));
+    final fontFaceCss = ref.watch(epubFontFaceCssProvider(settings.font)).value;
     final error = useState<Object?>(null);
-    final runtimeSettingsScript = _runtimeSettingsScript(context, settings);
+    final runtimeSettingsScript = _runtimeSettingsScript(
+      context,
+      settings,
+      fontFaceCss,
+    );
     final runtimeTextColoringScript = _runtimeTextColoringScript(
       context,
       textColoring,
@@ -82,6 +86,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
             initialAnchor,
             initialCfi,
             epubManifest.value!,
+            fontFaceCss,
           );
     final runtimeScriptRef = useRef<String?>(runtimeScript);
     runtimeScriptRef.value = runtimeScript;
@@ -319,6 +324,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     String? anchor,
     String? cfi,
     EpubManifest manifest,
+    String? fontFaceCss,
   ) {
     final scheme = Theme.of(context).colorScheme;
     final payload = jsonEncode({
@@ -335,6 +341,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
         'maxInlineSize': 760,
         'margin': settings.pageMargin,
         'fontFamily': settings.font.fontFamily,
+        'fontFaceCss': fontFaceCss,
         'fontSize': settings.fontSize,
         'lineHeight': settings.lineHeight,
         'foreground':
@@ -376,6 +383,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
   String _runtimeSettingsScript(
     BuildContext context,
     ReadingSettings settings,
+    String? fontFaceCss,
   ) {
     final scheme = Theme.of(context).colorScheme;
     return '''(() => {
@@ -383,7 +391,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
       if (runtime) void runtime.command(${jsonEncode({
       'type': 'setSettings',
       'payload': {
-        'settings': {'flow': settings.layoutMode == ReaderLayoutMode.paginated ? 'paginated' : 'scrolled', 'columnCount': settings.doubleColumn ? 2 : 1, 'maxInlineSize': 760, 'margin': settings.pageMargin, 'fontFamily': settings.font.fontFamily, 'fontSize': settings.fontSize, 'lineHeight': settings.lineHeight, 'foreground': _cssColor(scheme.onSurface), 'background': _cssColor(scheme.surface), 'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr', 'pageTransition': settings.pageTransition.name, 'tapNavigationEnabled': settings.tapToTurnPages},
+        'settings': {'flow': settings.layoutMode == ReaderLayoutMode.paginated ? 'paginated' : 'scrolled', 'columnCount': settings.doubleColumn ? 2 : 1, 'maxInlineSize': 760, 'margin': settings.pageMargin, 'fontFamily': settings.font.fontFamily, 'fontFaceCss': fontFaceCss, 'fontSize': settings.fontSize, 'lineHeight': settings.lineHeight, 'foreground': _cssColor(scheme.onSurface), 'background': _cssColor(scheme.surface), 'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr', 'pageTransition': settings.pageTransition.name, 'tapNavigationEnabled': settings.tapToTurnPages},
       },
     })});
     })();''';

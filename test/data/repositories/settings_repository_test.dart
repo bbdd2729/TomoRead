@@ -9,6 +9,7 @@ import 'package:tomoread/data/repositories/settings_repository.dart';
 import 'package:tomoread/domain/models/epub_manifest.dart';
 import 'package:tomoread/domain/models/font_choice.dart';
 import 'package:tomoread/domain/models/library_book.dart';
+import 'package:tomoread/domain/models/reading_font.dart';
 import 'package:tomoread/domain/models/reading_settings.dart';
 import 'package:tomoread/domain/models/reading_annotation.dart';
 
@@ -46,7 +47,7 @@ void main() {
     );
     await settings.saveReadingSettings(
       const ReadingSettings(
-        font: FontChoice.serif,
+        font: ReadingFontRef.serif,
         fontSize: 22,
         lineHeight: 2.1,
         pageMargin: 40,
@@ -59,7 +60,7 @@ void main() {
       const BookReadingOverride(
         bookId: 'book-a',
         settings: ReadingSettings(
-          font: FontChoice.monospace,
+          font: ReadingFontRef.monospace,
           fontSize: 18,
           pageMargin: 48,
           doubleColumn: false,
@@ -81,11 +82,11 @@ void main() {
     expect(stored.appearance.readerSidePanelWidth, 384);
     expect(stored.appearance.readerTocVisible, isFalse);
     expect(stored.appearance.readerSidePanelVisible, isFalse);
-    expect(stored.readingSettings.font, FontChoice.serif);
+    expect(stored.readingSettings.font, ReadingFontRef.serif);
     expect(stored.readingSettings.doubleColumn, isFalse);
     expect(stored.readingSettings.layoutMode, ReaderLayoutMode.paginated);
     expect(stored.readingSettings.tapToTurnPages, isTrue);
-    expect(override?.settings.font, FontChoice.monospace);
+    expect(override?.settings.font, ReadingFontRef.monospace);
     expect(override?.settings.fontSize, 18);
     expect(override?.settings.pageMargin, 48);
     expect(override?.settings.doubleColumn, isFalse);

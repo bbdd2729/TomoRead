@@ -1,4 +1,4 @@
-import 'font_choice.dart';
+import 'reading_font.dart';
 
 enum ReaderLayoutMode { scroll, paginated }
 
@@ -22,7 +22,7 @@ extension ReaderPageTransitionLabel on ReaderPageTransition {
 
 class ReadingSettings {
   const ReadingSettings({
-    this.font = FontChoice.system,
+    this.font = ReadingFontRef.system,
     this.fontSize = 19,
     this.lineHeight = 1.9,
     this.pageMargin = 32,
@@ -32,7 +32,7 @@ class ReadingSettings {
     this.tapToTurnPages = false,
   });
 
-  final FontChoice font;
+  final ReadingFontRef font;
   final double fontSize;
   final double lineHeight;
   final double pageMargin;
@@ -42,7 +42,7 @@ class ReadingSettings {
   final bool tapToTurnPages;
 
   ReadingSettings copyWith({
-    FontChoice? font,
+    ReadingFontRef? font,
     double? fontSize,
     double? lineHeight,
     double? pageMargin,

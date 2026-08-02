@@ -12,7 +12,7 @@ import '../../domain/models/chat_models.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/epub_section_progress.dart';
-import '../../domain/models/font_choice.dart';
+import '../../domain/models/reading_font.dart';
 import '../../domain/models/library_book.dart';
 import '../../domain/models/reader_chapter.dart';
 import '../../domain/models/reader_text_selection.dart';
@@ -32,6 +32,7 @@ import 'text_coloring_controller.dart';
 import 'text_coloring_widgets.dart';
 import '../chat/chat_controller.dart';
 import '../notes/notes_providers.dart';
+import '../settings/font_catalog_controller.dart';
 
 enum _MobileReaderToolbarAction { search, settings, pomodoro, focus }
 
@@ -144,6 +145,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
     final annotations = annotationsState.value ?? const <ReadingAnnotation>[];
     final settings = override?.settings ?? readingSettings;
+    ref.watch(readingFontReadyProvider(settings.font));
     final textColoring =
         textColoringState.value ?? ResolvedTextColoring.disabled();
     final isPaginated = settings.layoutMode == ReaderLayoutMode.paginated;
@@ -2453,7 +2455,7 @@ class _UnderlineColorDialog extends StatelessWidget {
 
 enum _BookTextColoringMode { followGlobal, enabled, disabled }
 
-class _BookReadingSettingsDialog extends HookWidget {
+class _BookReadingSettingsDialog extends HookConsumerWidget {
   const _BookReadingSettingsDialog({
     required this.bookId,
     required this.defaults,
@@ -2469,9 +2471,21 @@ class _BookReadingSettingsDialog extends HookWidget {
   final bool? textColoringOverride;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final useOverride = useState(readingOverride != null);
     final settings = useState(readingOverride?.settings ?? defaults);
+    final catalog = ref.watch(fontCatalogControllerProvider).value;
+    final fonts = <ReadingFontRef>{
+      ReadingFontRef.system,
+      ReadingFontRef.serif,
+      ReadingFontRef.sansSerif,
+      ReadingFontRef.monospace,
+      ...?catalog?.systemFonts.map(
+        (font) => ReadingFontRef.systemFamily(font.family),
+      ),
+      ...?catalog?.importedFonts.map((font) => font.ref),
+      settings.value.font,
+    }.toList();
     final textColoringMode = useState(
       switch (textColoringOverride) {
         true => _BookTextColoringMode.enabled,
@@ -2495,10 +2509,10 @@ class _BookReadingSettingsDialog extends HookWidget {
               subtitle: const Text('关闭后，本书将跟随全局阅读设置。'),
             ),
             if (useOverride.value) ...[
-              DropdownButtonFormField<FontChoice>(
+              DropdownButtonFormField<ReadingFontRef>(
                 initialValue: settings.value.font,
                 decoration: const InputDecoration(labelText: '书本字体'),
-                items: FontChoice.values
+                items: fonts
                     .map(
                       (font) => DropdownMenuItem(
                         value: font,

@@ -8,6 +8,7 @@ import '../data/repositories/annotation_repository.dart';
 import '../data/repositories/ai_provider_repository.dart';
 import '../data/repositories/book_repository.dart';
 import '../data/repositories/chat_repository.dart';
+import '../data/repositories/font_repository.dart';
 import '../data/repositories/reading_session_repository.dart';
 import '../data/repositories/pomodoro_repository.dart';
 import '../data/repositories/settings_repository.dart';
@@ -26,6 +27,7 @@ import '../data/services/epub_content_service.dart';
 import '../data/services/epub_extraction_service.dart';
 import '../data/services/epub_reader_session_service.dart';
 import '../data/services/epub_section_progress_service.dart';
+import '../data/services/font_catalog_service.dart';
 import '../data/services/reading_activity_tracker.dart';
 import '../data/services/pomodoro_timer_service.dart';
 import '../data/services/stats_report_service.dart';
@@ -38,6 +40,7 @@ import '../domain/models/reader_chapter.dart';
 import '../domain/models/text_chapter.dart';
 import '../domain/models/text_content_profile.dart';
 import '../domain/models/reading_settings.dart';
+import '../domain/models/reading_font.dart';
 import '../domain/models/reading_annotation.dart';
 import '../features/chat/ai_agent_runner.dart';
 import 'appearance.dart';
@@ -79,6 +82,24 @@ final textColoringRepositoryProvider = Provider<TextColoringRepository>(
 final textContentRepositoryProvider = Provider<TextContentRepository>(
   (ref) => TextContentRepository(ref.watch(appDatabaseProvider)),
 );
+
+final fontRepositoryProvider = Provider<FontRepository>(
+  (ref) => FontRepository(ref.watch(appDatabaseProvider)),
+);
+
+final fontCatalogServiceProvider = Provider<FontCatalogService>(
+  (ref) => const PlatformFontCatalogService(),
+);
+
+final readingFontReadyProvider = FutureProvider.autoDispose
+    .family<void, ReadingFontRef>((ref, font) async {
+      await ref.watch(fontRepositoryProvider).ensureLoaded(font);
+    });
+
+final epubFontFaceCssProvider = FutureProvider.autoDispose
+    .family<String?, ReadingFontRef>(
+      (ref, font) => ref.watch(fontRepositoryProvider).epubFontFaceCss(font),
+    );
 
 final readingSessionRepositoryProvider = Provider<ReadingSessionRepository>(
   (ref) => ReadingSessionRepository(ref.watch(appDatabaseProvider)),

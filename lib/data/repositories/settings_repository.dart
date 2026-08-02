@@ -5,6 +5,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../app/appearance.dart';
 import '../../domain/models/font_choice.dart';
+import '../../domain/models/reading_font.dart';
 import '../../domain/models/reading_settings.dart';
 import '../database/app_database.dart';
 
@@ -130,7 +131,7 @@ class SettingsRepository {
 
   ReadingSettings _readingFromMap(Map<String, Object?> value) {
     return ReadingSettings(
-      font: FontChoice.values.byName(value['font']! as String),
+      font: ReadingFontRef.parse(value['font']),
       fontSize: (value['font_size']! as num).toDouble(),
       lineHeight: (value['line_height']! as num).toDouble(),
       pageMargin: (value['page_margin']! as num).toDouble(),
@@ -148,7 +149,7 @@ class SettingsRepository {
   }
 
   Map<String, Object> _readingToMap(ReadingSettings settings) => {
-    'font': settings.font.name,
+    'font': settings.font.storageValue,
     'font_size': settings.fontSize,
     'line_height': settings.lineHeight,
     'page_margin': settings.pageMargin,

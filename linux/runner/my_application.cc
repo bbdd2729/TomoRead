@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <pango/pangocairo.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -10,9 +11,34 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  FlMethodChannel* font_catalog_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+static void font_catalog_method_call_cb(FlMethodChannel* channel,
+                                        FlMethodCall* method_call,
+                                        gpointer user_data) {
+  const gchar* method = fl_method_call_get_name(method_call);
+  if (g_strcmp0(method, "listFonts") != 0) {
+    g_autoptr(FlMethodResponse) response = fl_method_not_implemented_response_new();
+    fl_method_call_respond(method_call, response, nullptr);
+    return;
+  }
+  PangoFontMap* font_map = pango_cairo_font_map_get_default();
+  PangoFontFamily** families = nullptr;
+  int family_count = 0;
+  pango_font_map_list_families(font_map, &families, &family_count);
+  g_autoptr(FlValue) values = fl_value_new_list();
+  for (int index = 0; index < family_count; index++) {
+    fl_value_append_take(values, fl_value_new_string(
+        pango_font_family_get_name(families[index])));
+  }
+  g_free(families);
+  g_autoptr(FlMethodResponse) response =
+      FL_METHOD_RESPONSE(fl_method_success_response_new(values));
+  fl_method_call_respond(method_call, response, nullptr);
+}
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
@@ -75,6 +101,13 @@ static void my_application_activate(GApplication* application) {
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  self->font_catalog_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "dev.tomoread/font_catalog", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->font_catalog_channel, font_catalog_method_call_cb, nullptr, nullptr);
+
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
@@ -121,6 +154,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->font_catalog_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
