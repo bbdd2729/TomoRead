@@ -16,6 +16,8 @@ import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_coloring.dart';
 import 'reader_navigation_command.dart';
 
+enum _AndroidEpubLoadPhase { loading, ready, failed }
+
 class AndroidEpubWebView extends HookConsumerWidget {
   const AndroidEpubWebView({
     super.key,
@@ -67,6 +69,10 @@ class AndroidEpubWebView extends HookConsumerWidget {
     final epubManifest = ref.watch(readerManifestProvider(bookId));
     final fontFaceCss = ref.watch(epubFontFaceCssProvider(settings.font)).value;
     final error = useState<Object?>(null);
+    final loadPhase = useState(_AndroidEpubLoadPhase.loading);
+    final retryRevision = useState(0);
+    final readinessTimer = useRef<Timer?>(null);
+    final active = useRef(true);
     final runtimeSettingsScript = _runtimeSettingsScript(
       context,
       settings,
@@ -93,21 +99,71 @@ class AndroidEpubWebView extends HookConsumerWidget {
     final textColoringScriptRef = useRef(runtimeTextColoringScript);
     textColoringScriptRef.value = runtimeTextColoringScript;
     final runtimeLoaded = useRef(false);
+    void reportReady() {
+      if (!active.value) return;
+      readinessTimer.value?.cancel();
+      readinessTimer.value = null;
+      error.value = null;
+      loadPhase.value = _AndroidEpubLoadPhase.ready;
+    }
+
+    void reportFailure(Object exception) {
+      if (!active.value) return;
+      readinessTimer.value?.cancel();
+      readinessTimer.value = null;
+      error.value = exception;
+      loadPhase.value = _AndroidEpubLoadPhase.failed;
+    }
+
     final messageHandlerRef = useRef<void Function(String)?>(null);
     messageHandlerRef.value = (rawMessage) =>
-        _handleRuntimeMessage(rawMessage, error);
+        _handleRuntimeMessage(rawMessage, reportReady, reportFailure);
     final controller = useMemoized(() {
       late final WebViewController webViewController;
       webViewController = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(const Color(0x00000000))
         ..setNavigationDelegate(
           NavigationDelegate(
+            onPageStarted: (_) {
+              if (!active.value) return;
+              readinessTimer.value?.cancel();
+              error.value = null;
+              loadPhase.value = _AndroidEpubLoadPhase.loading;
+            },
             onPageFinished: (_) {
+              if (!active.value) return;
               final script = runtimeScriptRef.value;
               if (script != null) {
-                unawaited(webViewController.runJavaScript(script));
                 unawaited(
-                  webViewController.runJavaScript(textColoringScriptRef.value),
+                  _runJavaScript(
+                    webViewController,
+                    script,
+                    onError: reportFailure,
+                  ),
+                );
+                unawaited(
+                  _runJavaScript(
+                    webViewController,
+                    textColoringScriptRef.value,
+                    onError: reportFailure,
+                  ),
+                );
+                readinessTimer.value?.cancel();
+                readinessTimer.value = Timer(
+                  const Duration(seconds: 12),
+                  () => reportFailure(
+                    StateError('EPUB renderer did not become ready in time.'),
+                  ),
+                );
+              }
+            },
+            onWebResourceError: (webError) {
+              if (webError.isForMainFrame == true) {
+                reportFailure(
+                  StateError(
+                    'Unable to load EPUB renderer: ${webError.description}',
+                  ),
                 );
               }
             },
@@ -124,8 +180,20 @@ class AndroidEpubWebView extends HookConsumerWidget {
 
     useEffect(() {
       runtimeLoaded.value = false;
+      readinessTimer.value?.cancel();
+      error.value = null;
+      loadPhase.value = _AndroidEpubLoadPhase.loading;
       return null;
-    }, [bookId]);
+    }, [bookId, retryRevision.value]);
+
+    useEffect(
+      () => () {
+        active.value = false;
+        readinessTimer.value?.cancel();
+        readinessTimer.value = null;
+      },
+      const [],
+    );
 
     useEffect(
       () {
@@ -137,13 +205,13 @@ class AndroidEpubWebView extends HookConsumerWidget {
         );
         Future<void> loadChapter() async {
           if (!await file.exists()) {
-            error.value = StateError('EPUB chapter is unavailable: $href');
+            reportFailure(StateError('EPUB chapter is unavailable: $href'));
             return;
           }
           try {
             await controller.loadFile(file.path);
           } catch (exception) {
-            error.value = exception;
+            reportFailure(exception);
           }
         }
 
@@ -156,45 +224,85 @@ class AndroidEpubWebView extends HookConsumerWidget {
         readerSession.value?.directoryPath,
         epubManifest.value,
         bookId,
+        retryRevision.value,
       ],
     );
 
     useEffect(() {
-      unawaited(controller.runJavaScript(runtimeSettingsScript));
+      if (loadPhase.value == _AndroidEpubLoadPhase.ready) {
+        unawaited(
+          _runJavaScript(
+            controller,
+            runtimeSettingsScript,
+            onError: reportFailure,
+          ),
+        );
+      }
       return null;
-    }, [controller, runtimeSettingsScript]);
+    }, [controller, runtimeSettingsScript, loadPhase.value]);
 
     useEffect(() {
-      unawaited(controller.runJavaScript(runtimeTextColoringScript));
+      if (loadPhase.value == _AndroidEpubLoadPhase.ready) {
+        unawaited(
+          _runJavaScript(
+            controller,
+            runtimeTextColoringScript,
+            onError: reportFailure,
+          ),
+        );
+      }
       return null;
-    }, [controller, runtimeTextColoringScript]);
+    }, [controller, runtimeTextColoringScript, loadPhase.value]);
 
     useEffect(() {
       final command = navigationCommand;
-      if (command == null) return null;
-      unawaited(controller.runJavaScript(_runtimeCommandScript(command)));
-      return null;
-    }, [controller, navigationCommand]);
-
-    if (readerSession.hasError ||
-        epubManifest.hasError ||
-        error.value != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'Unable to start EPUB renderer: ${error.value ?? readerSession.error ?? epubManifest.error}',
-          ),
+      if (command == null ||
+          loadPhase.value != _AndroidEpubLoadPhase.ready) {
+        return null;
+      }
+      unawaited(
+        _runJavaScript(
+          controller,
+          _runtimeCommandScript(command),
+          onError: reportFailure,
         ),
+      );
+      return null;
+    }, [controller, navigationCommand, loadPhase.value]);
+
+    if (readerSession.hasError || epubManifest.hasError) {
+      final providerError = readerSession.error ?? epubManifest.error;
+      return _AndroidEpubLoadFailure(
+        message: '无法准备 EPUB 阅读资源：$providerError',
+        onRetry: () {
+          ref.invalidate(epubReaderSessionProvider(bookId));
+          ref.invalidate(readerManifestProvider(bookId));
+        },
       );
     }
     if (readerSession.isLoading || epubManifest.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const _AndroidEpubLoading();
     }
-    return WebViewWidget(controller: controller);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        WebViewWidget(controller: controller),
+        if (loadPhase.value == _AndroidEpubLoadPhase.loading)
+          const _AndroidEpubLoading(),
+        if (loadPhase.value == _AndroidEpubLoadPhase.failed)
+          _AndroidEpubLoadFailure(
+            message: '无法启动 EPUB 渲染器：${error.value}',
+            onRetry: () => retryRevision.value += 1,
+          ),
+      ],
+    );
   }
 
-  void _handleRuntimeMessage(String rawMessage, ValueNotifier<Object?> error) {
+  void _handleRuntimeMessage(
+    String rawMessage,
+    VoidCallback onReady,
+    ValueChanged<Object> onFailure,
+  ) {
     Object? runtimeMessage;
     try {
       runtimeMessage = jsonDecode(rawMessage);
@@ -203,6 +311,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     }
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'runtimeRelocate') {
+      onReady();
       final messageHref = runtimeMessage['href'];
       final ratio = runtimeMessage['ratio'];
       final pageIndex = runtimeMessage['pageIndex'];
@@ -229,14 +338,15 @@ class AndroidEpubWebView extends HookConsumerWidget {
     }
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'runtimeError') {
-      error.value = StateError(
-        runtimeMessage['message'] ?? 'Unknown runtime error',
+      onFailure(
+        StateError(runtimeMessage['message'] ?? 'Unknown runtime error'),
       );
       return;
     }
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'commandCompleted') {
       final commandId = runtimeMessage['id'];
+      if (commandId == 0) onReady();
       if (commandId is num) onNavigationCommandFinished(commandId.toInt());
       return;
     }
@@ -416,4 +526,69 @@ class AndroidEpubWebView extends HookConsumerWidget {
 
   String _cssColor(Color color) =>
       '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
+
+  static Future<void> _runJavaScript(
+    WebViewController controller,
+    String script, {
+    required ValueChanged<Object> onError,
+  }) async {
+    try {
+      await controller.runJavaScript(script);
+    } catch (error) {
+      onError(error);
+    }
+  }
+}
+
+class _AndroidEpubLoading extends StatelessWidget {
+  const _AndroidEpubLoading();
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: Theme.of(context).colorScheme.surface,
+    child: const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('正在加载 EPUB…'),
+        ],
+      ),
+    ),
+  );
+}
+
+class _AndroidEpubLoadFailure extends StatelessWidget {
+  const _AndroidEpubLoadFailure({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: Theme.of(context).colorScheme.surface,
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 36),
+            const SizedBox(height: 12),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('重新加载'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

@@ -79,6 +79,10 @@ void main() {
       final sessionManifest =
           jsonDecode(await File(session.manifestPath).readAsString())
               as Map<String, dynamic>;
+      expect(
+        sessionManifest['runtimeVersion'],
+        EpubReaderSessionService.runtimeVersion,
+      );
       expect(sessionManifest['bookId'], book.id);
       expect(sessionManifest['resourceBase'], '../');
       expect(
@@ -91,7 +95,7 @@ void main() {
         await File(
           path.join(session.runtimeDirectoryPath, '.runtime-version'),
         ).readAsString(),
-        '26',
+        EpubReaderSessionService.runtimeVersion,
       );
     },
   );
@@ -111,6 +115,19 @@ void main() {
 
     expect(runtime, contains('rangeForCfi(doc, locator.slice(4))'));
     expect(runtime, isNot(contains('annotation.loc.slice')));
+  });
+
+  test('keeps the cached runtime marker aligned with the JS protocol', () async {
+    final runtime = await rootBundle.loadString(
+      'assets/epub_reader_runtime/tomoread-reader.js',
+    );
+
+    expect(
+      runtime,
+      contains(
+        "const runtimeVersion = '${EpubReaderSessionService.runtimeVersion}'",
+      ),
+    );
   });
 }
 

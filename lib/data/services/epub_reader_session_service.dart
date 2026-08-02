@@ -36,7 +36,7 @@ class EpubReaderSessionService {
        _runtimeAssetLoader = runtimeAssetLoader ?? rootBundle.loadString;
 
   static const _runtimeDirectoryName = '.tomoread-reader';
-  static const _runtimeVersion = '26';
+  static const runtimeVersion = '27';
 
   static const _runtimeAssets = {
     'index.html': 'assets/epub_reader_runtime/index.html',
@@ -66,7 +66,7 @@ class EpubReaderSessionService {
     );
     await manifestFile.writeAsString(
       const JsonEncoder.withIndent('  ').convert({
-        'runtimeVersion': _runtimeVersion,
+        'runtimeVersion': runtimeVersion,
         'bookId': book.id,
         'resourceBase': '../',
         'manifest': manifest.toJson(),
@@ -86,7 +86,7 @@ class EpubReaderSessionService {
       path.join(runtimeDirectory.path, '.runtime-version'),
     );
     if (await versionFile.exists() &&
-        await versionFile.readAsString() == _runtimeVersion) {
+        await versionFile.readAsString() == runtimeVersion) {
       return;
     }
 
@@ -95,6 +95,6 @@ class EpubReaderSessionService {
       await destination.parent.create(recursive: true);
       await destination.writeAsString(await _runtimeAssetLoader(entry.value));
     }
-    await versionFile.writeAsString(_runtimeVersion);
+    await versionFile.writeAsString(runtimeVersion);
   }
 }
