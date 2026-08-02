@@ -210,6 +210,7 @@ class HybridSearchResult {
     required this.href,
     required this.locator,
     required this.rawStart,
+    required this.textHash,
     required this.excerpt,
     required this.score,
     required this.sources,
@@ -224,6 +225,7 @@ class HybridSearchResult {
   final String href;
   final String locator;
   final int rawStart;
+  final String textHash;
   final String excerpt;
   final double score;
   final double? keywordScore;

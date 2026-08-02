@@ -5,15 +5,18 @@ import 'package:crypto/crypto.dart';
 import '../../domain/models/reading_context.dart';
 import '../repositories/annotation_repository.dart';
 import '../repositories/content_chunk_repository.dart';
+import 'hybrid_search_service.dart';
 
 class ReadingContextAssembler {
   const ReadingContextAssembler({
     required this.chunks,
     required this.annotations,
+    this.hybridSearch,
   });
 
   final ContentChunkRepository chunks;
   final AnnotationRepository annotations;
+  final HybridSearchService? hybridSearch;
 
   Future<ReadingContextBundle> assemble({
     required String bookId,
@@ -83,26 +86,50 @@ class ReadingContextAssembler {
     }
     final query = searchQuery?.trim() ?? '';
     if (query.isNotEmpty) {
-      final hits = await chunks.search(
-        bookId: bookId,
-        query: query,
-        maxChapterIndex: allowFutureChapters ? null : currentChapterIndex,
-        limit: 12,
-      );
-      candidates.addAll(
-        hits.map(
-          (hit) => ReadingContextSegment(
-            kind: ReadingContextKind.indexHit,
-            bookId: bookId,
-            chapterIndex: hit.chunk.chapterIndex,
-            chapterTitle: hit.chunk.chapterTitle,
-            href: hit.chunk.href,
-            locator: hit.chunk.locatorStart,
-            text: hit.excerpt,
-            contentHash: hit.chunk.textHash,
+      final hybrid = hybridSearch;
+      if (hybrid == null) {
+        final hits = await chunks.search(
+          bookId: bookId,
+          query: query,
+          maxChapterIndex: allowFutureChapters ? null : currentChapterIndex,
+          limit: 12,
+        );
+        candidates.addAll(
+          hits.map(
+            (hit) => ReadingContextSegment(
+              kind: ReadingContextKind.indexHit,
+              bookId: bookId,
+              chapterIndex: hit.chunk.chapterIndex,
+              chapterTitle: hit.chunk.chapterTitle,
+              href: hit.chunk.href,
+              locator: hit.chunk.locatorStart,
+              text: hit.excerpt,
+              contentHash: hit.chunk.textHash,
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        final response = await hybrid.search(
+          bookId: bookId,
+          query: query,
+          maxChapterIndex: allowFutureChapters ? null : currentChapterIndex,
+          limit: 12,
+        );
+        candidates.addAll(
+          response.results.map(
+            (hit) => ReadingContextSegment(
+              kind: ReadingContextKind.indexHit,
+              bookId: bookId,
+              chapterIndex: hit.chapterIndex,
+              chapterTitle: hit.chapterTitle,
+              href: hit.href,
+              locator: hit.locator,
+              text: hit.excerpt,
+              contentHash: hit.textHash,
+            ),
+          ),
+        );
+      }
     }
 
     final segments = <ReadingContextSegment>[];

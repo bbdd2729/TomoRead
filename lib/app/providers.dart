@@ -9,6 +9,8 @@ import '../data/repositories/ai_provider_repository.dart';
 import '../data/repositories/book_repository.dart';
 import '../data/repositories/chat_repository.dart';
 import '../data/repositories/content_chunk_repository.dart';
+import '../data/repositories/content_embedding_repository.dart';
+import '../data/repositories/embedding_provider_repository.dart';
 import '../data/repositories/font_repository.dart';
 import '../data/repositories/reading_session_repository.dart';
 import '../data/repositories/pomodoro_repository.dart';
@@ -34,6 +36,10 @@ import '../data/services/epub_content_service.dart';
 import '../data/services/epub_extraction_service.dart';
 import '../data/services/epub_reader_session_service.dart';
 import '../data/services/epub_section_progress_service.dart';
+import '../data/services/embedding_provider_catalog.dart';
+import '../data/services/embedding_provider_probe_service.dart';
+import '../data/services/embedding_provider_service.dart';
+import '../data/services/hybrid_search_service.dart';
 import '../data/services/backup_service.dart';
 import '../data/services/installation_identity_service.dart';
 import '../data/services/restore_service.dart';
@@ -41,6 +47,7 @@ import '../data/services/storage_diagnostics_service.dart';
 import '../data/services/font_catalog_service.dart';
 import '../data/services/reading_activity_tracker.dart';
 import '../data/services/reading_context_assembler.dart';
+import '../data/services/semantic_index_service.dart';
 import '../data/services/reader_shortcut_service.dart';
 import '../data/services/pomodoro_timer_service.dart';
 import '../data/services/platform_tts_engine.dart';
@@ -55,6 +62,7 @@ import '../data/services/visual_artifact_export_service.dart';
 import '../data/services/word_frequency_service.dart';
 import '../domain/models/bookmark.dart';
 import '../domain/models/content_chunk.dart';
+import '../domain/models/embedding_models.dart';
 import '../domain/models/epub_manifest.dart';
 import '../domain/models/epub_section_progress.dart';
 import '../domain/models/library_book.dart';
@@ -135,6 +143,16 @@ final contentChunkRepositoryProvider = Provider<ContentChunkRepository>(
   (ref) => ContentChunkRepository(ref.watch(appDatabaseProvider)),
 );
 
+final embeddingProviderRepositoryProvider =
+    Provider<EmbeddingProviderRepository>(
+      (ref) => EmbeddingProviderRepository(ref.watch(appDatabaseProvider)),
+    );
+
+final contentEmbeddingRepositoryProvider =
+    Provider<ContentEmbeddingRepository>(
+      (ref) => ContentEmbeddingRepository(ref.watch(appDatabaseProvider)),
+    );
+
 final ttsRepositoryProvider = Provider<TtsRepository>(
   (ref) => TtsRepository(ref.watch(appDatabaseProvider)),
 );
@@ -161,6 +179,10 @@ final contentChunkServiceProvider = Provider<ContentChunkService>(
 );
 
 final contentIndexRevisionProvider = NotifierProvider<RevisionNotifier, int>(
+  RevisionNotifier.new,
+);
+
+final semanticIndexRevisionProvider = NotifierProvider<RevisionNotifier, int>(
   RevisionNotifier.new,
 );
 
@@ -217,6 +239,36 @@ final contentSearchProvider = FutureProvider.autoDispose
     .family<List<ContentSearchResult>, ContentSearchRequest>((ref, request) {
       ref.watch(contentIndexRevisionProvider);
       return ref.watch(contentChunkRepositoryProvider).search(
+        bookId: request.bookId,
+        query: request.query,
+        maxChapterIndex: request.maxChapterIndex,
+        limit: request.limit,
+      );
+    });
+
+typedef SemanticIndexRequest = ({String bookId, String profileId});
+
+final semanticIndexStateProvider = FutureProvider.autoDispose
+    .family<SemanticIndexState?, SemanticIndexRequest>((ref, request) {
+      ref.watch(semanticIndexRevisionProvider);
+      return ref.watch(contentEmbeddingRepositoryProvider).loadState(
+        bookId: request.bookId,
+        profileId: request.profileId,
+      );
+    });
+
+typedef HybridSearchRequest = ({
+  String bookId,
+  String query,
+  int? maxChapterIndex,
+  int limit,
+});
+
+final hybridSearchProvider = FutureProvider.autoDispose
+    .family<HybridSearchResponse, HybridSearchRequest>((ref, request) {
+      ref.watch(contentIndexRevisionProvider);
+      ref.watch(semanticIndexRevisionProvider);
+      return ref.watch(hybridSearchServiceProvider).search(
         bookId: request.bookId,
         query: request.query,
         maxChapterIndex: request.maxChapterIndex,
@@ -302,6 +354,41 @@ final aiProviderProbeServiceProvider = Provider<AiProviderProbeService>(
   (ref) => const AiProviderProbeService(),
 );
 
+final embeddingProviderCatalogProvider = Provider<EmbeddingProviderCatalog>(
+  (ref) => const EmbeddingProviderCatalog(),
+);
+
+final embeddingProviderServiceProvider =
+    Provider<OpenAiCompatibleEmbeddingService>(
+      (ref) => const OpenAiCompatibleEmbeddingService(),
+    );
+
+final embeddingProviderProbeServiceProvider =
+    Provider<EmbeddingProviderProbeService>(
+      (ref) => EmbeddingProviderProbeService(
+        ref.watch(embeddingProviderServiceProvider),
+      ),
+    );
+
+final semanticIndexServiceProvider = Provider<SemanticIndexService>(
+  (ref) => SemanticIndexService(
+    chunks: ref.watch(contentChunkRepositoryProvider),
+    embeddings: ref.watch(contentEmbeddingRepositoryProvider),
+    provider: ref.watch(embeddingProviderServiceProvider),
+    secrets: ref.watch(aiSecretStoreProvider),
+  ),
+);
+
+final hybridSearchServiceProvider = Provider<HybridSearchService>(
+  (ref) => HybridSearchService(
+    chunks: ref.watch(contentChunkRepositoryProvider),
+    embeddings: ref.watch(contentEmbeddingRepositoryProvider),
+    profiles: ref.watch(embeddingProviderRepositoryProvider),
+    provider: ref.watch(embeddingProviderServiceProvider),
+    secrets: ref.watch(aiSecretStoreProvider),
+  ),
+);
+
 final aiToolRegistryProvider = Provider<AiToolRegistry>(
   (ref) => AiToolRegistry(
     ref.watch(bookRepositoryProvider),
@@ -315,6 +402,7 @@ final readingContextAssemblerProvider = Provider<ReadingContextAssembler>(
   (ref) => ReadingContextAssembler(
     chunks: ref.watch(contentChunkRepositoryProvider),
     annotations: ref.watch(annotationRepositoryProvider),
+    hybridSearch: ref.watch(hybridSearchServiceProvider),
   ),
 );
 
