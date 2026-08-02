@@ -41,7 +41,7 @@ class PlatformImportInboxService {
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
-    await _channel.setMethodCallHandler(_handleMethodCall);
+    _channel.setMethodCallHandler(_handleMethodCall);
 
     final commandLine = _commandLineEvent();
     if (!commandLine.isEmpty) _events.add(commandLine);
@@ -129,7 +129,7 @@ class PlatformImportInboxService {
   };
 
   Future<void> dispose() async {
-    await _channel.setMethodCallHandler(null);
+    _channel.setMethodCallHandler(null);
     await _events.close();
   }
 }
