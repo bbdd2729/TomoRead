@@ -106,6 +106,7 @@ lib/
 - [阅读统计架构](.agent/reading-statistics-architecture.md)
 - [阅读器文本前景色设计](.agent/reader-text-coloring-architecture.md)
 - [以 ColorTxt 为目标的功能差距与路线图](.agent/colortxt-feature-gap-analysis.md)
+- [阅读增强功能交接规格](.agent/reader-enhancement-implementation-guide.md)
 
 ## 本地开发
 
