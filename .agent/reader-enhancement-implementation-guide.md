@@ -326,3 +326,82 @@ lib/
 - 内容检索、TTS、字体、同步的总体优先级以 `feature-gap-analysis.md` 和 `colortxt-feature-gap-analysis.md` 为主。
 - EPUB 文本前景色的 `Range + CSS Highlight` 约束以 `reader-text-coloring-architecture.md` 为主；展示转换不得破坏该隔离。
 - 全局笔记、标签、导出和跳转以 `global-notes-architecture.md` 为主；下划线只扩展现有标注样式。
+
+## 8. 实施结果与维护说明（2026-08-02）
+
+本规格的首版范围已经按 Repository / Service / Riverpod Controller / Widget 分层落地。数据库当前为 v21；所有新表均通过顺序迁移创建，原书、显示投影、AI 输出和派生可视化仍分别保存。验收以推送后的 GitHub Actions `Verify` 作业为准，不要求开发机器安装 Flutter SDK。
+
+| Issue | 实施状态 | 主要落点 |
+| --- | --- | --- |
+| EPUB 下划线标注 | 已实现 | 复用 `reading_annotations`，新增 `render_style`，支持回跳、编辑、删除与 Markdown/JSON 样式导出 |
+| 阅读专注计时 | 已实现 | 绝对时间状态机、活动状态恢复、独立 `pomodoro_sessions` 历史、阅读时长边界 |
+| AI 服务商目录 | 已实现 | 版本化预设、多 profile、显式激活、连接测试、模型拉取与安全存储引用 |
+| 系统/导入字体 | 已实现并显式降级 | Windows/Linux 枚举，移动端通用族降级；导入字体 hash 去重、引用检查；EPUB/TXT 应用，PDF 不替换 |
+| TXT/Markdown 管线 | 已实现 | BOM/编码检测、预览与覆盖、章节规则预览和人工修正、`text:v1` 原始 locator |
+| 展示投影 | 已实现 | OpenCC 简繁、全半角、全局/本书字面量替换、raw/display 映射与歧义范围保护 |
+| 内容分块与阅读助手 | 已实现 | 可信 `content_chunks`、版本与 hash 状态、本地搜索、防剧透上下文、可点击引用 |
+| 本地词云 | 已实现 | 当前章/已读/整书范围、isolate 词频、取消、版本化缓存、seed 重排、原生渲染与导出 |
+| AI 思维导图 | 已实现 | 纯 JSON、深度/数量/ID/引用白名单校验、原生折叠与缩放、引用回跳、错误纯文本降级 |
+| `ArtifactPart` | 已实现 | 聊天消息支持结构化 Artifact 持久化和安全原生渲染，不执行模型 HTML/JavaScript |
+
+### 8.1 可视化数据流
+
+```mermaid
+flowchart LR
+  Reader["EPUB / TXT 阅读器"] --> Scope["当前章 / 已读 / 整书"]
+  Scope --> Chunks["可信 content_chunks"]
+  Chunks --> Local["WordFrequencyService\nisolate + cache"]
+  Chunks --> Context["受字符预算约束的 source id 上下文"]
+  Context --> Provider["当前激活 AI Provider\nKey 来自安全存储"]
+  Provider --> Validate["纯 JSON + Schema 边界 + 引用白名单"]
+  Local --> Artifact["visual_artifacts"]
+  Validate --> Artifact
+  Artifact --> Native["Flutter 原生词云 / 树图"]
+  Native --> Export["JSON / SVG / PNG\n导图额外 Markdown"]
+  Native --> Locator["可信原始 locator 回跳"]
+```
+
+- `visual_artifacts` 保存小型结构化 payload、内容 hash、范围和生成时间；`word_cloud_cache` 只保存可重建词频，不保存字体二进制、密钥或原文件。
+- 词云缓存键包含书籍/范围内容 hash、范围、分词器版本、停用词版本、最小词长和最大词数。更换布局 seed 复用词频，不重新读取或发送正文。
+- 首版 CJK tokenizer 是确定性的双字词频 tokenizer，并配有版本化停用词表；它不是语言学分词或语义词云。后续更换 tokenizer 时必须提升版本，使旧缓存自然失效。
+- 思维导图最多 5 层、80 个节点，节点 ID 全局唯一，标签最多 80 个 UTF-16 code unit，每节点最多 8 个引用。模型只能引用本次上下文提供的 `source id`；客户端再把 source 映射回可信 `href + locator`。
+- 模型返回 Markdown 围栏、HTML、解释文字或不合法 JSON 时不尝试渲染；界面显示可恢复错误，并把截断后的原始响应作为可选择的纯文本展示。
+
+### 8.2 格式能力矩阵
+
+| 能力 | EPUB | TXT/Markdown | PDF |
+| --- | --- | --- | --- |
+| 下划线标注 | 支持 CFI/章节回跳 | 首版未扩展文本标注 UI | 暂不支持 |
+| 编码与章节识别 | 使用 EPUB 自带清单 | 支持检测、覆盖和人工修正 | 不适用 |
+| 简繁/全半角/字面替换 | 暂不注入 WebView DOM | 支持，保留 raw locator | 暂不支持 |
+| 系统/导入阅读字体 | 支持受控 `@font-face` | 支持 `FontLoader` | 不替换嵌入字体 |
+| 可信正文索引与本地搜索 | 支持，从解析后的章节纯文本构建 | 支持，从原始章节范围构建 | 文本层稳定前不接入 |
+| 词云与 AI 思维导图 | 支持 | 支持 | 暂不显示伪入口 |
+
+### 8.3 依赖与平台注意事项
+
+- `opencc ^1.1.0` 用于词组级简繁转换，许可证为 Apache-2.0，声明已加入 `THIRD_PARTY_NOTICES.md`。依赖含原生资产，升级 Flutter 或目标平台工具链时应优先观察 CI 的 `flutter pub get`、analyze 和测试结果。
+- 当前仓库提供 Android、Linux、Windows 工程；Windows 使用字体枚举平台通道，Linux 使用 Pango。Android 使用通用族和导入字体降级。仓库未提供 macOS/iOS runner，因此不声称已验证 CoreText 或 iOS 系统字体枚举。
+- 可视化只依赖 Flutter Canvas、TextPainter 和原生 Widget；不引入 WebView HTML 渲染。PNG 在 Flutter UI isolate 编码，JSON/Markdown/SVG 使用 UTF-8。
+- AI Provider 的公开预设不含密钥。思维导图 Controller 仅从系统安全存储读取当前 profile 的 secret；错误消息和 Artifact payload 不记录 Key、Authorization、Cookie 或原始文件路径。
+
+### 8.4 自动化测试与验收
+
+新增测试覆盖：
+
+- v10 到 v21 的顺序迁移以及可视化表创建；
+- Artifact Repository 的保存、读取、删除和词频缓存；
+- ASCII/CJK tokenizer、停用词、cache key 和 seed 复用；
+- 思维导图纯 JSON、深度、节点数、重复 ID、非法 source 引用与可信 locator 映射；
+- Artifact JSON/Markdown/SVG/PNG 导出；
+- 聊天 `ArtifactPart` 的 SQLite 往返持久化。
+
+推送后通过 GitHub CLI 定位该提交触发的 `CI Build`，只需等待并确认 `Verify`：
+
+```text
+flutter pub get
+flutter analyze lib test
+flutter test
+```
+
+Linux、Windows、Android build 作业依赖 `Verify`，不属于本次验收等待范围。如果 `Verify` 失败，应按具体日志修复后追加带范围说明的提交，再重新推送验证；不得用删除测试、跳过分析或放宽敏感数据边界来取得绿色结果。
