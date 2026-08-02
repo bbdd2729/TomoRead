@@ -117,7 +117,8 @@ void main() {
     await tester.tap(find.byKey(const Key('settings-navigation')));
     await tester.pump();
     await tester.tap(find.text('数据与隐私'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.byKey(const Key('create-library-backup')), findsOneWidget);
     expect(find.byKey(const Key('restore-library-backup')), findsOneWidget);
