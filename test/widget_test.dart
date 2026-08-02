@@ -123,6 +123,8 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('reader-progress-slider')), findsOneWidget);
+    expect(find.textContaining('第 1 / 1 页'), findsNothing);
+    expect(find.byKey(const Key('reader-position-label')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('reader-bookmark')));
     await tester.pump();

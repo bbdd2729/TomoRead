@@ -137,6 +137,16 @@ class ContentChunkRepository {
     return rows.map(_chunkFromRow).toList();
   }
 
+  Future<int> characterCountForBook(String bookId) async {
+    final database = await _database.database;
+    final rows = await database.rawQuery(
+      'SELECT COALESCE(SUM(LENGTH(text_content)), 0) AS character_count '
+      'FROM content_chunks WHERE book_id = ?',
+      [bookId],
+    );
+    return (rows.single['character_count'] as num?)?.toInt() ?? 0;
+  }
+
   Future<List<ContentSearchResult>> search({
     required String bookId,
     required String query,

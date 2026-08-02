@@ -62,5 +62,6 @@ void main() {
     );
     expect(visible, hasLength(1));
     expect(visible.single.chunk.chapterIndex, 0);
+    expect(await repository.characterCountForBook('book-a'), 29);
   });
 }

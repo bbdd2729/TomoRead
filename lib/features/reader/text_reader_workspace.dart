@@ -14,6 +14,7 @@ import '../../domain/models/content_chunk.dart';
 import '../../domain/models/chat_models.dart';
 import '../../domain/models/reading_context.dart';
 import '../../domain/models/reading_activity.dart';
+import '../../domain/models/reading_position_metrics.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_chapter.dart';
 import '../../domain/models/visual_artifact.dart';
@@ -54,6 +55,8 @@ class TextReaderWorkspace extends HookConsumerWidget {
     ref.watch(readingFontReadyProvider(settings.font));
     final chapterIndex = useState(0);
     final scrollController = useScrollController();
+    final currentScrollRatio = useState(0.0);
+    final scrollSaveTimer = useRef<Timer?>(null);
     final selectedContext = useState<ReadingContextSelection?>(null);
     final projectionConfigState = ref.watch(
       textProjectionConfigProvider(bookId),
@@ -63,6 +66,10 @@ class TextReaderWorkspace extends HookConsumerWidget {
     final breakActive = pomodoro?.isBreak == true && pomodoro?.isRunning == true;
     final tracker = ref.read(readingActivityTrackerProvider);
     final document = documentState.value;
+    final textPositionIndex = useMemoized(
+      () => ReadingTextPositionIndex.fromText(document?.rawText ?? ''),
+      [document?.profile.contentHash],
+    );
     final activeChapter = document == null || document.chapters.isEmpty
         ? null
         : document.chapters[
@@ -148,6 +155,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
                         (chapter.rawEnd - chapter.rawStart))
                     .clamp(0, 1)
                     .toDouble();
+          currentScrollRatio.value = ratio;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (scrollController.hasClients) {
               scrollController.jumpTo(
@@ -176,18 +184,73 @@ class TextReaderWorkspace extends HookConsumerWidget {
       return null;
     }, [lifecycle, breakActive]);
 
+    useEffect(() {
+      final current = document;
+      final chapter = activeChapter;
+      if (current == null || chapter == null) return null;
+
+      void handleScroll() {
+        if (!scrollController.hasClients) return;
+        final extent = scrollController.position.maxScrollExtent;
+        final ratio = extent <= 0
+            ? 0.0
+            : (scrollController.offset / extent).clamp(0, 1).toDouble();
+        if ((ratio - currentScrollRatio.value).abs() < 0.001) return;
+        currentScrollRatio.value = ratio;
+        final rawOffset = (chapter.rawStart +
+                (chapter.rawEnd - chapter.rawStart) * ratio)
+            .round()
+            .clamp(chapter.rawStart, chapter.rawEnd)
+            .toInt();
+        final progress = current.rawText.isEmpty
+            ? 0.0
+            : rawOffset / current.rawText.length;
+        final locator = chapter.locator(start: rawOffset, end: rawOffset);
+        scrollSaveTimer.value?.cancel();
+        scrollSaveTimer.value = Timer(const Duration(milliseconds: 600), () {
+          unawaited(
+            ref
+                .read(bookRepositoryProvider)
+                .updateReadingPosition(
+                  bookId: bookId,
+                  chapterIndex: chapter.ordinal,
+                  progress: progress,
+                  locator: locator,
+                ),
+          );
+          tracker.recordInteraction(
+            ReaderPosition(progress: progress, locator: locator),
+            ReadingInteraction.scroll,
+          );
+        });
+      }
+
+      scrollController.addListener(handleScroll);
+      return () {
+        scrollController.removeListener(handleScroll);
+        scrollSaveTimer.value?.cancel();
+        scrollSaveTimer.value = null;
+      };
+    }, [
+      bookId,
+      scrollController,
+      activeChapter?.id,
+      document?.profile.contentHash,
+    ]);
+
     Future<void> selectChapter(int index) async {
       final current = document;
       if (current == null || index < 0 || index >= current.chapters.length) {
         return;
       }
       chapterIndex.value = index;
+      currentScrollRatio.value = 0;
       selectedContext.value = null;
       if (scrollController.hasClients) scrollController.jumpTo(0);
       final chapter = current.chapters[index];
-      final progress = current.chapters.length <= 1
-          ? 1.0
-          : index / (current.chapters.length - 1);
+      final progress = current.rawText.isEmpty
+          ? 0.0
+          : chapter.rawStart / current.rawText.length;
       await ref.read(bookRepositoryProvider).updateReadingPosition(
         bookId: bookId,
         chapterIndex: index,
@@ -405,9 +468,9 @@ class TextReaderWorkspace extends HookConsumerWidget {
       await ref.read(bookRepositoryProvider).updateReadingPosition(
         bookId: bookId,
         chapterIndex: chapterIndex.value,
-        progress: current.chapters.length <= 1
+        progress: current.rawText.isEmpty
             ? 0
-            : chapterIndex.value / (current.chapters.length - 1),
+            : chunk.rawStart / current.rawText.length,
         locator: chunk.locatorStart,
       );
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -418,6 +481,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
                       (chapter.rawEnd - chapter.rawStart))
                   .clamp(0, 1)
                   .toDouble();
+        currentScrollRatio.value = ratio;
         if (scrollController.hasClients) {
           scrollController.jumpTo(
             scrollController.position.maxScrollExtent * ratio,
@@ -516,9 +580,10 @@ class TextReaderWorkspace extends HookConsumerWidget {
               locatorParts.first == 'text:v1'
           ? int.tryParse(locatorParts[2])
           : null;
-      final progress = current.chapters.length <= 1
+      final targetOffset = rawOffset ?? chapter.rawStart;
+      final progress = current.rawText.isEmpty
           ? 0.0
-          : nextIndex / (current.chapters.length - 1);
+          : targetOffset / current.rawText.length;
       await ref.read(bookRepositoryProvider).updateReadingPosition(
         bookId: bookId,
         chapterIndex: nextIndex,
@@ -538,6 +603,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
                       (chapter.rawEnd - chapter.rawStart))
                   .clamp(0, 1)
                   .toDouble();
+        currentScrollRatio.value = ratio;
         scrollController.jumpTo(
           scrollController.position.maxScrollExtent * ratio,
         );
@@ -637,6 +703,14 @@ class TextReaderWorkspace extends HookConsumerWidget {
                   .clamp(start, value.rawText.length)
                   .toInt();
               final rawContent = value.rawText.substring(start, end);
+              final rawOffset = (start +
+                      (end - start) * currentScrollRatio.value)
+                  .round()
+                  .clamp(start, end)
+                  .toInt();
+              final positionMetrics = textPositionIndex.metricsForOffset(
+                rawOffset,
+              );
               final projection = projectionSnapshot.data;
               final content = projection?.rawText == rawContent
                   ? projection!.displayText
@@ -739,7 +813,8 @@ class TextReaderWorkspace extends HookConsumerWidget {
                           ),
                           Expanded(
                             child: Text(
-                              '${chapter.title} · ${index + 1}/${value.chapters.length}',
+                              '${chapter.title} · ${positionMetrics.label}',
+                              key: const Key('text-reader-position-label'),
                               textAlign: TextAlign.center,
                               overflow: TextOverflow.ellipsis,
                             ),

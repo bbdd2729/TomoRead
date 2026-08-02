@@ -21,6 +21,7 @@ import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_context.dart';
+import '../../domain/models/reading_position_metrics.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_coloring.dart';
 import '../../domain/models/visual_artifact.dart';
@@ -129,6 +130,9 @@ class ReaderWorkspace extends HookConsumerWidget {
     final readerBook = ref.watch(readerBookProvider(bookId));
     final manifest = ref.watch(readerManifestProvider(bookId));
     final contentIndexState = ref.watch(contentIndexStateProvider(bookId));
+    final contentCharacterCount = ref.watch(
+      contentCharacterCountProvider(bookId),
+    );
     final sectionProgressState = ref.watch(epubSectionProgressProvider(bookId));
     final annotationsState = ref.watch(annotationsForBookProvider(bookId));
     final appearance =
@@ -179,6 +183,14 @@ class ReaderWorkspace extends HookConsumerWidget {
       cfi: activeCfi.value,
     );
     final currentLocator = currentLocation.toLocator();
+    final overallProgress = sectionProgress.overallProgress(
+      activeChapterIndex,
+      scrollRatio.value,
+    );
+    final positionMetrics = ReadingPositionMetrics.characters(
+      progress: overallProgress,
+      total: contentCharacterCount.value ?? 0,
+    );
     final chapterTitle =
         chapter.value?.title ?? '第 ${activeChapterIndex + 1} 章';
     final isLoading =
@@ -1227,8 +1239,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                     activeChapterIndex,
                     scrollRatio.value,
                   ),
-                  pageIndex: pageIndex.value,
-                  pageCount: pageCount.value,
+                  positionMetrics: positionMetrics,
                   onSeekProgress: seekToOverallProgress,
                   onPrevious:
                       activeChapterIndex > 0 ||
@@ -2496,8 +2507,7 @@ class _ReaderFooter extends StatelessWidget {
     required this.chapterCount,
     required this.layoutMode,
     required this.overallProgress,
-    required this.pageIndex,
-    required this.pageCount,
+    required this.positionMetrics,
     required this.onSeekProgress,
     required this.onPrevious,
     required this.onNext,
@@ -2507,8 +2517,7 @@ class _ReaderFooter extends StatelessWidget {
   final int chapterCount;
   final ReaderLayoutMode layoutMode;
   final double overallProgress;
-  final int pageIndex;
-  final int pageCount;
+  final ReadingPositionMetrics positionMetrics;
   final ValueChanged<double> onSeekProgress;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
@@ -2541,9 +2550,9 @@ class _ReaderFooter extends StatelessWidget {
             Text(
               chapterCount == 0
                   ? '正在读取目录'
-                  : layoutMode == ReaderLayoutMode.paginated
-                  ? '全书 ${(progress * 100).round()}% · 第 ${pageIndex + 1} / $pageCount 页 · 第 ${chapterIndex + 1} / $chapterCount 章'
-                  : '连续滚动 · 全书 ${(progress * 100).round()}% · 第 ${chapterIndex + 1} / $chapterCount 章',
+                  : '${positionMetrics.label} · '
+                        '第 ${chapterIndex + 1} / $chapterCount 章',
+              key: const Key('reader-position-label'),
             ),
             const SizedBox(width: 8),
             IconButton(

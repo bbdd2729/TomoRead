@@ -127,6 +127,14 @@ final contentIndexStateProvider = FutureProvider.autoDispose
       return ref.watch(contentChunkRepositoryProvider).loadState(bookId);
     });
 
+final contentCharacterCountProvider = FutureProvider.autoDispose
+    .family<int, String>((ref, bookId) {
+      ref.watch(contentIndexRevisionProvider);
+      return ref
+          .watch(contentChunkRepositoryProvider)
+          .characterCountForBook(bookId);
+    });
+
 typedef ContentSearchRequest = ({
   String bookId,
   String query,

@@ -8,6 +8,7 @@ import 'package:pdfrx/pdfrx.dart';
 import '../../app/providers.dart';
 import '../../domain/models/bookmark.dart';
 import '../../domain/models/reading_activity.dart';
+import '../../domain/models/reading_position_metrics.dart';
 import 'pdf_bookmarks_dialog.dart';
 import 'pdf_navigation_dialog.dart';
 import 'pdf_search_dialog.dart';
@@ -93,6 +94,12 @@ class PdfReaderWorkspace extends HookConsumerWidget {
         final displayedPage = currentPage.value == 1 && book.chapterIndex > 0
             ? initialPage
             : currentPage.value;
+        final displayedProgress = pageCount <= 1
+            ? 0.0
+            : (displayedPage - 1) / (pageCount - 1);
+        final positionMetrics = ReadingPositionMetrics.progressOnly(
+          displayedProgress,
+        );
         final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
         final currentLocator = 'page:$displayedPage';
         final isBookmarked = bookmarkItems.any(
@@ -303,13 +310,14 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                       children: [
                         const Icon(Icons.description_outlined, size: 18),
                         const SizedBox(width: 8),
-                        Text('第 $displayedPage / $pageCount 页'),
+                        Text(
+                          positionMetrics.label,
+                          key: const Key('pdf-reader-position-label'),
+                        ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: _PdfReaderProgressSlider(
-                            progress: pageCount <= 1
-                                ? 0
-                                : (displayedPage - 1) / (pageCount - 1),
+                            progress: displayedProgress,
                             onChanged: seekToProgress,
                           ),
                         ),
