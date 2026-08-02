@@ -7,9 +7,12 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/services/book_import_service.dart';
 import '../../data/services/text_decoder_service.dart';
+import '../../domain/models/book_import.dart';
 import '../../domain/models/library_book.dart';
 import '../../shared/widgets/book_cover.dart';
 import '../../shared/widgets/page_header.dart';
+import 'book_import_preview_dialog.dart';
+import 'import_workflow_controller.dart';
 
 class LibraryHomePage extends HookConsumerWidget {
   const LibraryHomePage({
@@ -25,6 +28,12 @@ class LibraryHomePage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final books = ref.watch(libraryBooksProvider);
     final isImporting = useState(false);
+    final importService = ref.read(bookImportServiceProvider);
+    final importController = useMemoized(
+      () => ImportWorkflowController.forService(importService),
+      [importService],
+    );
+    useEffect(() => importController.dispose, [importController]);
     final searchQuery = useState('');
     final formatFilter = useState(_LibraryFormatFilter.all);
     final sort = useState(_LibrarySort.recent);
@@ -37,12 +46,7 @@ class LibraryHomePage extends HookConsumerWidget {
     final removingBookId = useState<String?>(null);
     final isBatchOperating = useState(false);
 
-    Future<void> importBooks() async {
-      if (isImporting.value) return;
-      isImporting.value = true;
-      final initialResults = await ref
-          .read(libraryBooksProvider.notifier)
-          .importFromPicker();
+    Future<void> finishImport(List<BookImportResult> initialResults) async {
       final results = <BookImportResult>[];
       for (final result in initialResults) {
         if (result.status != BookImportStatus.needsEncoding ||
@@ -64,8 +68,12 @@ class LibraryHomePage extends HookConsumerWidget {
               .importTextWithEncoding(result.sourcePath, encoding),
         );
       }
-      isImporting.value = false;
       if (!context.mounted || results.isEmpty) return;
+      if (results.any(
+        (result) => result.status == BookImportStatus.imported,
+      )) {
+        ref.invalidate(libraryBooksProvider);
+      }
       final imported = results
           .where((result) => result.status == BookImportStatus.imported)
           .length;
@@ -87,6 +95,46 @@ class LibraryHomePage extends HookConsumerWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
+    }
+
+    Future<void> importSources(List<ImportSource> sources) async {
+      if (isImporting.value || sources.isEmpty) return;
+      isImporting.value = true;
+      try {
+        importController.reset();
+        final dialog = showDialog<List<BookImportResult>>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => BookImportPreviewDialog(
+            controller: importController,
+          ),
+        );
+        unawaited(importController.prepare(sources));
+        final results = await dialog;
+        if (context.mounted && results != null) {
+          await finishImport(results);
+        }
+      } finally {
+        if (context.mounted) isImporting.value = false;
+      }
+    }
+
+    Future<void> importBooks() async {
+      if (isImporting.value) return;
+      final choice = await showDialog<_ImportSourceChoice>(
+        context: context,
+        builder: (context) => const _ImportSourceDialog(),
+      );
+      if (choice == null || !context.mounted) return;
+      switch (choice) {
+        case _ImportSourceChoice.files:
+          await importSources(await importService.pickImportSources());
+          return;
+        case _ImportSourceChoice.directory:
+          final source = await importService.pickImportDirectorySource();
+          if (source != null) await importSources([source]);
+          return;
+      }
     }
 
     Future<void> removeBook(LibraryBook book) async {
@@ -410,6 +458,36 @@ class LibraryHomePage extends HookConsumerWidget {
       },
     );
   }
+}
+
+enum _ImportSourceChoice { files, directory }
+
+class _ImportSourceDialog extends StatelessWidget {
+  const _ImportSourceDialog();
+
+  @override
+  Widget build(BuildContext context) => SimpleDialog(
+    title: const Text('选择导入来源'),
+    children: [
+      SimpleDialogOption(
+        onPressed: () => Navigator.of(context).pop(_ImportSourceChoice.files),
+        child: const ListTile(
+          leading: Icon(Icons.file_open_outlined),
+          title: Text('选择文件'),
+          subtitle: Text('一次选择多个 EPUB、PDF、TXT 或 Markdown 文件'),
+        ),
+      ),
+      SimpleDialogOption(
+        onPressed: () =>
+            Navigator.of(context).pop(_ImportSourceChoice.directory),
+        child: const ListTile(
+          leading: Icon(Icons.folder_open_outlined),
+          title: Text('扫描文件夹'),
+          subtitle: Text('递归预览支持的文件，确认后再导入'),
+        ),
+      ),
+    ],
+  );
 }
 
 class _TextEncodingDialog extends ConsumerStatefulWidget {
