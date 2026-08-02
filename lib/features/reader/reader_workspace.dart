@@ -26,12 +26,14 @@ import 'epub_webview.dart';
 import 'reader_navigation_command.dart';
 import 'reader_runtime_controller.dart';
 import 'reader_search_dialog.dart';
+import 'pomodoro_controller.dart';
+import 'pomodoro_widgets.dart';
 import 'text_coloring_controller.dart';
 import 'text_coloring_widgets.dart';
 import '../chat/chat_controller.dart';
 import '../notes/notes_providers.dart';
 
-enum _MobileReaderToolbarAction { search, settings, focus }
+enum _MobileReaderToolbarAction { search, settings, pomodoro, focus }
 
 enum _SelectionContextAction {
   yellow,
@@ -106,6 +108,9 @@ class ReaderWorkspace extends HookConsumerWidget {
     );
     final activityTracker = ref.read(readingActivityTrackerProvider);
     final lifecycleState = useAppLifecycleState();
+    final pomodoro = ref.watch(pomodoroControllerProvider).value;
+    final pomodoroBreakActive =
+        pomodoro?.isBreak == true && pomodoro?.isRunning == true;
     final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
     final readerBook = ref.watch(readerBookProvider(bookId));
     final manifest = ref.watch(readerManifestProvider(bookId));
@@ -204,10 +209,11 @@ class ReaderWorkspace extends HookConsumerWidget {
 
     useEffect(() {
       activityTracker.setForeground(
-        lifecycleState == null || lifecycleState == AppLifecycleState.resumed,
+        (lifecycleState == null || lifecycleState == AppLifecycleState.resumed) &&
+            !pomodoroBreakActive,
       );
       return null;
-    }, [lifecycleState]);
+    }, [lifecycleState, pomodoroBreakActive]);
 
     useEffect(() {
       // A new book or reader-mode switch has no valid runtime page position.
@@ -1051,8 +1057,14 @@ class ReaderWorkspace extends HookConsumerWidget {
                   onCreateAnnotation: createAnnotation,
                   onOpenBookSettings: openBookSettings,
                   onOpenSearch: openSearch,
+                  bookId: bookId,
                 ),
               ),
+            ),
+            Positioned(
+              right: 20,
+              bottom: controlsVisible.value ? 76 : 20,
+              child: const PomodoroBreakBanner(),
             ),
             Positioned(
               bottom: 0,
@@ -1111,6 +1123,7 @@ class _ReaderToolbar extends StatelessWidget {
     required this.onCreateAnnotation,
     required this.onOpenBookSettings,
     required this.onOpenSearch,
+    required this.bookId,
   });
 
   final String title;
@@ -1127,6 +1140,7 @@ class _ReaderToolbar extends StatelessWidget {
   final VoidCallback onCreateAnnotation;
   final VoidCallback onOpenBookSettings;
   final VoidCallback onOpenSearch;
+  final String bookId;
 
   @override
   Widget build(BuildContext context) {
@@ -1182,6 +1196,7 @@ class _ReaderToolbar extends StatelessWidget {
               ),
             SizedBox(width: mobileReaderControls ? 4 : 12),
             Expanded(child: Text(title, overflow: TextOverflow.ellipsis)),
+            if (!mobileReaderControls) PomodoroToolbarButton(bookId: bookId),
             if (!mobileReaderControls)
               IconButton(
                 tooltip: '搜索书内内容',
@@ -1207,10 +1222,22 @@ class _ReaderToolbar extends StatelessWidget {
               PopupMenuButton<_MobileReaderToolbarAction>(
                 key: const Key('reader-mobile-more'),
                 tooltip: '更多阅读控制',
-                onSelected: (action) => switch (action) {
-                  _MobileReaderToolbarAction.search => onOpenSearch(),
-                  _MobileReaderToolbarAction.settings => onOpenBookSettings(),
-                  _MobileReaderToolbarAction.focus => onHideControls(),
+                onSelected: (action) {
+                  switch (action) {
+                    case _MobileReaderToolbarAction.search:
+                      onOpenSearch();
+                    case _MobileReaderToolbarAction.settings:
+                      onOpenBookSettings();
+                    case _MobileReaderToolbarAction.pomodoro:
+                      unawaited(
+                        showDialog<void>(
+                          context: context,
+                          builder: (context) => PomodoroDialog(bookId: bookId),
+                        ),
+                      );
+                    case _MobileReaderToolbarAction.focus:
+                      onHideControls();
+                  }
                 },
                 itemBuilder: (context) => [
                   const PopupMenuItem(
@@ -2640,6 +2667,13 @@ class _BookReadingSettingsDialog extends HookWidget {
                     settings: textColoringSettings,
                     title: '本书文字词条',
                     bookId: bookId,
+                  ),
+                  const PopupMenuItem(
+                    value: _MobileReaderToolbarAction.pomodoro,
+                    child: ListTile(
+                      leading: Icon(Icons.timer_outlined),
+                      title: Text('阅读专注计时'),
+                    ),
                   ),
                 ),
                 icon: const Icon(Icons.format_color_text_outlined),

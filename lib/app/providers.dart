@@ -9,6 +9,7 @@ import '../data/repositories/ai_provider_repository.dart';
 import '../data/repositories/book_repository.dart';
 import '../data/repositories/chat_repository.dart';
 import '../data/repositories/reading_session_repository.dart';
+import '../data/repositories/pomodoro_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/repositories/skill_repository.dart';
 import '../data/repositories/text_coloring_repository.dart';
@@ -22,6 +23,7 @@ import '../data/services/epub_extraction_service.dart';
 import '../data/services/epub_reader_session_service.dart';
 import '../data/services/epub_section_progress_service.dart';
 import '../data/services/reading_activity_tracker.dart';
+import '../data/services/pomodoro_timer_service.dart';
 import '../data/services/stats_report_service.dart';
 import '../domain/models/bookmark.dart';
 import '../domain/models/epub_manifest.dart';
@@ -69,6 +71,14 @@ final textColoringRepositoryProvider = Provider<TextColoringRepository>(
 
 final readingSessionRepositoryProvider = Provider<ReadingSessionRepository>(
   (ref) => ReadingSessionRepository(ref.watch(appDatabaseProvider)),
+);
+
+final pomodoroRepositoryProvider = Provider<PomodoroRepository>(
+  (ref) => PomodoroRepository(ref.watch(appDatabaseProvider)),
+);
+
+final pomodoroTimerServiceProvider = Provider<PomodoroTimerService>(
+  (ref) => const PomodoroTimerService(),
 );
 
 final aiSecretStoreProvider = Provider<AiSecretStore>((ref) => AiSecretStore());

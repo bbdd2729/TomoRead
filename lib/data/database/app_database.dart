@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 13,
+        version: 14,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -73,6 +73,9 @@ class AppDatabase {
           }
           if (oldVersion < 13) {
             await _upgradeToVersion13(database);
+          }
+          if (oldVersion < 14) {
+            await _upgradeToVersion14(database);
           }
         },
       ),
@@ -160,6 +163,7 @@ class AppDatabase {
     await _createAnnotationTagsTable(database);
     await _createReadingSessionsTable(database);
     await _createTextColoringTables(database);
+    await _createPomodoroSessionsTable(database);
   }
 
   Future<void> _upgradeToVersion2(Database database) async {
@@ -317,6 +321,9 @@ class AppDatabase {
     column: 'render_style',
     definition: "TEXT NOT NULL DEFAULT 'highlight'",
   );
+
+  Future<void> _upgradeToVersion14(Database database) =>
+      _createPomodoroSessionsTable(database);
 
   Future<void> _createBooksIndexes(Database database) async {
     await database.execute(
@@ -597,6 +604,32 @@ class AppDatabase {
     await database.execute('''
       CREATE INDEX IF NOT EXISTS text_color_terms_book_updated
       ON text_color_terms(book_id, updated_at DESC)
+    ''');
+  }
+
+  Future<void> _createPomodoroSessionsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS pomodoro_sessions (
+        id TEXT PRIMARY KEY,
+        book_id TEXT,
+        phase TEXT NOT NULL CHECK(phase IN ('focus', 'shortBreak', 'longBreak')),
+        planned_millis INTEGER NOT NULL,
+        elapsed_millis INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('completed', 'cancelled', 'skipped')),
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE SET NULL,
+        CHECK(planned_millis >= 0),
+        CHECK(elapsed_millis >= 0 AND elapsed_millis <= planned_millis)
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS pomodoro_sessions_started
+      ON pomodoro_sessions(started_at DESC)
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS pomodoro_sessions_book_started
+      ON pomodoro_sessions(book_id, started_at DESC)
     ''');
   }
 

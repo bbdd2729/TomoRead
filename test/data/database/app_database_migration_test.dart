@@ -98,7 +98,7 @@ void main() {
     addTearDown(appDatabase.close);
     final database = await appDatabase.database;
 
-    expect(await database.getVersion(), 13);
+    expect(await database.getVersion(), 14);
     final parts = await database.query('chat_message_parts');
     expect(parts.single['type'], 'text');
     expect(parts.single['text_content'], 'Legacy answer');
@@ -122,5 +122,10 @@ void main() {
       annotationColumns.map((column) => column['name']),
       contains('render_style'),
     );
+    final pomodoroTables = await database.rawQuery('''
+      SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name = 'pomodoro_sessions'
+    ''');
+    expect(pomodoroTables, hasLength(1));
   });
 }
