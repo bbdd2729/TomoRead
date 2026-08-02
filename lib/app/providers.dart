@@ -15,6 +15,7 @@ import '../data/repositories/settings_repository.dart';
 import '../data/repositories/skill_repository.dart';
 import '../data/repositories/text_coloring_repository.dart';
 import '../data/repositories/text_content_repository.dart';
+import '../data/repositories/text_projection_repository.dart';
 import '../data/services/ai_gateway.dart';
 import '../data/services/ai_provider_catalog.dart';
 import '../data/services/ai_provider_probe_service.dart';
@@ -32,6 +33,7 @@ import '../data/services/reading_activity_tracker.dart';
 import '../data/services/pomodoro_timer_service.dart';
 import '../data/services/stats_report_service.dart';
 import '../data/services/text_decoder_service.dart';
+import '../data/services/text_display_transform_service.dart';
 import '../domain/models/bookmark.dart';
 import '../domain/models/epub_manifest.dart';
 import '../domain/models/epub_section_progress.dart';
@@ -81,6 +83,18 @@ final textColoringRepositoryProvider = Provider<TextColoringRepository>(
 
 final textContentRepositoryProvider = Provider<TextContentRepository>(
   (ref) => TextContentRepository(ref.watch(appDatabaseProvider)),
+);
+
+final textProjectionRepositoryProvider = Provider<TextProjectionRepository>(
+  (ref) => TextProjectionRepository(ref.watch(appDatabaseProvider)),
+);
+
+final textDisplayTransformServiceProvider = Provider<TextDisplayTransformService>(
+  (ref) => const TextDisplayTransformService(),
+);
+
+final textProjectionRevisionProvider = NotifierProvider<RevisionNotifier, int>(
+  RevisionNotifier.new,
 );
 
 final fontRepositoryProvider = Provider<FontRepository>(

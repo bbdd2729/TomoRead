@@ -11,3 +11,9 @@ remain available from the linked upstream repositories.
 
 These packages provide independently licensed codecs. TomoRead does not copy
 encoding tables or detector code from the ColorTxt reference checkout.
+
+TomoRead also uses `opencc` 1.1.0, an Apache License 2.0 Dart wrapper around
+OpenCC, for phrase-aware Simplified/Traditional Chinese display conversion:
+<https://github.com/lindeer/opencc-dart>. OpenCC and its dictionaries are
+licensed under Apache License 2.0. Conversion output is a reversible display
+projection in TomoRead and never overwrites the imported book.

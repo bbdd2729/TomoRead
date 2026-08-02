@@ -98,7 +98,7 @@ void main() {
     addTearDown(appDatabase.close);
     final database = await appDatabase.database;
 
-    expect(await database.getVersion(), 18);
+    expect(await database.getVersion(), 19);
     final parts = await database.query('chat_message_parts');
     expect(parts.single['type'], 'text');
     expect(parts.single['text_content'], 'Legacy answer');
@@ -151,5 +151,11 @@ void main() {
       WHERE type = 'table' AND name = 'imported_fonts'
     ''');
     expect(fontTables, hasLength(1));
+    final projectionTables = await database.rawQuery('''
+      SELECT name FROM sqlite_master
+      WHERE type = 'table'
+        AND name IN ('text_display_rules', 'book_text_projection_settings')
+    ''');
+    expect(projectionTables, hasLength(2));
   });
 }

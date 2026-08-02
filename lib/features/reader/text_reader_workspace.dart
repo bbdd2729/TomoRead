@@ -3,17 +3,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/services/text_decoder_service.dart';
 import '../../domain/models/pomodoro.dart';
+import '../../domain/models/display_projection.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_chapter.dart';
 import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
 import '../text_import/text_content_controller.dart';
+import '../text_import/text_projection_controller.dart';
+import '../text_import/text_projection_dialog.dart';
 
 enum _TextChapterAction { rename, split, mergeNext }
 
@@ -38,11 +42,50 @@ class TextReaderWorkspace extends HookConsumerWidget {
     final settings = readingOverride?.settings ?? readingSettings;
     ref.watch(readingFontReadyProvider(settings.font));
     final chapterIndex = useState(0);
+    final projectionConfigState = ref.watch(
+      textProjectionConfigProvider(bookId),
+    );
     final lifecycle = useAppLifecycleState();
     final pomodoro = ref.watch(pomodoroControllerProvider).value;
     final breakActive = pomodoro?.isBreak == true && pomodoro?.isRunning == true;
     final tracker = ref.read(readingActivityTrackerProvider);
     final document = documentState.value;
+    final activeChapter = document == null || document.chapters.isEmpty
+        ? null
+        : document.chapters[
+            chapterIndex.value
+                .clamp(0, document.chapters.length - 1)
+                .toInt()
+          ];
+    final rawChapterText = activeChapter == null
+        ? ''
+        : document!.rawText.substring(
+            activeChapter.rawStart.clamp(0, document.rawText.length).toInt(),
+            activeChapter.rawEnd
+                .clamp(activeChapter.rawStart, document.rawText.length)
+                .toInt(),
+          );
+    final projectionConfig =
+        projectionConfigState.value ??
+        const TextProjectionConfig(
+          settings: TextProjectionSettings(),
+          rules: [],
+        );
+    final projectionJob = useMemoized(
+      () => ref.read(textDisplayTransformServiceProvider).startProjection(
+        bookId: bookId,
+        rawText: rawChapterText,
+        settings: projectionConfig.settings,
+        rules: projectionConfig.rules,
+      ),
+      [bookId, rawChapterText, projectionConfig],
+    );
+    final projectionSnapshot = useFuture(projectionJob.result);
+
+    useEffect(
+      () => () => unawaited(projectionJob.cancel()),
+      [projectionJob],
+    );
 
     useEffect(() {
       final book = document?.book;
@@ -271,6 +314,16 @@ class TextReaderWorkspace extends HookConsumerWidget {
       }
     }
 
+    Future<void> copyOriginalChapter() async {
+      if (rawChapterText.isEmpty) return;
+      await Clipboard.setData(ClipboardData(text: rawChapterText));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已复制当前章节原文。')),
+        );
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -298,6 +351,19 @@ class TextReaderWorkspace extends HookConsumerWidget {
             onPressed: document == null ? null : editCurrentChapter,
             icon: const Icon(Icons.edit_note),
           ),
+          IconButton(
+            tooltip: '文本显示投影',
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (context) => TextProjectionDialog(bookId: bookId),
+            ),
+            icon: const Icon(Icons.translate),
+          ),
+          IconButton(
+            tooltip: '复制当前章节原文',
+            onPressed: rawChapterText.isEmpty ? null : copyOriginalChapter,
+            icon: const Icon(Icons.content_copy_outlined),
+          ),
         ],
       ),
       body: Stack(
@@ -320,7 +386,11 @@ class TextReaderWorkspace extends HookConsumerWidget {
               final end = chapter.rawEnd
                   .clamp(start, value.rawText.length)
                   .toInt();
-              final content = value.rawText.substring(start, end);
+              final rawContent = value.rawText.substring(start, end);
+              final projection = projectionSnapshot.data;
+              final content = projection?.rawText == rawContent
+                  ? projection!.displayText
+                  : rawContent;
               final textStyle = TextStyle(
                 fontFamily: settings.font.fontFamily,
                 fontSize: settings.fontSize,
@@ -328,6 +398,18 @@ class TextReaderWorkspace extends HookConsumerWidget {
               );
               return Column(
                 children: [
+                  if (projectionSnapshot.hasError)
+                    MaterialBanner(
+                      content: Text('显示转换失败，已回退原文：${projectionSnapshot.error}'),
+                      actions: const [SizedBox.shrink()],
+                    )
+                  else if (projection?.hasAmbiguousRanges == true)
+                    const MaterialBanner(
+                      content: Text(
+                        '本章含无法精确映射的转换区段；这些区段不会创建可回跳标注。',
+                      ),
+                      actions: [SizedBox.shrink()],
+                    ),
                   Expanded(
                     child: SingleChildScrollView(
                       key: ValueKey(chapter.id),

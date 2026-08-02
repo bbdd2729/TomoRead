@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 18,
+        version: 19,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -88,6 +88,9 @@ class AppDatabase {
           }
           if (oldVersion < 18) {
             await _upgradeToVersion18(database);
+          }
+          if (oldVersion < 19) {
+            await _upgradeToVersion19(database);
           }
         },
       ),
@@ -178,6 +181,7 @@ class AppDatabase {
     await _createPomodoroSessionsTable(database);
     await _createTextContentTables(database);
     await _createImportedFontsTable(database);
+    await _createTextProjectionTables(database);
   }
 
   Future<void> _upgradeToVersion2(Database database) async {
@@ -396,6 +400,40 @@ class AppDatabase {
 
   Future<void> _upgradeToVersion18(Database database) =>
       _createImportedFontsTable(database);
+
+  Future<void> _upgradeToVersion19(Database database) =>
+      _createTextProjectionTables(database);
+
+  Future<void> _createTextProjectionTables(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS text_display_rules (
+        id TEXT PRIMARY KEY,
+        book_id TEXT,
+        name TEXT NOT NULL,
+        find_text TEXT NOT NULL,
+        replace_text TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        priority INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE,
+        CHECK(length(find_text) BETWEEN 1 AND 200),
+        CHECK(length(replace_text) <= 200)
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS text_display_rules_scope_priority
+      ON text_display_rules(book_id, enabled, priority DESC)
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS book_text_projection_settings (
+        book_id TEXT PRIMARY KEY,
+        settings_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
+      )
+    ''');
+  }
 
   Future<void> _createImportedFontsTable(Database database) async {
     await database.execute('''
