@@ -692,7 +692,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
         builder: (context) => _TextColoringBookDialog(
           bookId: bookId,
           settings: textColoring.settings,
-          override: textColoringOverride.value,
+          bookOverride: textColoringOverride.value,
         ),
       );
       if (result == null || !context.mounted) return;
@@ -949,12 +949,12 @@ class _TextColoringBookDialog extends StatefulWidget {
   const _TextColoringBookDialog({
     required this.bookId,
     required this.settings,
-    required this.override,
+    required this.bookOverride,
   });
 
   final String bookId;
   final TextColoringSettings settings;
-  final bool? override;
+  final bool? bookOverride;
 
   @override
   State<_TextColoringBookDialog> createState() =>
@@ -962,7 +962,7 @@ class _TextColoringBookDialog extends StatefulWidget {
 }
 
 class _TextColoringBookDialogState extends State<_TextColoringBookDialog> {
-  late _TextColoringBookMode _mode = switch (widget.override) {
+  late _TextColoringBookMode _mode = switch (widget.bookOverride) {
     true => _TextColoringBookMode.enabled,
     false => _TextColoringBookMode.disabled,
     null => _TextColoringBookMode.followGlobal,
