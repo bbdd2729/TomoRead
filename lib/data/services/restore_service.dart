@@ -324,11 +324,7 @@ class RestoreService {
     return directory;
   }
 
-  List<int> _archiveBytes(ArchiveFile file) {
-    final content = file.content;
-    if (content is List<int>) return content;
-    throw const RestoreException('备份条目不是普通文件。');
-  }
+  List<int> _archiveBytes(ArchiveFile file) => file.content;
 
   bool _safeArchivePath(String value) {
     final normalized = path.posix.normalize(value);

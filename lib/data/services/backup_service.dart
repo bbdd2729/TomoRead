@@ -424,11 +424,7 @@ class BackupService {
     return decoded;
   }
 
-  List<int> _archiveBytes(ArchiveFile file) {
-    final content = file.content;
-    if (content is List<int>) return content;
-    throw const FormatException('备份条目不是普通文件。');
-  }
+  List<int> _archiveBytes(ArchiveFile file) => file.content;
 
   bool _entryKindMatchesPath(BackupManifestEntry entry) => switch (entry.kind) {
     'database' => entry.path == 'database/tomoread.db',
