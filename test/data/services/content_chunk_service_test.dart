@@ -26,7 +26,9 @@ void main() {
       repository: repository,
       epubContent: const EpubContentService(),
     );
-    final text = '${List.filled(180, '第一段文字。').join()}\n\n第二段。';
+    final text =
+        '${List.filled(ContentChunkService.maxChunkLength + 200, '字').join()}'
+        '\n\n第二段。';
     await service.rebuildText(
       bookId: 'book-a',
       rawText: text,

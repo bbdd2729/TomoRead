@@ -85,8 +85,11 @@ void main() {
   });
 
   testWidgets('encodes native PNG output', (tester) async {
-    final png = await service.pngBytes(wordCloudArtifact(), width: 320, height: 220);
+    final png = await tester.runAsync(
+      () => service.pngBytes(wordCloudArtifact(), width: 320, height: 220),
+    );
 
-    expect(png.take(8), [137, 80, 78, 71, 13, 10, 26, 10]);
+    expect(png, isNotNull);
+    expect(png!.take(8), [137, 80, 78, 71, 13, 10, 26, 10]);
   });
 }
