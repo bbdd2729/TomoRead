@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '29'
+const runtimeVersion = '30'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
@@ -11,6 +11,7 @@ let paginator
 let annotations = []
 let focusedAnnotationId
 let searchQuery = ''
+let ttsHighlight
 let textColoring = { enabled: false, tokens: [], colors: {}, terms: [] }
 let pageTransition = 'slide'
 let tapNavigationEnabled = false
@@ -332,6 +333,37 @@ const applySearchHighlights = doc => {
     doc.head.append(style)
   }
   style.textContent = '::highlight(tomoread-search) { background: #ffb74d99; }'
+}
+
+const applyTtsHighlight = (doc, index) => {
+  const highlights = doc.defaultView.CSS?.highlights
+  const Highlight = doc.defaultView.Highlight
+  if (!highlights || !Highlight) return
+  const ranges = new Highlight()
+  const sectionHref = getSections()[index]?.href
+  const text = String(ttsHighlight?.text ?? '')
+  if (text && ttsHighlight?.href === sectionHref) {
+    const content = doc.body?.textContent ?? ''
+    let start = Number(ttsHighlight.start)
+    const expectedEnd = Number(ttsHighlight.end)
+    const hasVerifiedOffsets = Number.isInteger(start)
+      && Number.isInteger(expectedEnd)
+      && expectedEnd > start
+      && content.slice(start, expectedEnd) === text
+    if (!hasVerifiedOffsets) start = content.indexOf(text)
+    if (start >= 0) {
+      const range = rangeForOffsets(doc, start, start + text.length)
+      if (range) ranges.add(range)
+    }
+  }
+  highlights.set('tomoread-tts', ranges)
+  let style = doc.getElementById('tomoread-runtime-tts')
+  if (!style) {
+    style = doc.createElement('style')
+    style.id = 'tomoread-runtime-tts'
+    doc.head.append(style)
+  }
+  style.textContent = '::highlight(tomoread-tts) { background: #64b5f680; }'
 }
 
 const textColorHighlightPrefix = 'tomoread-text-color-'
@@ -977,6 +1009,7 @@ const navigateInternalLink = ({ link, doc, index, targetIndex, target }) => {
 const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   applyAnnotations(doc, index)
   applySearchHighlights(doc)
+  applyTtsHighlight(doc, index)
   applyTextColoring(doc)
   applySelectionListener(doc, index)
   // A section can emit more than one `load` event while Foliate rebuilds its
@@ -1256,6 +1289,13 @@ const setSearchQuery = nextQuery => {
   for (const { doc } of paginator?.getContents?.() ?? []) applySearchHighlights(doc)
 }
 
+const setTtsHighlight = nextHighlight => {
+  ttsHighlight = nextHighlight ?? null
+  for (const { doc, index } of paginator?.getContents?.() ?? []) {
+    applyTtsHighlight(doc, index)
+  }
+}
+
 const setTextColoring = nextTextColoring => {
   textColoring = nextTextColoring ?? {
     enabled: false,
@@ -1278,6 +1318,7 @@ window.TomoReadEpubRuntime = Object.freeze({
   command: executeCommand,
   setAnnotations,
   setSearchQuery,
+  setTtsHighlight,
   setTextColoring,
   setSettings: applySettings,
   postMessage,

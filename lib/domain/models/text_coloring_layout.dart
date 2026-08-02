@@ -161,4 +161,36 @@ class TextColoringLayout {
       isExact: contiguous && cells.every((cell) => cell.isExact),
     );
   }
+
+  TextColoringSourceRange displayToVisible(int start, int end) {
+    final safeStart = start.clamp(0, displaySourceLength).toInt();
+    final safeEnd = end.clamp(safeStart, displaySourceLength).toInt();
+    if (sourceCells.isEmpty) {
+      return TextColoringSourceRange(
+        start: safeStart.clamp(0, text.length).toInt(),
+        end: safeEnd.clamp(0, text.length).toInt(),
+        isExact: true,
+      );
+    }
+    final indices = <int>[];
+    for (var index = 0; index < sourceCells.length; index++) {
+      final cell = sourceCells[index];
+      if (cell.sourceEnd > safeStart && cell.sourceStart < safeEnd) {
+        indices.add(index);
+      }
+    }
+    if (indices.isEmpty) {
+      return const TextColoringSourceRange(
+        start: 0,
+        end: 0,
+        isExact: false,
+      );
+    }
+    final cells = indices.map((index) => sourceCells[index]);
+    return TextColoringSourceRange(
+      start: indices.first,
+      end: indices.last + 1,
+      isExact: cells.every((cell) => cell.isExact),
+    );
+  }
 }

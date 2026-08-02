@@ -27,6 +27,10 @@ class AndroidEpubWebView extends HookConsumerWidget {
     required this.href,
     required this.settings,
     required this.textColoring,
+    this.ttsHighlightHref,
+    this.ttsHighlightText,
+    this.ttsHighlightStart,
+    this.ttsHighlightEnd,
     required this.initialScrollRatio,
     required this.initialAnchor,
     required this.initialCfi,
@@ -49,6 +53,10 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final String href;
   final ReadingSettings settings;
   final ResolvedTextColoring textColoring;
+  final String? ttsHighlightHref;
+  final String? ttsHighlightText;
+  final int? ttsHighlightStart;
+  final int? ttsHighlightEnd;
   final double initialScrollRatio;
   final String? initialAnchor;
   final String? initialCfi;
@@ -85,6 +93,12 @@ class AndroidEpubWebView extends HookConsumerWidget {
     final runtimeTextColoringScript = _runtimeTextColoringScript(
       context,
       textColoring,
+    );
+    final runtimeTtsHighlightScript = _runtimeTtsHighlightScript(
+      href: ttsHighlightHref,
+      text: ttsHighlightText,
+      start: ttsHighlightStart,
+      end: ttsHighlightEnd,
     );
     final runtimeScript = epubManifest.value == null
         ? null
@@ -273,6 +287,19 @@ class AndroidEpubWebView extends HookConsumerWidget {
       }
       return null;
     }, [controller, runtimeTextColoringScript, loadPhase.value]);
+
+    useEffect(() {
+      if (loadPhase.value == _AndroidEpubLoadPhase.ready) {
+        unawaited(
+          _runJavaScript(
+            controller,
+            runtimeTtsHighlightScript,
+            onError: reportFailure,
+          ),
+        );
+      }
+      return null;
+    }, [controller, runtimeTtsHighlightScript, loadPhase.value]);
 
     useEffect(() {
       final command = navigationCommand;
@@ -572,6 +599,25 @@ class AndroidEpubWebView extends HookConsumerWidget {
   ) => _runtimeCall(
     'runtime.setTextColoring(${jsonEncode(textColoring.toRuntimeJson(dark: Theme.of(context).brightness == Brightness.dark))})',
   );
+
+  String _runtimeTtsHighlightScript({
+    required String? href,
+    required String? text,
+    required int? start,
+    required int? end,
+  }) {
+    final payload = text == null || href == null
+        ? null
+        : <String, Object?>{
+            'href': href,
+            'text': text,
+            'start': start,
+            'end': end,
+          };
+    return _runtimeCall(
+      'runtime.setTtsHighlight(${jsonEncode(payload)})',
+    );
+  }
 
   String _runtimeCall(String invocation) => '''(() => {
     let attempts = 0;

@@ -2,17 +2,26 @@ import 'package:flutter/material.dart';
 
 import '../../domain/models/text_coloring_layout.dart';
 
+class TextEmphasisRange {
+  const TextEmphasisRange({required this.start, required this.end});
+
+  final int start;
+  final int end;
+}
+
 class TextColoringSelectableText extends StatelessWidget {
   const TextColoringSelectableText({
     super.key,
     required this.layout,
     required this.style,
     this.onSelectionChanged,
+    this.emphasisRange,
   });
 
   final TextColoringLayout layout;
   final TextStyle style;
   final SelectionChangedCallback? onSelectionChanged;
+  final TextEmphasisRange? emphasisRange;
 
   @override
   Widget build(BuildContext context) => SelectableText.rich(
@@ -20,6 +29,7 @@ class TextColoringSelectableText extends StatelessWidget {
       context: context,
       layout: layout,
       baseStyle: style,
+      emphasisRange: emphasisRange,
     ),
     onSelectionChanged: onSelectionChanged,
   );
@@ -32,6 +42,7 @@ class TextColoringTextSpanBuilder {
     required BuildContext context,
     required TextColoringLayout layout,
     required TextStyle baseStyle,
+    TextEmphasisRange? emphasisRange,
   }) {
     if (layout.text.isEmpty) return TextSpan(text: '', style: baseStyle);
     final boundaries = <int>{0, layout.text.length};
@@ -44,6 +55,19 @@ class TextColoringTextSpanBuilder {
       boundaries
         ..add(range.start)
         ..add(range.end);
+    }
+    final emphasisStart = emphasisRange?.start
+        .clamp(0, layout.text.length)
+        .toInt();
+    final emphasisEnd = emphasisRange?.end
+        .clamp(0, layout.text.length)
+        .toInt();
+    if (emphasisStart != null &&
+        emphasisEnd != null &&
+        emphasisEnd > emphasisStart) {
+      boundaries
+        ..add(emphasisStart)
+        ..add(emphasisEnd);
     }
     final offsets = boundaries.toList()..sort();
     final children = <InlineSpan>[];
@@ -78,6 +102,14 @@ class TextColoringTextSpanBuilder {
       );
       if (colorRange != null) {
         style = style.copyWith(color: _colorFromHex(colorRange.hexColor));
+      }
+      if (emphasisStart != null &&
+          emphasisEnd != null &&
+          start >= emphasisStart &&
+          end <= emphasisEnd) {
+        style = style.copyWith(
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        );
       }
       children.add(
         TextSpan(text: layout.text.substring(start, end), style: style),

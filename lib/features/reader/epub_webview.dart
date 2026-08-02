@@ -28,6 +28,10 @@ class EpubWebView extends HookConsumerWidget {
     required this.textColoring,
     required this.annotations,
     required this.searchQuery,
+    this.ttsHighlightHref,
+    this.ttsHighlightText,
+    this.ttsHighlightStart,
+    this.ttsHighlightEnd,
     required this.focusedAnnotationId,
     required this.annotationFocusRevision,
     required this.initialScrollRatio,
@@ -56,6 +60,10 @@ class EpubWebView extends HookConsumerWidget {
   final ResolvedTextColoring textColoring;
   final List<ReadingAnnotation> annotations;
   final String? searchQuery;
+  final String? ttsHighlightHref;
+  final String? ttsHighlightText;
+  final int? ttsHighlightStart;
+  final int? ttsHighlightEnd;
   final String? focusedAnnotationId;
   final int annotationFocusRevision;
   final double initialScrollRatio;
@@ -84,6 +92,10 @@ class EpubWebView extends HookConsumerWidget {
         href: href,
         settings: settings,
         textColoring: textColoring,
+        ttsHighlightHref: ttsHighlightHref,
+        ttsHighlightText: ttsHighlightText,
+        ttsHighlightStart: ttsHighlightStart,
+        ttsHighlightEnd: ttsHighlightEnd,
         initialScrollRatio: initialScrollRatio,
         initialAnchor: initialAnchor,
         initialCfi: initialCfi,
@@ -121,6 +133,12 @@ class EpubWebView extends HookConsumerWidget {
       focusedAnnotationId,
     );
     final runtimeSearchScript = _runtimeSearchScript(searchQuery);
+    final runtimeTtsHighlightScript = _runtimeTtsHighlightScript(
+      href: ttsHighlightHref,
+      text: ttsHighlightText,
+      start: ttsHighlightStart,
+      end: ttsHighlightEnd,
+    );
     final runtimeSettingsScript = _runtimeSettingsScript(
       context,
       settings,
@@ -215,6 +233,14 @@ class EpubWebView extends HookConsumerWidget {
       }
     }
 
+    Future<void> applyFoliateTtsHighlight() async {
+      try {
+        await controller.executeScript(runtimeTtsHighlightScript);
+      } catch (_) {
+        // The active iframe can change while speech moves to the next sentence.
+      }
+    }
+
     useEffect(() {
       if (resourceDirectory == null) return null;
       var disposed = false;
@@ -279,6 +305,13 @@ class EpubWebView extends HookConsumerWidget {
       }
       return null;
     }, [initialized.value, runtimeSearchScript, useFoliateRuntime]);
+
+    useEffect(() {
+      if (initialized.value && useFoliateRuntime) {
+        unawaited(applyFoliateTtsHighlight());
+      }
+      return null;
+    }, [initialized.value, runtimeTtsHighlightScript, useFoliateRuntime]);
 
     useEffect(() {
       if (useFoliateRuntime) return null;
@@ -1012,6 +1045,25 @@ a { color: ${_cssColor(colorScheme.primary)}; }
 
   String _runtimeSearchScript(String? query) =>
       _runtimeCall('runtime.setSearchQuery(${jsonEncode(query)})');
+
+  String _runtimeTtsHighlightScript({
+    required String? href,
+    required String? text,
+    required int? start,
+    required int? end,
+  }) {
+    final payload = text == null || href == null
+        ? null
+        : <String, Object?>{
+            'href': href,
+            'text': text,
+            'start': start,
+            'end': end,
+          };
+    return _runtimeCall(
+      'runtime.setTtsHighlight(${jsonEncode(payload)})',
+    );
+  }
 
   String _runtimeCall(String invocation) =>
       '''(() => {

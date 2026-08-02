@@ -140,6 +140,16 @@ void main() {
     expect(runtime, contains("stopAutoScroll('selection')"));
     expect(runtime, isNot(contains('setInterval(startAutoScroll')));
   });
+
+  test('keeps TTS sentence emphasis separate from search highlights', () async {
+    final runtime = await rootBundle.loadString(
+      'assets/epub_reader_runtime/tomoread-reader.js',
+    );
+
+    expect(runtime, contains('setTtsHighlight'));
+    expect(runtime, contains("highlights.set('tomoread-tts', ranges)"));
+    expect(runtime, contains("highlights.set('tomoread-search', ranges)"));
+  });
 }
 
 LibraryBook _book(String filePath) => LibraryBook(
