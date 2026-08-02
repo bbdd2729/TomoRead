@@ -46,10 +46,9 @@ typedef ImportPreviewExecutor = Future<List<BookImportResult>> Function(
 
 class ImportWorkflowController extends ChangeNotifier {
   ImportWorkflowController({
-    required ImportPreviewLoader previewLoader,
-    required ImportPreviewExecutor executor,
-  }) : _previewLoader = previewLoader,
-       _executor = executor;
+    required this.previewLoader,
+    required this.executor,
+  });
 
   factory ImportWorkflowController.forService(BookImportService service) =>
       ImportWorkflowController(
@@ -65,8 +64,8 @@ class ImportWorkflowController extends ChangeNotifier {
         ),
       );
 
-  final ImportPreviewLoader _previewLoader;
-  final ImportPreviewExecutor _executor;
+  final ImportPreviewLoader previewLoader;
+  final ImportPreviewExecutor executor;
   ImportCancellationToken? _token;
   ImportWorkflowState _state = const ImportWorkflowState();
   bool _disposed = false;
@@ -79,7 +78,7 @@ class ImportWorkflowController extends ChangeNotifier {
     _token = token;
     _setState(const ImportWorkflowState(phase: ImportWorkflowPhase.scanning));
     try {
-      final preview = await _previewLoader(sources, token, (completed, total) {
+      final preview = await previewLoader(sources, token, (completed, total) {
         _setState(
           ImportWorkflowState(
             phase: ImportWorkflowPhase.scanning,
@@ -132,7 +131,7 @@ class ImportWorkflowController extends ChangeNotifier {
       ),
     );
     try {
-      final results = await _executor(preview, token, (completed, total) {
+      final results = await executor(preview, token, (completed, total) {
         _setState(
           ImportWorkflowState(
             phase: ImportWorkflowPhase.importing,
