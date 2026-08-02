@@ -9,11 +9,13 @@ import 'package:path/path.dart' as path;
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../app/providers.dart';
+import '../../domain/models/epub_interaction.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_coloring.dart';
+import 'epub_interaction_presenter.dart';
 import 'reader_navigation_command.dart';
 
 enum _AndroidEpubLoadPhase { loading, ready, failed }
@@ -116,8 +118,13 @@ class AndroidEpubWebView extends HookConsumerWidget {
     }
 
     final messageHandlerRef = useRef<void Function(String)?>(null);
-    messageHandlerRef.value = (rawMessage) =>
-        _handleRuntimeMessage(rawMessage, reportReady, reportFailure);
+    messageHandlerRef.value = (rawMessage) => _handleRuntimeMessage(
+      context,
+      rawMessage,
+      epubManifest.value,
+      reportReady,
+      reportFailure,
+    );
     final controller = useMemoized(() {
       late final WebViewController webViewController;
       webViewController = WebViewController()
@@ -299,7 +306,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
   }
 
   void _handleRuntimeMessage(
+    BuildContext context,
     String rawMessage,
+    EpubManifest? manifest,
     VoidCallback onReady,
     ValueChanged<Object> onFailure,
   ) {
@@ -308,6 +317,20 @@ class AndroidEpubWebView extends HookConsumerWidget {
       runtimeMessage = jsonDecode(rawMessage);
     } on FormatException {
       // Legacy scroll and tap messages use a compact pipe format.
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'epubInteraction') {
+      if (manifest == null || !context.mounted) return;
+      try {
+        final interaction = EpubInteraction.fromBridgeMessage(
+          runtimeMessage,
+          manifest: manifest,
+        );
+        unawaited(presentEpubInteraction(context, interaction));
+      } on FormatException {
+        reportInvalidEpubInteraction(context);
+      }
+      return;
     }
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'runtimeRelocate') {

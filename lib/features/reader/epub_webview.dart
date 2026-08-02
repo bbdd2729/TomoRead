@@ -8,6 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:webview_flutter_windows/webview_flutter_windows.dart';
 
 import '../../app/providers.dart';
+import '../../domain/models/epub_interaction.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/reader_text_selection.dart';
@@ -15,6 +16,7 @@ import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_coloring.dart';
 import 'epub_webview_android.dart';
+import 'epub_interaction_presenter.dart';
 import 'reader_navigation_command.dart';
 
 class EpubWebView extends HookConsumerWidget {
@@ -98,6 +100,7 @@ class EpubWebView extends HookConsumerWidget {
       );
     }
     final readerSession = ref.watch(epubReaderSessionProvider(bookId));
+    final epubManifest = ref.watch(readerManifestProvider(bookId));
     final fontFaceCss = ref.watch(epubFontFaceCssProvider(settings.font)).value;
     final controller = useMemoized(WebviewController.new);
     final initialized = useState(false);
@@ -293,7 +296,19 @@ class EpubWebView extends HookConsumerWidget {
         final subscription = controller.webMessage.listen((message) {
           if (message is! Map) return;
           final messageHref = message['href'];
-          if (message['type'] == 'scrollProgress') {
+          if (message['type'] == 'epubInteraction') {
+            final manifest = epubManifest.value;
+            if (manifest == null || !context.mounted) return;
+            try {
+              final interaction = EpubInteraction.fromBridgeMessage(
+                Map<Object?, Object?>.from(message),
+                manifest: manifest,
+              );
+              unawaited(presentEpubInteraction(context, interaction));
+            } on FormatException {
+              reportInvalidEpubInteraction(context);
+            }
+          } else if (message['type'] == 'scrollProgress') {
             final ratio = message['ratio'];
             final anchor = message['anchor'];
             if (messageHref is String && ratio is num) {
@@ -414,6 +429,7 @@ class EpubWebView extends HookConsumerWidget {
         onScrollPositionChanged,
         onTextSelectionChanged,
         onNavigationCommandFinished,
+        epubManifest.value,
       ],
     );
 

@@ -19,8 +19,9 @@
         if (/^ResizeObserver loop (limit exceeded|completed with undelivered notifications)\.?$/.test(message)) {
           return
         }
-        window.TomoRead?.postMessage(JSON.stringify({ type: 'runtimeError', message }))
-        window.chrome?.webview?.postMessage({ type: 'runtimeError', message })
+        const payload = { bridgeVersion: 1, type: 'runtimeError', message }
+        window.TomoRead?.postMessage(JSON.stringify(payload))
+        window.chrome?.webview?.postMessage(payload)
       }
       window.addEventListener('error', reportRuntimeError)
       window.addEventListener('unhandledrejection', reportRuntimeError)

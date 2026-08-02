@@ -1,7 +1,8 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '27'
+const runtimeVersion = '28'
+const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -22,14 +23,19 @@ let currentPageCount = 1
 let measuredRelocationRevision = 0
 let commandTail = Promise.resolve()
 let nextCommandId = 1
+let interactionOverlay
+let interactionOverlayKeyHandler
+let navigationBackButton
+const navigationHistory = []
 
 const postMessage = message => {
+  const payload = { ...message, bridgeVersion }
   if (window.chrome?.webview?.postMessage) {
-    window.chrome.webview.postMessage(message)
+    window.chrome.webview.postMessage(payload)
     return
   }
   if (window.TomoRead?.postMessage) {
-    window.TomoRead.postMessage(JSON.stringify(message))
+    window.TomoRead.postMessage(JSON.stringify(payload))
   }
 }
 
@@ -557,6 +563,343 @@ const reportPaginatorPosition = async ({
   emitPagePosition({ index, ratio, pageIndex, pageCount })
 }
 
+const interactionLocator = (doc, index, element) => {
+  let range
+  try {
+    range = doc.createRange()
+    range.selectNodeContents(element)
+  } catch {
+    range = null
+  }
+  return {
+    chapterIndex: index,
+    ratio: index === currentSectionIndex ? currentRatio : 0,
+    anchor: nearestAnchor(range),
+    cfi: cfiFor(range),
+  }
+}
+
+const postInteraction = (action, doc, index, element, details = {}) => {
+  const section = getSections()[index]
+  if (!section) return
+  postMessage({
+    type: 'epubInteraction',
+    action,
+    href: section.href,
+    locator: interactionLocator(doc, index, element),
+    ...details,
+  })
+}
+
+const closeInteractionOverlay = () => {
+  if (!interactionOverlay) return
+  const overlay = interactionOverlay
+  interactionOverlay = null
+  window.removeEventListener('keydown', interactionOverlayKeyHandler)
+  interactionOverlayKeyHandler = null
+  overlay.remove()
+  overlay.__tomoReadOnClose?.()
+  overlay.__tomoReadRestoreFocus?.focus?.()
+}
+
+const showInteractionOverlay = ({ title, content, onClose, restoreFocus }) => {
+  closeInteractionOverlay()
+  const overlay = document.createElement('div')
+  overlay.style.cssText = [
+    'position:fixed',
+    'inset:0',
+    'z-index:2147483646',
+    'display:flex',
+    'align-items:center',
+    'justify-content:center',
+    'padding:24px',
+    'box-sizing:border-box',
+    'background:rgba(0,0,0,.68)',
+  ].join(';')
+  overlay.setAttribute('role', 'presentation')
+  overlay.__tomoReadOnClose = onClose
+  overlay.__tomoReadRestoreFocus = restoreFocus
+
+  const panel = document.createElement('section')
+  panel.style.cssText = [
+    'position:relative',
+    'display:flex',
+    'flex-direction:column',
+    'gap:16px',
+    'width:min(760px,100%)',
+    'max-height:90vh',
+    'overflow:auto',
+    'box-sizing:border-box',
+    'padding:24px',
+    'border-radius:16px',
+    'color:CanvasText',
+    'background:Canvas',
+    'box-shadow:0 18px 60px rgba(0,0,0,.4)',
+  ].join(';')
+  panel.setAttribute('role', 'dialog')
+  panel.setAttribute('aria-modal', 'true')
+  panel.setAttribute('aria-label', title)
+
+  const heading = document.createElement('h2')
+  heading.textContent = title
+  heading.style.cssText = 'margin:0;font:600 1.15rem/1.4 system-ui,sans-serif'
+  const closeButton = document.createElement('button')
+  closeButton.type = 'button'
+  closeButton.textContent = '关闭'
+  closeButton.setAttribute('aria-label', `关闭${title}`)
+  closeButton.style.cssText = [
+    'align-self:flex-end',
+    'min-width:72px',
+    'padding:8px 16px',
+    'border:0',
+    'border-radius:999px',
+    'font:inherit',
+    'cursor:pointer',
+  ].join(';')
+  closeButton.addEventListener('click', closeInteractionOverlay)
+  panel.append(heading, content, closeButton)
+  overlay.append(panel)
+  overlay.addEventListener('click', event => {
+    if (event.target === overlay) closeInteractionOverlay()
+  })
+  interactionOverlayKeyHandler = event => {
+    if (event.key === 'Escape') closeInteractionOverlay()
+  }
+  window.addEventListener('keydown', interactionOverlayKeyHandler)
+  document.body.append(overlay)
+  interactionOverlay = overlay
+  closeButton.focus()
+}
+
+const decodedFragment = target => {
+  if (!target.hash || target.hash.length <= 1) return null
+  try {
+    return decodeURIComponent(target.hash.slice(1))
+  } catch {
+    return null
+  }
+}
+
+const relativeBookResource = target => {
+  const root = new URL('../', location.href)
+  const targetWithoutFragment = target.href.split('#')[0].split('?')[0]
+  const rootHref = root.href
+  if (!targetWithoutFragment.startsWith(rootHref)) return null
+  const value = targetWithoutFragment.slice(rootHref.length)
+  if (!value || value.split('/').includes('..')) return null
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+const footnoteType = element => [
+  element?.getAttribute?.('epub:type'),
+  element?.getAttribute?.('role'),
+  element?.getAttribute?.('class'),
+].filter(Boolean).join(' ').toLowerCase()
+
+const isFootnoteReference = (link, targetElement, target) => {
+  const referenceType = footnoteType(link)
+  const targetType = footnoteType(targetElement)
+  const resourceId = decodedFragment(target) ?? ''
+  const targetName = target.pathname.split('/').pop() ?? ''
+  return /\b(noteref|footnote-ref|footnoteref)\b/.test(referenceType)
+    || /\b(doc-footnote|footnote|endnote|rearnote)\b/.test(targetType)
+    || /^(?:fn|note|footnote|endnote)[-_.:]?\d*$/i.test(resourceId)
+    || /^(?:footnotes?|endnotes?|notes?)\.(?:x?html?)$/i.test(targetName)
+}
+
+const loadFootnoteText = async ({ doc, index, targetIndex, resourceId }) => {
+  let targetDocument = doc
+  if (targetIndex !== index) {
+    const response = await fetch(sectionUrl(getSections()[targetIndex].href))
+    if (!response.ok) throw new Error(`脚注资源加载失败 (${response.status})`)
+    const source = await response.text()
+    targetDocument = new DOMParser().parseFromString(source, 'text/html')
+  }
+  const targetElement = targetDocument.getElementById(resourceId)
+  if (!targetElement) throw new Error('未找到脚注内容。')
+  const text = targetElement.textContent?.replace(/\s+/g, ' ').trim()
+  if (!text) throw new Error('脚注内容为空。')
+  return text.slice(0, 12000)
+}
+
+const openFootnote = async ({ link, doc, index, targetIndex, target }) => {
+  const resourceId = decodedFragment(target)
+  const targetHref = getSections()[targetIndex]?.href
+  if (!resourceId || !targetHref) {
+    postInteraction('interactionError', doc, index, link, {
+      message: '脚注链接缺少有效目标。',
+    })
+    return
+  }
+  try {
+    const text = await loadFootnoteText({ doc, index, targetIndex, resourceId })
+    const content = document.createElement('p')
+    content.textContent = text
+    content.style.cssText = 'margin:0;white-space:pre-wrap;font:1rem/1.75 system-ui,sans-serif'
+    const details = { targetHref, resourceId }
+    postInteraction('footnoteOpened', doc, index, link, details)
+    showInteractionOverlay({
+      title: link.getAttribute('aria-label')?.trim() || '脚注',
+      content,
+      restoreFocus: link,
+      onClose: () => postInteraction('footnoteClosed', doc, index, link, details),
+    })
+  } catch (error) {
+    postInteraction('interactionError', doc, index, link, {
+      message: String(error?.message ?? error).slice(0, 500),
+    })
+  }
+}
+
+const openImage = ({ element, doc, index }) => {
+  const inlineSvg = element.localName === 'svg'
+  if (inlineSvg) {
+    postInteraction('imageFailed', doc, index, element, {
+      resourceId: `inline-svg-${element.id || index}`.replace(/[^a-z0-9._-]/gi, '-'),
+      message: '为避免执行 EPUB 内嵌脚本，内联 SVG 仅在正文中显示。',
+    })
+    return
+  }
+  const source = inlineSvg
+    ? null
+    : element.currentSrc || element.href?.baseVal || element.getAttribute('src')
+      || element.getAttribute('href') || element.getAttribute('xlink:href')
+  let resourceId
+  let target
+  if (inlineSvg) {
+    resourceId = `inline-svg-${element.id || index}`.replace(/[^a-z0-9._-]/gi, '-')
+  } else {
+    try {
+      target = new URL(source, doc.location.href)
+      resourceId = relativeBookResource(target)
+    } catch {
+      resourceId = null
+    }
+  }
+  if (!resourceId) {
+    postInteraction('imageFailed', doc, index, element, {
+      resourceId: 'invalid-image-resource',
+      message: '图片来源不在当前 EPUB 资源范围内。',
+    })
+    return
+  }
+
+  const content = document.createElement('div')
+  content.style.cssText = 'display:grid;place-items:center;min-height:160px;overflow:auto'
+  const status = document.createElement('p')
+  status.textContent = '正在加载图片…'
+  status.style.cssText = 'margin:0;font:1rem/1.5 system-ui,sans-serif'
+  content.append(status)
+  const details = { resourceId }
+  postInteraction('imageOpened', doc, index, element, details)
+  showInteractionOverlay({
+    title: element.getAttribute('alt')?.trim() || '图片查看器',
+    content,
+    restoreFocus: element,
+    onClose: () => postInteraction('imageClosed', doc, index, element, details),
+  })
+
+  const image = document.createElement('img')
+  image.alt = element.getAttribute('alt') ?? ''
+  image.style.cssText = 'display:block;max-width:100%;max-height:72vh;width:auto;height:auto;object-fit:contain'
+  image.addEventListener('load', () => {
+    if (image.naturalWidth * image.naturalHeight > 64000000) {
+      image.removeAttribute('src')
+      status.textContent = '图片尺寸过大，已停止解码以保护阅读器。'
+      content.replaceChildren(status)
+      postInteraction('imageFailed', doc, index, element, {
+        ...details,
+        message: status.textContent,
+      })
+      return
+    }
+    content.replaceChildren(image)
+  })
+  image.addEventListener('error', () => {
+    status.textContent = '图片加载失败，可以关闭后继续阅读。'
+    content.replaceChildren(status)
+    postInteraction('imageFailed', doc, index, element, {
+      ...details,
+      message: status.textContent,
+    })
+  })
+  image.src = target.href
+}
+
+const updateNavigationBackButton = () => {
+  if (!navigationBackButton) {
+    navigationBackButton = document.createElement('button')
+    navigationBackButton.type = 'button'
+    navigationBackButton.textContent = '返回链接前位置'
+    navigationBackButton.style.cssText = [
+      'position:fixed',
+      'left:16px',
+      'bottom:16px',
+      'z-index:2147483645',
+      'padding:9px 14px',
+      'border:0',
+      'border-radius:999px',
+      'box-shadow:0 4px 18px rgba(0,0,0,.28)',
+      'cursor:pointer',
+    ].join(';')
+    navigationBackButton.addEventListener('click', () => {
+      const target = navigationHistory.pop()
+      updateNavigationBackButton()
+      if (!target) return
+      const source = getSections()[currentSectionIndex]
+      if (source) {
+        postMessage({
+          type: 'epubInteraction',
+          action: 'internalBack',
+          href: source.href,
+          targetHref: target.href,
+          locator: {
+            chapterIndex: currentSectionIndex,
+            ratio: currentRatio,
+            anchor: null,
+            cfi: null,
+          },
+        })
+      }
+      void executeCommand({
+        type: 'goToLocation',
+        payload: target,
+      })
+    })
+    document.body.append(navigationBackButton)
+  }
+  navigationBackButton.hidden = navigationHistory.length === 0
+}
+
+const navigateInternalLink = ({ link, doc, index, targetIndex, target }) => {
+  const source = getSections()[index]
+  const destination = getSections()[targetIndex]
+  if (!source || !destination) return
+  const sourceLocator = interactionLocator(doc, index, link)
+  navigationHistory.push({
+    href: source.href,
+    ratio: sourceLocator.ratio,
+    anchor: sourceLocator.anchor,
+    cfi: sourceLocator.cfi,
+  })
+  updateNavigationBackButton()
+  postInteraction('internalLink', doc, index, link, {
+    targetHref: destination.href,
+  })
+  void executeCommand({
+    type: 'goToLocation',
+    payload: {
+      href: destination.href,
+      ratio: 0,
+      anchor: target.hash,
+    },
+  })
+}
+
 const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   applyAnnotations(doc, index)
   applySearchHighlights(doc)
@@ -573,15 +916,38 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   doc.addEventListener('click', event => {
     const link = event.target.closest?.('a[href]')
     if (link) {
-      const target = new URL(link.href, doc.location.href)
+      event.preventDefault()
+      let target
+      try {
+        target = new URL(link.href, doc.location.href)
+      } catch {
+        postInteraction('blockedLink', doc, index, link)
+        return
+      }
       const targetIndex = getSections().findIndex(section => sectionUrl(section.href) === target.href.split('#')[0])
       if (targetIndex >= 0) {
-        event.preventDefault()
-        void executeCommand({
-          type: 'goToLocation',
-          payload: { href: getSections()[targetIndex].href, ratio: 0, anchor: target.hash },
+        const resourceId = decodedFragment(target)
+        const targetElement = targetIndex === index && resourceId
+          ? doc.getElementById(resourceId)
+          : null
+        if (isFootnoteReference(link, targetElement, target)) {
+          void openFootnote({ link, doc, index, targetIndex, target })
+        } else {
+          navigateInternalLink({ link, doc, index, targetIndex, target })
+        }
+      } else if (target.protocol === 'http:' || target.protocol === 'https:') {
+        postInteraction('externalLinkRequested', doc, index, link, {
+          externalUrl: target.href,
         })
+      } else {
+        postInteraction('blockedLink', doc, index, link)
       }
+      return
+    }
+    const image = event.target.closest?.('img,svg,image')
+    if (image) {
+      event.preventDefault()
+      openImage({ element: image, doc, index })
       return
     }
     if (doc.getSelection()?.toString().trim()) return
@@ -673,6 +1039,7 @@ const createPaginator = () => {
   paginator.addEventListener('error', error => {
     postMessage({ type: 'runtimeError', message: String(error.message ?? error) })
   })
+  updateNavigationBackButton()
 }
 
 const ensureOpen = async options => {
