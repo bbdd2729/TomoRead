@@ -21,7 +21,8 @@ static void font_catalog_method_call_cb(FlMethodChannel* channel,
                                         gpointer user_data) {
   const gchar* method = fl_method_call_get_name(method_call);
   if (g_strcmp0(method, "listFonts") != 0) {
-    g_autoptr(FlMethodResponse) response = fl_method_not_implemented_response_new();
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
     fl_method_call_respond(method_call, response, nullptr);
     return;
   }
