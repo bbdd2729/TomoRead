@@ -116,6 +116,36 @@ bool FlutterWindow::OnCreate() {
           result->NotImplemented();
         }
       });
+  wake_lock_channel_ = std::make_unique<
+      flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(),
+      "dev.tomoread/wake_lock",
+      &flutter::StandardMethodCodec::GetInstance());
+  wake_lock_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() != "setEnabled") {
+          result->NotImplemented();
+          return;
+        }
+        bool enabled = false;
+        const auto* arguments = std::get_if<flutter::EncodableMap>(
+            call.arguments());
+        if (arguments != nullptr) {
+          const auto entry = arguments->find(
+              flutter::EncodableValue("enabled"));
+          if (entry != arguments->end()) {
+            if (const auto* value = std::get_if<bool>(&entry->second)) {
+              enabled = *value;
+            }
+          }
+        }
+        const EXECUTION_STATE flags = enabled
+            ? ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+            : ES_CONTINUOUS;
+        result->Success(flutter::EncodableValue(
+            SetThreadExecutionState(flags) != 0));
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -133,6 +163,8 @@ bool FlutterWindow::OnCreate() {
 void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
     DragAcceptFiles(GetHandle(), FALSE);
+    SetThreadExecutionState(ES_CONTINUOUS);
+    wake_lock_channel_.reset();
     import_inbox_channel_.reset();
     font_catalog_channel_.reset();
     flutter_controller_ = nullptr;

@@ -18,6 +18,7 @@ import '../data/repositories/skill_repository.dart';
 import '../data/repositories/text_coloring_repository.dart';
 import '../data/repositories/text_content_repository.dart';
 import '../data/repositories/text_projection_repository.dart';
+import '../data/repositories/tts_repository.dart';
 import '../data/repositories/visual_artifact_repository.dart';
 import '../data/services/ai_gateway.dart';
 import '../data/services/ai_provider_catalog.dart';
@@ -42,10 +43,13 @@ import '../data/services/reading_activity_tracker.dart';
 import '../data/services/reading_context_assembler.dart';
 import '../data/services/reader_shortcut_service.dart';
 import '../data/services/pomodoro_timer_service.dart';
+import '../data/services/platform_tts_engine.dart';
+import '../data/services/platform_tts_wake_lock.dart';
 import '../data/services/stats_report_service.dart';
 import '../data/services/text_coloring_layout_service.dart';
 import '../data/services/text_decoder_service.dart';
 import '../data/services/text_display_transform_service.dart';
+import '../data/services/tts_queue_service.dart';
 import '../data/services/mind_map_generation_service.dart';
 import '../data/services/visual_artifact_export_service.dart';
 import '../data/services/word_frequency_service.dart';
@@ -60,6 +64,7 @@ import '../domain/models/text_content_profile.dart';
 import '../domain/models/reading_settings.dart';
 import '../domain/models/reading_font.dart';
 import '../domain/models/reading_annotation.dart';
+import '../domain/models/tts.dart';
 import '../domain/models/visual_artifact.dart';
 import '../features/chat/ai_agent_runner.dart';
 import 'appearance.dart';
@@ -128,6 +133,24 @@ final textProjectionRevisionProvider = NotifierProvider<RevisionNotifier, int>(
 
 final contentChunkRepositoryProvider = Provider<ContentChunkRepository>(
   (ref) => ContentChunkRepository(ref.watch(appDatabaseProvider)),
+);
+
+final ttsRepositoryProvider = Provider<TtsRepository>(
+  (ref) => TtsRepository(ref.watch(appDatabaseProvider)),
+);
+
+final ttsQueueServiceProvider = Provider<TtsQueueService>(
+  (ref) => TtsQueueService(ref.watch(contentChunkRepositoryProvider)),
+);
+
+final ttsEngineProvider = Provider<TtsEngine>((ref) {
+  final engine = PlatformTtsEngine();
+  ref.onDispose(() => unawaited(engine.stop()));
+  return engine;
+});
+
+final ttsWakeLockProvider = Provider<TtsWakeLock>(
+  (ref) => const PlatformTtsWakeLock(),
 );
 
 final contentChunkServiceProvider = Provider<ContentChunkService>(

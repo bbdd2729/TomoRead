@@ -34,6 +34,8 @@ class FlutterWindow : public Win32Window {
       font_catalog_channel_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       import_inbox_channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      wake_lock_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -12,6 +13,7 @@ import java.util.UUID
 
 class MainActivity : FlutterActivity() {
     private val channelName = "dev.tomoread/import_inbox"
+    private val wakeLockChannelName = "dev.tomoread/wake_lock"
     private val pendingIntents = mutableListOf<Intent>()
     private var importChannel: MethodChannel? = null
     private var dartReady = false
@@ -31,6 +33,27 @@ class MainActivity : FlutterActivity() {
                 processIntents(intents) { sources -> result.success(sources) }
             }
         }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            wakeLockChannelName,
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "setEnabled") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val enabled = call.argument<Boolean>("enabled") == true
+            if (enabled) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+            result.success(true)
+        }
+    }
+
+    override fun onDestroy() {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -13,6 +13,9 @@ struct _MyApplication {
   char** dart_entrypoint_arguments;
   FlMethodChannel* font_catalog_channel;
   FlMethodChannel* import_inbox_channel;
+  FlMethodChannel* wake_lock_channel;
+  GtkWindow* window;
+  guint wake_lock_cookie;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -57,6 +60,39 @@ static void import_inbox_method_call_cb(FlMethodChannel* channel,
   g_autoptr(FlValue) values = fl_value_new_list();
   g_autoptr(FlMethodResponse) response =
       FL_METHOD_RESPONSE(fl_method_success_response_new(values));
+  fl_method_call_respond(method_call, response, nullptr);
+}
+
+static void wake_lock_method_call_cb(FlMethodChannel* channel,
+                                     FlMethodCall* method_call,
+                                     gpointer user_data) {
+  (void)channel;
+  MyApplication* self = MY_APPLICATION(user_data);
+  if (g_strcmp0(fl_method_call_get_name(method_call), "setEnabled") != 0) {
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+    fl_method_call_respond(method_call, response, nullptr);
+    return;
+  }
+  FlValue* arguments = fl_method_call_get_args(method_call);
+  FlValue* enabled_value = arguments == nullptr
+      ? nullptr
+      : fl_value_lookup_string(arguments, "enabled");
+  const gboolean enabled = enabled_value != nullptr &&
+      fl_value_get_type(enabled_value) == FL_VALUE_TYPE_BOOL &&
+      fl_value_get_bool(enabled_value);
+  if (enabled && self->wake_lock_cookie == 0 && self->window != nullptr) {
+    self->wake_lock_cookie = gtk_application_inhibit(
+        GTK_APPLICATION(self), self->window, GTK_APPLICATION_INHIBIT_IDLE,
+        "TomoRead system text-to-speech playback");
+  } else if (!enabled && self->wake_lock_cookie != 0) {
+    gtk_application_uninhibit(GTK_APPLICATION(self), self->wake_lock_cookie);
+    self->wake_lock_cookie = 0;
+  }
+  const gboolean success = !enabled || self->wake_lock_cookie != 0;
+  g_autoptr(FlValue) value = fl_value_new_bool(success);
+  g_autoptr(FlMethodResponse) response =
+      FL_METHOD_RESPONSE(fl_method_success_response_new(value));
   fl_method_call_respond(method_call, response, nullptr);
 }
 
@@ -109,6 +145,7 @@ static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+  self->window = window;
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
@@ -171,6 +208,11 @@ static void my_application_activate(GApplication* application) {
       "dev.tomoread/import_inbox", FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(
       self->import_inbox_channel, import_inbox_method_call_cb, nullptr, nullptr);
+  self->wake_lock_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "dev.tomoread/wake_lock", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->wake_lock_channel, wake_lock_method_call_cb, self, nullptr);
 
   GtkTargetEntry import_targets[] = {
       {const_cast<gchar*>("text/uri-list"), 0, 0},
@@ -225,9 +267,15 @@ static void my_application_shutdown(GApplication* application) {
 // Implements GObject::dispose.
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
+  if (self->wake_lock_cookie != 0) {
+    gtk_application_uninhibit(GTK_APPLICATION(self), self->wake_lock_cookie);
+    self->wake_lock_cookie = 0;
+  }
+  self->window = nullptr;
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   g_clear_object(&self->font_catalog_channel);
   g_clear_object(&self->import_inbox_channel);
+  g_clear_object(&self->wake_lock_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
