@@ -85,8 +85,8 @@ class ReadingPositionMetrics {
 class ReadingTextPositionIndex {
   ReadingTextPositionIndex._({
     required this.textLength,
-    required List<int> lineStarts,
-  }) : _lineStarts = lineStarts;
+    required this._lineStarts,
+  });
 
   factory ReadingTextPositionIndex.fromText(String text) {
     final starts = <int>[0];
@@ -97,7 +97,7 @@ class ReadingTextPositionIndex {
     }
     return ReadingTextPositionIndex._(
       textLength: text.length,
-      lineStarts: starts,
+      _lineStarts: starts,
     );
   }
 
