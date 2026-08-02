@@ -3,6 +3,8 @@
 [![CI Build](https://github.com/bbdd2729/TomoRead/actions/workflows/ci.yml/badge.svg)](https://github.com/bbdd2729/TomoRead/actions/workflows/ci.yml)
 [![Release](https://github.com/bbdd2729/TomoRead/actions/workflows/release.yml/badge.svg)](https://github.com/bbdd2729/TomoRead/actions/workflows/release.yml)
 
+> Licensed under the [GNU General Public License v3.0 only](LICENSE).
+
 TomoRead 是一款基于 Flutter 的跨平台 AI 阅读器，面向本地 EPUB/PDF 书库、沉浸式阅读、全局知识整理和基于原文的 AI 对话。
 
 项目目前以 Windows 和 Linux 桌面端为主要开发目标。书籍、阅读位置、书签、标注、笔记、对话和阅读统计默认保存在本地；模型 API Key 通过系统安全存储管理。使用 AI 功能时，用户输入和明确附加的原文会发送到所配置的模型服务商。
