@@ -99,14 +99,11 @@ lib/
 5. 阅读器将有效前台阅读活动写入会话表，统计服务再按日期和书籍聚合。
 6. AI Gateway 通过 OpenAI 兼容 SSE 接口流式返回内容，对话与引用独立持久化。
 
-更详细的功能设计位于：
+更多项目文档位于 [`docs/`](docs/)：
 
-- [AI 对话架构](.agent/ai-chat-architecture.md)
-- [全局笔记架构](.agent/global-notes-architecture.md)
-- [阅读统计架构](.agent/reading-statistics-architecture.md)
-- [阅读器文本前景色设计](.agent/reader-text-coloring-architecture.md)
-- [以 ColorTxt 为目标的功能差距与路线图](.agent/colortxt-feature-gap-analysis.md)
-- [阅读增强功能交接规格](.agent/reader-enhancement-implementation-guide.md)
+- [核心架构](docs/architecture.md)：本地数据、AI 对话、全局笔记与阅读统计的边界。
+- [阅读能力与数据边界](docs/reader-features.md)：当前格式能力、定位、标注、显示投影与内容安全规则。
+- [产品路线图](docs/roadmap.md)：以 ColorTxt、ReadAny 为参照的后续优先级与交付原则。
 
 ## 本地开发
 
