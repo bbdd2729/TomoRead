@@ -41,6 +41,7 @@ import '../data/services/reading_activity_tracker.dart';
 import '../data/services/reading_context_assembler.dart';
 import '../data/services/pomodoro_timer_service.dart';
 import '../data/services/stats_report_service.dart';
+import '../data/services/text_coloring_layout_service.dart';
 import '../data/services/text_decoder_service.dart';
 import '../data/services/text_display_transform_service.dart';
 import '../data/services/mind_map_generation_service.dart';
@@ -105,6 +106,10 @@ final textProjectionRepositoryProvider = Provider<TextProjectionRepository>(
 
 final textDisplayTransformServiceProvider = Provider<TextDisplayTransformService>(
   (ref) => const TextDisplayTransformService(),
+);
+
+final textColoringLayoutServiceProvider = Provider<TextColoringLayoutService>(
+  (ref) => const TextColoringLayoutService(),
 );
 
 final textProjectionRevisionProvider = NotifierProvider<RevisionNotifier, int>(
