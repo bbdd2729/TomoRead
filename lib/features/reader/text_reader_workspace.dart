@@ -21,6 +21,7 @@ import '../../domain/models/reader_commands.dart';
 import '../../domain/models/text_chapter.dart';
 import '../../domain/models/text_coloring.dart';
 import '../../domain/models/text_coloring_layout.dart';
+import '../../domain/models/tts.dart';
 import '../../domain/models/visual_artifact.dart';
 import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
@@ -31,6 +32,8 @@ import 'content_search_dialog.dart';
 import 'text_coloring_controller.dart';
 import 'text_coloring_text.dart';
 import 'text_coloring_widgets.dart';
+import 'tts_controller.dart';
+import 'tts_controls.dart';
 import '../text_import/text_content_controller.dart';
 import '../text_import/text_projection_controller.dart';
 import '../text_import/text_projection_dialog.dart';
@@ -61,6 +64,17 @@ class TextReaderWorkspace extends HookConsumerWidget {
     final documentState = ref.watch(textBookDocumentProvider(bookId));
     final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
     final contentIndexState = ref.watch(contentIndexStateProvider(bookId));
+    final ttsController = useMemoized(
+      () => TtsPlaybackController(
+        engine: ref.read(ttsEngineProvider),
+        queue: ref.read(ttsQueueServiceProvider),
+        store: ref.read(ttsRepositoryProvider),
+        wakeLock: ref.read(ttsWakeLockProvider),
+      ),
+      [bookId],
+    );
+    useListenable(ttsController);
+    final ttsState = ttsController.state;
     final readingOverride = ref.watch(bookReadingOverrideProvider(bookId)).value;
     final settings = readingOverride?.settings ?? readingSettings;
     ref.watch(readingFontReadyProvider(settings.font));
@@ -150,6 +164,8 @@ class TextReaderWorkspace extends HookConsumerWidget {
       preserveState: false,
     );
 
+    useEffect(() => ttsController.dispose, [ttsController]);
+
     useEffect(
       () => () => unawaited(projectionJob.cancel()),
       [projectionJob],
@@ -193,6 +209,35 @@ class TextReaderWorkspace extends HookConsumerWidget {
       contentIndexState.isLoading,
       contentIndexState.value?.status,
       contentIndexState.value?.contentHash,
+    ]);
+
+    useEffect(() {
+      final current = document;
+      final chapter = activeChapter;
+      if (current == null ||
+          chapter == null ||
+          contentIndexState.value?.status != ContentIndexStatus.ready) {
+        return null;
+      }
+      final rawOffset = (chapter.rawStart +
+              (chapter.rawEnd - chapter.rawStart) * currentScrollRatio.value)
+          .round()
+          .clamp(chapter.rawStart, chapter.rawEnd)
+          .toInt();
+      unawaited(
+        ttsController.prepare(
+          bookId: bookId,
+          format: current.book.format,
+          chapterIndex: chapter.ordinal,
+          currentLocator: chapter.locator(start: rawOffset, end: rawOffset),
+        ),
+      );
+      return null;
+    }, [
+      ttsController,
+      document?.profile.contentHash,
+      contentIndexState.value?.status,
+      activeChapter?.id,
     ]);
 
     useEffect(() {
@@ -241,9 +286,18 @@ class TextReaderWorkspace extends HookConsumerWidget {
       if ((lifecycle != null && lifecycle != AppLifecycleState.resumed) ||
           breakActive) {
         autoScrollController.stop(AutoScrollStopReason.lifecycle);
+        if (ttsState.status == TtsPlaybackStatus.playing) {
+          unawaited(ttsController.pause());
+        }
       }
       return null;
-    }, [lifecycle, breakActive, autoScrollController]);
+    }, [
+      lifecycle,
+      breakActive,
+      autoScrollController,
+      ttsState.status,
+      ttsController,
+    ]);
 
     useEffect(() {
       if (settings.layoutMode != ReaderLayoutMode.scroll) {
@@ -312,6 +366,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
       if (current == null || index < 0 || index >= current.chapters.length) {
         return;
       }
+      await ttsController.stop();
       chapterIndex.value = index;
       currentScrollRatio.value = 0;
       selectedContext.value = null;
@@ -873,6 +928,8 @@ class TextReaderWorkspace extends HookConsumerWidget {
       ReaderCommand.decreaseFontSize: () => unawaited(adjustFontSize(-1)),
       ReaderCommand.toggleTextColoring: () => unawaited(toggleTextColoring()),
       ReaderCommand.togglePomodoro: togglePomodoro,
+      ReaderCommand.ttsPlayPause: () => unawaited(ttsController.playPause()),
+      ReaderCommand.ttsStop: () => unawaited(ttsController.stop()),
       ReaderCommand.toggleAutoScroll: toggleAutoScroll,
     };
 
@@ -882,11 +939,20 @@ class TextReaderWorkspace extends HookConsumerWidget {
           : AppBar(
               leading: IconButton(
                 tooltip: '返回书库',
-                onPressed: onExitReader,
+                onPressed: () {
+                  unawaited(ttsController.stop());
+                  onExitReader();
+                },
                 icon: const Icon(Icons.arrow_back),
               ),
               title: Text(title, overflow: TextOverflow.ellipsis),
               actions: [
+          TtsToolbarButton(
+            controller: ttsController,
+            onBeforeOpen: () => autoScrollController.stop(
+              AutoScrollStopReason.dialog,
+            ),
+          ),
           PomodoroToolbarButton(
             bookId: bookId,
             onOpen: () => autoScrollController.stop(
@@ -1021,6 +1087,27 @@ class TextReaderWorkspace extends HookConsumerWidget {
                 fontSize: settings.fontSize,
                 height: settings.lineHeight,
               );
+              TextEmphasisRange? ttsEmphasis;
+              final ttsSegment = ttsState.currentSegment;
+              if ((ttsState.status == TtsPlaybackStatus.playing ||
+                      ttsState.status == TtsPlaybackStatus.paused) &&
+                  ttsSegment != null &&
+                  ttsSegment.chapterIndex == index) {
+                final displayRange = projection.rawToDisplay(
+                  ttsSegment.rawStart - start,
+                  ttsSegment.rawEnd - start,
+                );
+                final visibleRange = layout.displayToVisible(
+                  displayRange.start,
+                  displayRange.end,
+                );
+                if (visibleRange.end > visibleRange.start) {
+                  ttsEmphasis = TextEmphasisRange(
+                    start: visibleRange.start,
+                    end: visibleRange.end,
+                  );
+                }
+              }
               return Column(
                 children: [
                   if (projectionSnapshot.hasError)
@@ -1091,6 +1178,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
                               key: const Key('text-reader-selectable-content'),
                               layout: layout,
                               style: textStyle,
+                              emphasisRange: ttsEmphasis,
                               onSelectionChanged: (selection, _) {
                                 if (!selection.isCollapsed) {
                                   autoScrollController.stop(

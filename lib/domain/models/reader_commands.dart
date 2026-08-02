@@ -304,6 +304,16 @@ List<ReaderShortcutBinding> _defaultBindingsFor(
       control: true,
       shift: true,
     ),
+    ReaderCommand.ttsPlayPause: ReaderShortcutChord(
+      key: 'space',
+      control: true,
+      shift: true,
+    ),
+    ReaderCommand.ttsStop: ReaderShortcutChord(
+      key: 'keyS',
+      control: true,
+      shift: true,
+    ),
     ReaderCommand.toggleAutoScroll: ReaderShortcutChord(
       key: 'keyA',
       control: true,

@@ -222,6 +222,25 @@ class PdfReaderWorkspace extends HookConsumerWidget {
           ref.invalidate(bookmarksForBookProvider(bookId));
         }
 
+        void showPdfTtsUnavailable() {
+          showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('PDF 系统朗读'),
+              content: const Text(
+                '当前 PDF 尚无可验证的全文朗读队列，因此不会提供模拟播放。'
+                '待 PDF 文本层能够稳定映射到原文位置后再启用。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('知道了'),
+                ),
+              ],
+            ),
+          );
+        }
+
         Future<void> openBookmarks() async {
           final bookmark = await showDialog<Bookmark>(
             context: context,
@@ -622,6 +641,12 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(title, overflow: TextOverflow.ellipsis),
+                        ),
+                        IconButton(
+                          key: const Key('pdf-reader-tts-unavailable'),
+                          tooltip: 'PDF 尚无可信全文朗读队列',
+                          onPressed: showPdfTtsUnavailable,
+                          icon: const Icon(Icons.headphones_outlined),
                         ),
                         IconButton(
                           tooltip: isBookmarked ? '移除书签' : '添加书签',

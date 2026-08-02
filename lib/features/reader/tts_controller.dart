@@ -37,6 +37,7 @@ class TtsPlaybackController extends ChangeNotifier {
   }) async {
     final generation = ++_generation;
     await _stopPlayback(setIdle: false);
+    if (_disposed || generation != _generation) return;
     _bookId = bookId;
     _setState(
       _state.copyWith(
@@ -66,6 +67,7 @@ class TtsPlaybackController extends ChangeNotifier {
         await _engine.setRate(settings.rate);
         await _engine.setVolume(settings.volume);
       }
+      if (_disposed || generation != _generation) return;
       _setState(
         TtsPlaybackState(
           status: TtsPlaybackStatus.idle,
@@ -110,16 +112,24 @@ class TtsPlaybackController extends ChangeNotifier {
 
   Future<void> pause() async {
     if (_state.status != TtsPlaybackStatus.playing) return;
-    await _engine.pause();
-    await _setWakeLock(false);
-    _setState(_state.copyWith(status: TtsPlaybackStatus.paused));
+    try {
+      await _engine.pause();
+      await _setWakeLock(false);
+      _setState(_state.copyWith(status: TtsPlaybackStatus.paused));
+    } on Object catch (error) {
+      _fail(error.toString());
+    }
   }
 
   Future<void> resume() async {
     if (_state.status != TtsPlaybackStatus.paused) return;
-    await _setWakeLock(_state.settings.keepAwake);
-    await _engine.resume();
-    _setState(_state.copyWith(status: TtsPlaybackStatus.playing));
+    try {
+      await _setWakeLock(_state.settings.keepAwake);
+      await _engine.resume();
+      _setState(_state.copyWith(status: TtsPlaybackStatus.playing));
+    } on Object catch (error) {
+      _fail(error.toString());
+    }
   }
 
   Future<void> stop() => _stopPlayback(setIdle: true);
@@ -150,15 +160,19 @@ class TtsPlaybackController extends ChangeNotifier {
       rate: settings.rate.clamp(.1, 1).toDouble(),
       volume: settings.volume.clamp(0, 1).toDouble(),
     );
-    if (_state.availability.available) {
-      await _engine.setRate(normalized.rate);
-      await _engine.setVolume(normalized.volume);
+    try {
+      if (_state.availability.available) {
+        await _engine.setRate(normalized.rate);
+        await _engine.setVolume(normalized.volume);
+      }
+      await _store.saveSettings(normalized);
+      if (_state.status == TtsPlaybackStatus.playing) {
+        await _setWakeLock(normalized.keepAwake);
+      }
+      _setState(_state.copyWith(settings: normalized));
+    } on Object catch (error) {
+      _fail(error.toString());
     }
-    await _store.saveSettings(normalized);
-    if (_state.status == TtsPlaybackStatus.playing) {
-      await _setWakeLock(normalized.keepAwake);
-    }
-    _setState(_state.copyWith(settings: normalized));
   }
 
   Future<void> _start(int startIndex) async {
@@ -244,17 +258,27 @@ class TtsPlaybackController extends ChangeNotifier {
   }
 
   Future<void> _stopPlayback({required bool setIdle}) async {
-    await _engine.stop();
-    await _subscription?.cancel();
-    _subscription = null;
-    await _setWakeLock(false);
+    Object? stopError;
+    try {
+      await _engine.stop();
+    } on Object catch (error) {
+      stopError = error;
+    } finally {
+      await _subscription?.cancel();
+      _subscription = null;
+      await _setWakeLock(false);
+    }
     if (setIdle && !_disposed) {
-      _setState(
-        _state.copyWith(
-          status: TtsPlaybackStatus.idle,
-          clearWordRange: true,
-        ),
-      );
+      if (stopError == null) {
+        _setState(
+          _state.copyWith(
+            status: TtsPlaybackStatus.idle,
+            clearWordRange: true,
+          ),
+        );
+      } else {
+        _fail(stopError.toString());
+      }
     }
   }
 
@@ -282,7 +306,17 @@ class TtsPlaybackController extends ChangeNotifier {
   }
 
   void _fail(String message) {
-    unawaited(_setWakeLock(false));
+    final subscription = _subscription;
+    _subscription = null;
+    unawaited(() async {
+      try {
+        await _engine.stop();
+      } on Object {
+        // Preserve the original playback failure for the user.
+      }
+      await subscription?.cancel();
+      await _setWakeLock(false);
+    }());
     _setState(
       _state.copyWith(
         status: TtsPlaybackStatus.failed,

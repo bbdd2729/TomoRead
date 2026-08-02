@@ -25,6 +25,7 @@ import '../../domain/models/reading_position_metrics.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/reader_commands.dart';
 import '../../domain/models/text_coloring.dart';
+import '../../domain/models/tts.dart';
 import '../../domain/models/visual_artifact.dart';
 import '../../shared/widgets/resizable_pane.dart';
 import '../../shared/widgets/book_cover.dart';
@@ -38,6 +39,8 @@ import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
 import 'text_coloring_controller.dart';
 import 'text_coloring_widgets.dart';
+import 'tts_controller.dart';
+import 'tts_controls.dart';
 import '../chat/chat_controller.dart';
 import '../assistant/content_index_controller.dart';
 import '../notes/notes_providers.dart';
@@ -123,6 +126,17 @@ class ReaderWorkspace extends HookConsumerWidget {
     final contentCharacterCount = ref.watch(
       contentCharacterCountProvider(bookId),
     );
+    final ttsController = useMemoized(
+      () => TtsPlaybackController(
+        engine: ref.read(ttsEngineProvider),
+        queue: ref.read(ttsQueueServiceProvider),
+        store: ref.read(ttsRepositoryProvider),
+        wakeLock: ref.read(ttsWakeLockProvider),
+      ),
+      [bookId],
+    );
+    useListenable(ttsController);
+    final ttsState = ttsController.state;
     final sectionProgressState = ref.watch(epubSectionProgressProvider(bookId));
     final annotationsState = ref.watch(annotationsForBookProvider(bookId));
     final appearance =
@@ -194,6 +208,8 @@ class ReaderWorkspace extends HookConsumerWidget {
       ),
     );
 
+    useEffect(() => ttsController.dispose, [ttsController]);
+
     useEffect(() {
       tocPanelWidth.value = appearance.readerTocWidth;
       sidePanelWidth.value = appearance.readerSidePanelWidth;
@@ -229,6 +245,28 @@ class ReaderWorkspace extends HookConsumerWidget {
       contentIndexState.isLoading,
       contentIndexState.value?.status,
       contentIndexState.value?.contentHash,
+    ]);
+
+    useEffect(() {
+      final book = readerBook.value;
+      if (book == null ||
+          contentIndexState.value?.status != ContentIndexStatus.ready) {
+        return null;
+      }
+      unawaited(
+        ttsController.prepare(
+          bookId: bookId,
+          format: book.format,
+          chapterIndex: activeChapterIndex,
+          currentLocator: currentLocator,
+        ),
+      );
+      return null;
+    }, [
+      ttsController,
+      readerBook.value?.fileHash,
+      contentIndexState.value?.status,
+      activeChapterIndex,
     ]);
 
     useEffect(() {
@@ -286,9 +324,17 @@ class ReaderWorkspace extends HookConsumerWidget {
             id: ++navigationSequence.value,
           );
         }
+        if (ttsState.status == TtsPlaybackStatus.playing) {
+          unawaited(ttsController.pause());
+        }
       }
       return null;
-    }, [lifecycleState, pomodoroBreakActive]);
+    }, [
+      lifecycleState,
+      pomodoroBreakActive,
+      ttsState.status,
+      ttsController,
+    ]);
 
     useEffect(() {
       // A new book or reader-mode switch has no valid runtime page position.
@@ -377,6 +423,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
       final target = manifest.value?.spine[index];
       if (target == null) return;
+      await ttsController.stop();
       await flushPendingProgress();
       navigationCommand.value = ReaderNavigationCommand.goToLocation(
         id: ++navigationSequence.value,
@@ -975,6 +1022,8 @@ class ReaderWorkspace extends HookConsumerWidget {
       ReaderCommand.decreaseFontSize: () => unawaited(adjustFontSize(-1)),
       ReaderCommand.toggleTextColoring: () => unawaited(toggleTextColoring()),
       ReaderCommand.togglePomodoro: togglePomodoro,
+      ReaderCommand.ttsPlayPause: () => unawaited(ttsController.playPause()),
+      ReaderCommand.ttsStop: () => unawaited(ttsController.stop()),
       ReaderCommand.toggleAutoScroll: toggleAutoScroll,
     };
 
@@ -1088,6 +1137,11 @@ class ReaderWorkspace extends HookConsumerWidget {
                               annotations: annotations,
                               searchQuery: searchQuery.value,
                               focusedAnnotationId: focusedAnnotationId.value,
+                              ttsSegment:
+                                  ttsState.status == TtsPlaybackStatus.playing ||
+                                      ttsState.status == TtsPlaybackStatus.paused
+                                  ? ttsState.currentSegment
+                                  : null,
                               annotationFocusRevision:
                                   annotationFocusRevision.value,
                               restoreRevision: restoreRevision.value,
@@ -1276,6 +1330,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                   canAutoScroll: settings.layoutMode == ReaderLayoutMode.scroll,
                   onExitReader: () {
                     unawaited(flushPendingProgress());
+                    unawaited(ttsController.stop());
                     onExitReader();
                   },
                   onToggleToc: isMobile
@@ -1292,6 +1347,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                   onOpenAssistant: openReadingAssistant,
                   onOpenVisualization: openVisualization,
                   onToggleAutoScroll: toggleAutoScroll,
+                  ttsController: ttsController,
                   bookId: bookId,
                 ),
               ),
@@ -1368,6 +1424,7 @@ class _ReaderToolbar extends StatelessWidget {
     required this.onOpenAssistant,
     required this.onOpenVisualization,
     required this.onToggleAutoScroll,
+    required this.ttsController,
     required this.bookId,
   });
 
@@ -1390,6 +1447,7 @@ class _ReaderToolbar extends StatelessWidget {
   final VoidCallback onOpenAssistant;
   final VoidCallback onOpenVisualization;
   final VoidCallback onToggleAutoScroll;
+  final TtsPlaybackController ttsController;
   final String bookId;
 
   @override
@@ -1446,6 +1504,10 @@ class _ReaderToolbar extends StatelessWidget {
               ),
             SizedBox(width: mobileReaderControls ? 4 : 12),
             Expanded(child: Text(title, overflow: TextOverflow.ellipsis)),
+            TtsToolbarButton(
+              controller: ttsController,
+              onBeforeOpen: autoScrollActive ? onToggleAutoScroll : null,
+            ),
             IconButton(
               key: const Key('reader-auto-scroll'),
               tooltip: canAutoScroll
@@ -1998,6 +2060,7 @@ class _ReaderArticle extends StatelessWidget {
     required this.annotations,
     required this.searchQuery,
     required this.focusedAnnotationId,
+    required this.ttsSegment,
     required this.annotationFocusRevision,
     required this.onNavigateToHref,
     required this.onScrollPositionChanged,
@@ -2025,6 +2088,7 @@ class _ReaderArticle extends StatelessWidget {
   final List<ReadingAnnotation> annotations;
   final String? searchQuery;
   final String? focusedAnnotationId;
+  final TtsSegment? ttsSegment;
   final int annotationFocusRevision;
   final ValueChanged<String> onNavigateToHref;
   final void Function(String href, double ratio, String? anchor, String? cfi)
@@ -2068,6 +2132,10 @@ class _ReaderArticle extends StatelessWidget {
           annotations: annotations,
           searchQuery: searchQuery,
           focusedAnnotationId: focusedAnnotationId,
+          ttsHighlightHref: ttsSegment?.href,
+          ttsHighlightText: ttsSegment?.text,
+          ttsHighlightStart: ttsSegment?.rawStart,
+          ttsHighlightEnd: ttsSegment?.rawEnd,
           annotationFocusRevision: annotationFocusRevision,
           onNavigateToHref: onNavigateToHref,
           onScrollPositionChanged: onScrollPositionChanged,
