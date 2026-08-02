@@ -1,12 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../domain/models/reading_font.dart';
 import '../database/app_database.dart';
@@ -262,7 +260,7 @@ class _OpenTypeNameReader {
       final originalLength = data.getUint32(offset + 12);
       var table = bytes.sublist(tableOffset, tableOffset + compressedLength);
       if (compressedLength != originalLength) {
-        table = Uint8List.fromList(const ZLibDecoder().convert(table));
+        table = Uint8List.fromList(ZLibDecoder().convert(table));
       }
       return _fromNameTable(table);
     }

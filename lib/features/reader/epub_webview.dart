@@ -997,9 +997,9 @@ a { color: ${_cssColor(colorScheme.primary)}; }
 
   Map<String, Object?> _runtimeSettings(
     BuildContext context,
-    ReadingSettings settings,
-    [String? fontFaceCss],
-  ) {
+    ReadingSettings settings, [
+    String? fontFaceCss,
+  ]) {
     final scheme = Theme.of(context).colorScheme;
     return {
       'flow': settings.layoutMode == ReaderLayoutMode.paginated

@@ -1,4 +1,5 @@
 import '../../domain/models/ai_provider_preset.dart';
+import '../../domain/models/chat_models.dart';
 
 class AiProviderCatalog {
   const AiProviderCatalog();

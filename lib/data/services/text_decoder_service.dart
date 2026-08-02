@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:charset/charset.dart' as charset;
 import 'package:charset_converter/charset_converter.dart';

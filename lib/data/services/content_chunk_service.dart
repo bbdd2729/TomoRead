@@ -181,7 +181,9 @@ List<(int, int)> _splitRanges(String text, int start, int end) {
   final result = <(int, int)>[];
   var cursor = start;
   while (cursor < end) {
-    while (cursor < end && _isWhitespace(text.codeUnitAt(cursor))) cursor++;
+    while (cursor < end && _isWhitespace(text.codeUnitAt(cursor))) {
+      cursor++;
+    }
     if (cursor >= end) break;
     var target = (cursor + ContentChunkService.maxChunkLength)
         .clamp(cursor + 1, end)

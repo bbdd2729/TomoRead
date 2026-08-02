@@ -68,7 +68,7 @@ class VisualArtifactExportService {
     final bytes = await bytesFor(artifact, format);
     final fileName = '${_safeFileName(artifact.title)}.${format.extension}';
     final mobile = Platform.isAndroid || Platform.isIOS;
-    final path = await FilePicker.platform.saveFile(
+    final path = await FilePicker.saveFile(
       dialogTitle: '导出${artifact.kind == VisualArtifactKind.wordCloud ? '词云' : '思维导图'}',
       fileName: fileName,
       type: FileType.custom,
@@ -98,9 +98,13 @@ class VisualArtifactExportService {
           '`${citation.locator}`',
         );
       }
-      for (final child in node.children) append(child, depth + 1);
+      for (final child in node.children) {
+        append(child, depth + 1);
+      }
     }
-    for (final node in payload.nodes) append(node, 0);
+    for (final node in payload.nodes) {
+      append(node, 0);
+    }
     return Uint8List.fromList(utf8.encode(output.toString()));
   }
 
@@ -300,9 +304,13 @@ class VisualArtifactExportService {
     final flat = <(MindMapNode, String?, int)>[];
     void append(MindMapNode node, String? parent, int depth) {
       flat.add((node, parent, depth));
-      for (final child in node.children) append(child, node.id, depth + 1);
+      for (final child in node.children) {
+        append(child, node.id, depth + 1);
+      }
     }
-    for (final node in payload.nodes) append(node, null, 0);
+    for (final node in payload.nodes) {
+      append(node, null, 0);
+    }
     final rowHeight = size.height / (flat.length + 1);
     return [
       for (var index = 0; index < flat.length; index++)

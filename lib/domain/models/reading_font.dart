@@ -9,7 +9,7 @@ class ReadingFontRef {
     this.family,
   });
 
-  const ReadingFontRef.generic(GenericReadingFont font)
+  ReadingFontRef.generic(GenericReadingFont font)
     : this._(kind: ReadingFontKind.generic, value: font.name);
 
   const ReadingFontRef.systemFamily(String family)
@@ -26,13 +26,21 @@ class ReadingFontRef {
         family: family,
       );
 
-  static const system = ReadingFontRef.generic(GenericReadingFont.system);
-  static const serif = ReadingFontRef.generic(GenericReadingFont.serif);
-  static const sansSerif = ReadingFontRef.generic(
-    GenericReadingFont.sansSerif,
+  static const system = ReadingFontRef._(
+    kind: ReadingFontKind.generic,
+    value: 'system',
   );
-  static const monospace = ReadingFontRef.generic(
-    GenericReadingFont.monospace,
+  static const serif = ReadingFontRef._(
+    kind: ReadingFontKind.generic,
+    value: 'serif',
+  );
+  static const sansSerif = ReadingFontRef._(
+    kind: ReadingFontKind.generic,
+    value: 'sansSerif',
+  );
+  static const monospace = ReadingFontRef._(
+    kind: ReadingFontKind.generic,
+    value: 'monospace',
   );
 
   final ReadingFontKind kind;

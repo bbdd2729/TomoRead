@@ -8,7 +8,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/services/ai_provider_catalog.dart';
-import '../../domain/models/ai_provider_preset.dart';
 import '../../domain/models/chat_models.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/library_book.dart';

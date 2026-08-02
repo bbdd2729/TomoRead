@@ -3,7 +3,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/providers.dart';
-import '../../domain/models/content_chunk.dart';
 
 class ContentSearchDialog extends HookConsumerWidget {
   const ContentSearchDialog({

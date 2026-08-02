@@ -33,7 +33,7 @@ class FontCatalogController extends AsyncNotifier<FontCatalogState> {
   }
 
   Future<ImportedFont?> importFromPicker({String? licenseLabel}) async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['ttf', 'otf', 'woff', 'woff2'],
       allowMultiple: false,
