@@ -8,10 +8,14 @@ import 'package:pdfrx/pdfrx.dart';
 
 import '../../domain/models/library_book.dart';
 import '../../domain/models/epub_manifest.dart';
+import '../../domain/models/text_content_profile.dart';
 import '../repositories/book_repository.dart';
+import '../repositories/text_content_repository.dart';
+import 'chapter_parser_service.dart';
 import 'epub_parser.dart';
+import 'text_decoder_service.dart';
 
-enum BookImportStatus { imported, duplicate, failed }
+enum BookImportStatus { imported, duplicate, needsEncoding, failed }
 
 class BookImportResult {
   const BookImportResult._({
@@ -19,6 +23,9 @@ class BookImportResult {
     required this.status,
     this.book,
     this.error,
+    this.textPreview,
+    this.detectedEncoding,
+    this.encodingCandidates = const [],
   });
 
   factory BookImportResult.imported(String sourcePath, LibraryBook book) =>
@@ -42,28 +49,52 @@ class BookImportResult {
         error: error,
       );
 
+  factory BookImportResult.needsEncoding(
+    String sourcePath,
+    TextDecodeResult result,
+  ) => BookImportResult._(
+    sourcePath: sourcePath,
+    status: BookImportStatus.needsEncoding,
+    textPreview: result.preview,
+    detectedEncoding: result.encoding,
+    encodingCandidates: result.candidates,
+  );
+
   final String sourcePath;
   final BookImportStatus status;
   final LibraryBook? book;
   final String? error;
+  final String? textPreview;
+  final String? detectedEncoding;
+  final List<String> encodingCandidates;
 }
 
 class BookImportService {
   BookImportService({
     required this.repository,
     EpubParser? epubParser,
+    TextDecoderService? textDecoder,
+    ChapterParserService? chapterParser,
+    TextContentRepository? textContentRepository,
     this.libraryRootProvider,
-  }) : parser = epubParser ?? const EpubParser();
+  }) : parser = epubParser ?? const EpubParser(),
+       textDecoder = textDecoder ?? const TextDecoderService(),
+       chapterParser = chapterParser ?? const ChapterParserService(),
+       textContentRepository =
+           textContentRepository ?? TextContentRepository(repository.database);
 
   final BookRepository repository;
   final EpubParser parser;
+  final TextDecoderService textDecoder;
+  final ChapterParserService chapterParser;
+  final TextContentRepository textContentRepository;
   final Future<Directory> Function()? libraryRootProvider;
 
   Future<List<BookImportResult>> pickAndImportBooks() async {
     final selection = await FilePicker.pickFiles(
       allowMultiple: true,
       type: FileType.custom,
-      allowedExtensions: const ['epub', 'pdf'],
+      allowedExtensions: const ['epub', 'pdf', 'txt', 'md', 'markdown'],
     );
     if (selection == null) return const [];
     return Future.wait(
@@ -80,8 +111,9 @@ class BookImportService {
     return switch (path.extension(sourcePath).toLowerCase()) {
       '.epub' => importEpubFile(sourcePath),
       '.pdf' => importPdfFile(sourcePath),
+      '.txt' || '.md' || '.markdown' => importTextFile(sourcePath),
       _ => Future.value(
-        BookImportResult.failed(sourcePath, '仅支持导入 EPUB 或 PDF 文件'),
+        BookImportResult.failed(sourcePath, '仅支持导入 EPUB、PDF、TXT 或 Markdown 文件'),
       ),
     };
   }
@@ -202,6 +234,98 @@ class BookImportService {
     } catch (error) {
       if (await temporaryFile.exists()) await temporaryFile.delete();
       return BookImportResult.failed(sourcePath, 'PDF 导入失败：$error');
+    }
+  }
+
+  Future<BookImportResult> importTextFile(
+    String sourcePath, {
+    String? encodingOverride,
+  }) async {
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      return BookImportResult.failed(sourcePath, '找不到选择的文件');
+    }
+    final extension = path.extension(sourcePath).toLowerCase();
+    if (!const {'.txt', '.md', '.markdown'}.contains(extension)) {
+      return BookImportResult.failed(sourcePath, '仅支持导入 TXT 或 Markdown 文件');
+    }
+    final directories = await _libraryDirectories();
+    final temporaryFile = File(
+      path.join(
+        directories.imports.path,
+        '${DateTime.now().microsecondsSinceEpoch}$extension',
+      ),
+    );
+    File? targetFile;
+    LibraryBook? savedBook;
+    try {
+      final hash = await _copyAndHash(source, temporaryFile);
+      final duplicate = await repository.findByHash(hash);
+      if (duplicate != null) {
+        await temporaryFile.delete();
+        return BookImportResult.duplicate(sourcePath, duplicate);
+      }
+      final decoded = await textDecoder.decodeFile(
+        temporaryFile.path,
+        encodingOverride: encodingOverride,
+      );
+      if (decoded.requiresUserConfirmation && encodingOverride == null) {
+        await temporaryFile.delete();
+        return BookImportResult.needsEncoding(sourcePath, decoded);
+      }
+      final format = extension == '.txt' ? 'txt' : 'markdown';
+      final targetExtension = format == 'txt' ? '.txt' : '.md';
+      final managedFile = File(
+        path.join(directories.books.path, '$hash$targetExtension'),
+      );
+      targetFile = managedFile;
+      if (await managedFile.exists()) {
+        await temporaryFile.delete();
+      } else {
+        await temporaryFile.rename(managedFile.path);
+      }
+      final parsed = await chapterParser.parse(
+        bookId: hash,
+        text: decoded.text,
+        contentHash: decoded.contentHash,
+        markdown: format == 'markdown',
+      );
+      final book = LibraryBook(
+        id: hash,
+        fileHash: hash,
+        title: path.basenameWithoutExtension(sourcePath),
+        author: '',
+        filePath: managedFile.path,
+        progress: 0,
+        importedAt: DateTime.now(),
+        format: format,
+        chapterCount: parsed.chapters.length,
+        direction: ReadingDirection.ltr,
+      );
+      await repository.saveImportedStandaloneBook(book);
+      savedBook = book;
+      await textContentRepository.saveProfileAndChapters(
+        TextContentProfile(
+          bookId: book.id,
+          encoding: decoded.encoding,
+          encodingConfidence: decoded.confidence,
+          parserVersion: ChapterParserService.parserVersion,
+          contentHash: decoded.contentHash,
+          updatedAt: DateTime.now(),
+        ),
+        parsed.chapters,
+      );
+      return BookImportResult.imported(sourcePath, book);
+    } on TextDecodeException catch (error) {
+      if (await temporaryFile.exists()) await temporaryFile.delete();
+      return BookImportResult.failed(sourcePath, error.message);
+    } on Object catch (error) {
+      if (await temporaryFile.exists()) await temporaryFile.delete();
+      if (savedBook != null) await repository.deleteBook(savedBook.id);
+      if (targetFile != null && await targetFile.exists()) {
+        await targetFile.delete();
+      }
+      return BookImportResult.failed(sourcePath, '文本导入失败：$error');
     }
   }
 

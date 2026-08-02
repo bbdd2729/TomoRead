@@ -13,6 +13,7 @@ import '../library/library_home_page.dart';
 import '../notes/notes_page.dart';
 import '../reader/reader_workspace.dart';
 import '../reader/pdf_reader_workspace.dart';
+import '../reader/text_reader_workspace.dart';
 import '../settings/settings_page.dart';
 import '../skills/skills_page.dart';
 import '../statistics/statistics_page.dart';
@@ -521,6 +522,14 @@ class _WorkspaceContent extends StatelessWidget {
                 key: ValueKey(readerBookId),
                 bookId: readerBookId ?? '',
                 title: readerTitle,
+                onExitReader: onExitReader,
+              )
+            : readerFormat == 'txt' || readerFormat == 'markdown'
+            ? TextReaderWorkspace(
+                key: ValueKey(readerBookId),
+                bookId: readerBookId ?? '',
+                title: readerTitle,
+                readingSettings: readingSettings,
                 onExitReader: onExitReader,
               )
             : ReaderWorkspace(

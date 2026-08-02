@@ -11,6 +11,8 @@ class BookRepository {
 
   final AppDatabase _database;
 
+  AppDatabase get database => _database;
+
   Future<List<LibraryBook>> listBooks() async {
     final database = await _database.database;
     final rows = await database.query('books', orderBy: 'created_at DESC');
@@ -226,6 +228,9 @@ class BookRepository {
       'updated_at': now,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
+
+  Future<void> saveImportedStandaloneBook(LibraryBook book) =>
+      saveImportedPdfBook(book);
 
   Future<EpubManifest?> loadManifest(String bookId) async {
     final database = await _database.database;

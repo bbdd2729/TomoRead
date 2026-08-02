@@ -42,6 +42,35 @@ void main() {
     expect(duplicate.status, BookImportStatus.duplicate);
     expect(await repository.listBooks(), hasLength(1));
   });
+
+  test('imports UTF-8 text and persists the detected chapter catalog', () async {
+    final source = File('${root.path}${Platform.pathSeparator}novel.txt');
+    await source.writeAsString('''序章
+开场
+第一章 起点
+正文
+第二章 继续
+结尾''');
+    final service = BookImportService(
+      repository: repository,
+      libraryRootProvider: () async => root,
+    );
+
+    final imported = await service.importTextFile(source.path);
+
+    expect(imported.status, BookImportStatus.imported);
+    expect(imported.book?.format, 'txt');
+    expect(imported.book!.chapterCount, 3);
+    expect(await File(imported.book!.filePath).exists(), isTrue);
+    final sql = await database.database;
+    final profile = await sql.query('text_content_profiles');
+    final chapters = await sql.query(
+      'text_chapters',
+      orderBy: 'ordinal ASC',
+    );
+    expect(profile.single['encoding'], 'utf-8');
+    expect(chapters.map((row) => row['title']), ['序章', '第一章 起点', '第二章 继续']);
+  });
 }
 
 List<int> _minimalEpub() {

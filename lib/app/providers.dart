@@ -13,6 +13,7 @@ import '../data/repositories/pomodoro_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/repositories/skill_repository.dart';
 import '../data/repositories/text_coloring_repository.dart';
+import '../data/repositories/text_content_repository.dart';
 import '../data/services/ai_gateway.dart';
 import '../data/services/ai_provider_catalog.dart';
 import '../data/services/ai_provider_probe_service.dart';
@@ -20,6 +21,7 @@ import '../data/services/ai_secret_store.dart';
 import '../data/services/ai_tool_registry.dart';
 import '../data/services/book_import_service.dart';
 import '../data/services/book_storage_service.dart';
+import '../data/services/chapter_parser_service.dart';
 import '../data/services/epub_content_service.dart';
 import '../data/services/epub_extraction_service.dart';
 import '../data/services/epub_reader_session_service.dart';
@@ -27,11 +29,14 @@ import '../data/services/epub_section_progress_service.dart';
 import '../data/services/reading_activity_tracker.dart';
 import '../data/services/pomodoro_timer_service.dart';
 import '../data/services/stats_report_service.dart';
+import '../data/services/text_decoder_service.dart';
 import '../domain/models/bookmark.dart';
 import '../domain/models/epub_manifest.dart';
 import '../domain/models/epub_section_progress.dart';
 import '../domain/models/library_book.dart';
 import '../domain/models/reader_chapter.dart';
+import '../domain/models/text_chapter.dart';
+import '../domain/models/text_content_profile.dart';
 import '../domain/models/reading_settings.dart';
 import '../domain/models/reading_annotation.dart';
 import '../features/chat/ai_agent_runner.dart';
@@ -69,6 +74,10 @@ final skillRepositoryProvider = Provider<SkillRepository>(
 
 final textColoringRepositoryProvider = Provider<TextColoringRepository>(
   (ref) => TextColoringRepository(ref.watch(appDatabaseProvider)),
+);
+
+final textContentRepositoryProvider = Provider<TextContentRepository>(
+  (ref) => TextContentRepository(ref.watch(appDatabaseProvider)),
 );
 
 final readingSessionRepositoryProvider = Provider<ReadingSessionRepository>(
@@ -156,7 +165,20 @@ final statsReportServiceProvider = Provider<StatsReportService>(
 );
 
 final bookImportServiceProvider = Provider<BookImportService>(
-  (ref) => BookImportService(repository: ref.watch(bookRepositoryProvider)),
+  (ref) => BookImportService(
+    repository: ref.watch(bookRepositoryProvider),
+    textDecoder: ref.watch(textDecoderServiceProvider),
+    chapterParser: ref.watch(chapterParserServiceProvider),
+    textContentRepository: ref.watch(textContentRepositoryProvider),
+  ),
+);
+
+final textDecoderServiceProvider = Provider<TextDecoderService>(
+  (ref) => const TextDecoderService(),
+);
+
+final chapterParserServiceProvider = Provider<ChapterParserService>(
+  (ref) => const ChapterParserService(),
 );
 
 final bookStorageServiceProvider = Provider<BookStorageService>(
@@ -245,6 +267,19 @@ class LibraryBooksNotifier extends AsyncNotifier<List<LibraryBook>> {
     }
     return results;
   }
+
+  Future<BookImportResult> importTextWithEncoding(
+    String sourcePath,
+    String encoding,
+  ) async {
+    final result = await ref
+        .read(bookImportServiceProvider)
+        .importTextFile(sourcePath, encodingOverride: encoding);
+    if (result.status == BookImportStatus.imported) {
+      state = AsyncData(await ref.read(bookRepositoryProvider).listBooks());
+    }
+    return result;
+  }
 }
 
 final bookReadingOverrideProvider = FutureProvider.autoDispose
@@ -269,6 +304,42 @@ final readerBookProvider = FutureProvider.autoDispose
     .family<LibraryBook?, String>(
       (ref, bookId) => ref.watch(bookRepositoryProvider).findById(bookId),
     );
+
+final textContentProfileProvider = FutureProvider.autoDispose
+    .family<TextContentProfile?, String>(
+      (ref, bookId) =>
+          ref.watch(textContentRepositoryProvider).loadProfile(bookId),
+    );
+
+final textChaptersProvider = FutureProvider.autoDispose
+    .family<List<TextChapter>, String>(
+      (ref, bookId) =>
+          ref.watch(textContentRepositoryProvider).listChapters(bookId),
+    );
+
+final textBookDocumentProvider = FutureProvider.autoDispose
+    .family<TextBookDocument, String>((ref, bookId) async {
+      final results = await Future.wait<Object?>([
+        ref.watch(readerBookProvider(bookId).future),
+        ref.watch(textContentProfileProvider(bookId).future),
+        ref.watch(textChaptersProvider(bookId).future),
+      ]);
+      final book = results[0] as LibraryBook?;
+      final profile = results[1] as TextContentProfile?;
+      final chapters = results[2]! as List<TextChapter>;
+      if (book == null || profile == null) {
+        throw const TextDecodeException('文本书籍或编码配置不存在。');
+      }
+      final decoded = await ref
+          .read(textDecoderServiceProvider)
+          .decodeFile(book.filePath, encodingOverride: profile.encoding);
+      return TextBookDocument(
+        book: book,
+        profile: profile,
+        chapters: chapters,
+        rawText: decoded.text,
+      );
+    });
 
 final readerManifestProvider = FutureProvider.autoDispose
     .family<EpubManifest?, String>(

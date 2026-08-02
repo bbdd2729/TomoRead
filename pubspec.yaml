@@ -46,6 +46,8 @@ dependencies:
   sqflite: ^2.4.3
   archive: ^4.0.7
   crypto: ^3.0.7
+  charset: ^2.0.1
+  charset_converter: ^2.5.1
   file_picker: ^11.0.2
   flutter_markdown_plus: ^1.0.12
   flutter_secure_storage: ^10.3.1

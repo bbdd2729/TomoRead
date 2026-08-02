@@ -1,4 +1,4 @@
-enum ReaderFormat { epub, pdf }
+enum ReaderFormat { epub, pdf, text }
 
 enum ReadingInteraction { pageTurn, scroll, navigation, seek, selection }
 

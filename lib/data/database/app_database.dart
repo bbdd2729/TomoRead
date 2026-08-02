@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 15,
+        version: 17,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -79,6 +79,12 @@ class AppDatabase {
           }
           if (oldVersion < 15) {
             await _upgradeToVersion15(database);
+          }
+          if (oldVersion < 16) {
+            await _upgradeToVersion16(database);
+          }
+          if (oldVersion < 17) {
+            await _upgradeToVersion17(database);
           }
         },
       ),
@@ -167,6 +173,7 @@ class AppDatabase {
     await _createReadingSessionsTable(database);
     await _createTextColoringTables(database);
     await _createPomodoroSessionsTable(database);
+    await _createTextContentTables(database);
   }
 
   Future<void> _upgradeToVersion2(Database database) async {
@@ -343,6 +350,44 @@ class AppDatabase {
         definition: column.$2,
       );
     }
+  }
+
+  Future<void> _upgradeToVersion16(Database database) =>
+      _createTextContentTables(database);
+
+  Future<void> _upgradeToVersion17(Database database) async {
+    final tables = await database.rawQuery('''
+      SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name = 'reading_sessions'
+    ''');
+    if (tables.isEmpty) {
+      await _createReadingSessionsTable(database);
+      return;
+    }
+    await database.execute(
+      'ALTER TABLE reading_sessions RENAME TO reading_sessions_v16',
+    );
+    for (final index in const [
+      'reading_sessions_time',
+      'reading_sessions_book_time',
+      'reading_sessions_group_time',
+    ]) {
+      await database.execute('DROP INDEX IF EXISTS $index');
+    }
+    await _createReadingSessionsTable(database);
+    await database.execute('''
+      INSERT INTO reading_sessions (
+        id, book_id, session_group_id, format, started_at, ended_at,
+        active_millis, timezone_offset_minutes, progress_start, progress_end,
+        locator_start, locator_end, interaction_count, created_at, updated_at
+      )
+      SELECT
+        id, book_id, session_group_id, format, started_at, ended_at,
+        active_millis, timezone_offset_minutes, progress_start, progress_end,
+        locator_start, locator_end, interaction_count, created_at, updated_at
+      FROM reading_sessions_v16
+    ''');
+    await database.execute('DROP TABLE reading_sessions_v16');
   }
 
   Future<void> _createBooksIndexes(Database database) async {
@@ -566,7 +611,7 @@ class AppDatabase {
         id TEXT PRIMARY KEY,
         book_id TEXT NOT NULL,
         session_group_id TEXT NOT NULL,
-        format TEXT NOT NULL CHECK(format IN ('epub', 'pdf')),
+        format TEXT NOT NULL CHECK(format IN ('epub', 'pdf', 'text')),
         started_at INTEGER NOT NULL,
         ended_at INTEGER,
         active_millis INTEGER NOT NULL DEFAULT 0,
@@ -655,6 +700,39 @@ class AppDatabase {
     await database.execute('''
       CREATE INDEX IF NOT EXISTS pomodoro_sessions_book_started
       ON pomodoro_sessions(book_id, started_at DESC)
+    ''');
+  }
+
+  Future<void> _createTextContentTables(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS text_content_profiles (
+        book_id TEXT PRIMARY KEY,
+        encoding TEXT NOT NULL,
+        encoding_confidence REAL,
+        parser_version INTEGER NOT NULL,
+        content_hash TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS text_chapters (
+        id TEXT PRIMARY KEY,
+        book_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        raw_start INTEGER NOT NULL,
+        raw_end INTEGER NOT NULL,
+        source_rule_id TEXT,
+        content_hash TEXT NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE,
+        UNIQUE(book_id, ordinal),
+        CHECK(raw_start >= 0 AND raw_end >= raw_start)
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS text_chapters_book_range
+      ON text_chapters(book_id, raw_start, raw_end)
     ''');
   }
 
