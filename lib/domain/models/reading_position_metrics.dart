@@ -97,7 +97,7 @@ class ReadingTextPositionIndex {
     }
     return ReadingTextPositionIndex._(
       textLength: text.length,
-      _lineStarts: starts,
+      lineStarts: starts,
     );
   }
 
