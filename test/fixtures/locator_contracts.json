@@ -1,0 +1,10 @@
+[
+  {"format":"epub","locator":"epub:v3|2|0.50000|heading|epubcfi%28%2F6%2F4%21%2F4%2F2%29","valid":true},
+  {"format":"epub","locator":"chapter-3:start","valid":true},
+  {"format":"epub","locator":"epub:v3|bad|0.25|%ZZ|","valid":false},
+  {"format":"pdf","locator":"page:12","valid":true},
+  {"format":"pdf","locator":"pdf:v1|12|0.120000,0.310000,0.740000,0.040000|quote|before|after","valid":true},
+  {"format":"pdf","locator":"pdf:v1|0||||","valid":false},
+  {"format":"text","locator":"text:v1|4|120|180","valid":true},
+  {"format":"text","locator":"text:v1|4|180|120","valid":false}
+]

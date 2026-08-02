@@ -11,6 +11,7 @@ import '../../data/services/content_chunk_service.dart';
 import '../../domain/models/bookmark.dart';
 import '../../domain/models/content_chunk.dart';
 import '../../domain/models/chat_models.dart';
+import '../../domain/models/document_locator.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/epub_section_progress.dart';
@@ -243,10 +244,25 @@ class ReaderWorkspace extends HookConsumerWidget {
     useEffect(() {
       final savedIndex = readerBook.value?.chapterIndex;
       if (savedIndex != null) {
-        final location = EpubLocation.fromLocator(
-          readerBook.value?.locator,
+        final savedLocator = readerBook.value?.locator;
+        final documentLocator = EpubDocumentLocator.tryParse(
+          savedLocator,
           fallbackChapterIndex: savedIndex,
         );
+        final location = documentLocator?.location ??
+            EpubLocation(chapterIndex: savedIndex, scrollRatio: 0);
+        if (savedLocator != null &&
+            savedLocator.isNotEmpty &&
+            documentLocator == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('无法恢复到上次的精确位置，已打开保存的章节。'),
+              ),
+            );
+          });
+        }
         chapterIndex.value = location.chapterIndex;
         scrollRatio.value = location.scrollRatio;
         activeAnchor.value = location.anchor;

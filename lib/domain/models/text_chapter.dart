@@ -1,3 +1,5 @@
+import 'document_locator.dart';
+
 class TextChapter {
   const TextChapter({
     required this.id,
@@ -19,8 +21,11 @@ class TextChapter {
   final String? sourceRuleId;
   final String contentHash;
 
-  String locator({int? start, int? end}) =>
-      'text:v1|$ordinal|${start ?? rawStart}|${end ?? rawEnd}';
+  String locator({int? start, int? end}) => TextDocumentLocator(
+    chapterIndex: ordinal,
+    rawStart: start ?? rawStart,
+    rawEnd: end ?? rawEnd,
+  ).serialize();
 }
 
 class ChapterRulePreview {

@@ -7,6 +7,7 @@ import 'package:pdfrx/pdfrx.dart';
 
 import '../../app/providers.dart';
 import '../../domain/models/bookmark.dart';
+import '../../domain/models/document_locator.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_position_metrics.dart';
 import 'pdf_bookmarks_dialog.dart';
@@ -88,9 +89,14 @@ class PdfReaderWorkspace extends HookConsumerWidget {
       data: (book) {
         if (book == null) return const Center(child: Text('找不到 PDF 书籍。'));
         final pageCount = book.chapterCount;
+        final savedPage = PdfDocumentLocator.tryParse(
+          book.locator,
+        )?.pageNumber;
         final initialPage = pageCount == 0
             ? 1
-            : (book.chapterIndex + 1).clamp(1, pageCount).toInt();
+            : (savedPage ?? book.chapterIndex + 1)
+                  .clamp(1, pageCount)
+                  .toInt();
         final displayedPage = currentPage.value == 1 && book.chapterIndex > 0
             ? initialPage
             : currentPage.value;
@@ -101,9 +107,13 @@ class PdfReaderWorkspace extends HookConsumerWidget {
           displayedProgress,
         );
         final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
-        final currentLocator = 'page:$displayedPage';
+        final currentLocator = PdfDocumentLocator(
+          pageNumber: displayedPage,
+        ).serialize();
         final isBookmarked = bookmarkItems.any(
-          (bookmark) => bookmark.locator == currentLocator,
+          (bookmark) =>
+              PdfDocumentLocator.tryParse(bookmark.locator)?.pageNumber ==
+              displayedPage,
         );
 
         Future<void> savePage(int? pageNumber) async {
@@ -112,17 +122,20 @@ class PdfReaderWorkspace extends HookConsumerWidget {
           final progress = pageCount <= 1
               ? 0.0
               : (pageNumber - 1) / (pageCount - 1);
+          final locator = PdfDocumentLocator(
+            pageNumber: pageNumber,
+          ).serialize();
           await ref
               .read(bookRepositoryProvider)
               .updateReadingPosition(
                 bookId: bookId,
                 chapterIndex: pageNumber - 1,
                 progress: progress,
-                locator: 'page:$pageNumber',
+                locator: locator,
               );
           ref.invalidate(libraryBooksProvider);
           activityTracker.recordInteraction(
-            ReaderPosition(progress: progress, locator: 'page:$pageNumber'),
+            ReaderPosition(progress: progress, locator: locator),
             ReadingInteraction.pageTurn,
           );
         }
@@ -130,7 +143,13 @@ class PdfReaderWorkspace extends HookConsumerWidget {
         Future<void> toggleBookmark() async {
           final repository = ref.read(bookmarkRepositoryProvider);
           final existing = bookmarkItems
-              .where((bookmark) => bookmark.locator == currentLocator)
+              .where(
+                (bookmark) =>
+                    PdfDocumentLocator.tryParse(
+                      bookmark.locator,
+                    )?.pageNumber ==
+                    displayedPage,
+              )
               .firstOrNull;
           if (existing != null) {
             await repository.remove(existing.id);
@@ -151,7 +170,7 @@ class PdfReaderWorkspace extends HookConsumerWidget {
           );
           final page = bookmark == null
               ? null
-              : int.tryParse(bookmark.locator.replaceFirst('page:', ''));
+              : PdfDocumentLocator.tryParse(bookmark.locator)?.pageNumber;
           if (page != null && viewerController.isReady) {
             await viewerController.goToPage(pageNumber: page);
           }

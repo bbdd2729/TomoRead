@@ -10,6 +10,7 @@ import '../../app/providers.dart';
 import '../../data/services/text_decoder_service.dart';
 import '../../data/services/content_chunk_service.dart';
 import '../../domain/models/display_projection.dart';
+import '../../domain/models/document_locator.dart';
 import '../../domain/models/content_chunk.dart';
 import '../../domain/models/chat_models.dart';
 import '../../domain/models/reading_context.dart';
@@ -138,15 +139,12 @@ class TextReaderWorkspace extends HookConsumerWidget {
     useEffect(() {
       final book = document?.book;
       if (book != null && document!.chapters.isNotEmpty) {
-        chapterIndex.value = book.chapterIndex.clamp(
+        final savedLocator = TextDocumentLocator.tryParse(book.locator);
+        chapterIndex.value = (savedLocator?.chapterIndex ?? book.chapterIndex).clamp(
           0,
           document.chapters.length - 1,
         ).toInt();
-        final locatorParts = book.locator?.split('|');
-        final rawOffset = locatorParts?.length == 4 &&
-                locatorParts?.first == 'text:v1'
-            ? int.tryParse(locatorParts![2])
-            : null;
+        final rawOffset = savedLocator?.rawStart;
         if (rawOffset != null) {
           final chapter = document.chapters[chapterIndex.value];
           final ratio = chapter.rawEnd <= chapter.rawStart
@@ -575,11 +573,9 @@ class TextReaderWorkspace extends HookConsumerWidget {
       chapterIndex.value = nextIndex;
       selectedContext.value = null;
       final chapter = current.chapters[nextIndex];
-      final locatorParts = citation.locator.split('|');
-      final rawOffset = locatorParts.length == 4 &&
-              locatorParts.first == 'text:v1'
-          ? int.tryParse(locatorParts[2])
-          : null;
+      final rawOffset = TextDocumentLocator.tryParse(
+        citation.locator,
+      )?.rawStart;
       final targetOffset = rawOffset ?? chapter.rawStart;
       final progress = current.rawText.isEmpty
           ? 0.0
