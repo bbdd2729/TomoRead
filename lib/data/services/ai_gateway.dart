@@ -92,9 +92,12 @@ class OpenAiCompatibleGateway implements AiGateway {
       }
       final request = http.Request('POST', _endpoint(profile.baseUrl))
         ..headers.addAll({
-          'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream, application/json',
+          if (profile.authType == AiProviderAuthType.bearer)
+            'Authorization': 'Bearer $apiKey',
+          if (profile.authType == AiProviderAuthType.apiKey)
+            'api-key': apiKey,
         })
         ..body = jsonEncode(body);
       final response = await client

@@ -98,7 +98,7 @@ void main() {
     addTearDown(appDatabase.close);
     final database = await appDatabase.database;
 
-    expect(await database.getVersion(), 14);
+    expect(await database.getVersion(), 15);
     final parts = await database.query('chat_message_parts');
     expect(parts.single['type'], 'text');
     expect(parts.single['text_content'], 'Legacy answer');
@@ -127,5 +127,18 @@ void main() {
       WHERE type = 'table' AND name = 'pomodoro_sessions'
     ''');
     expect(pomodoroTables, hasLength(1));
+    final providerV15Columns = await database.rawQuery(
+      'PRAGMA table_info(ai_provider_profiles)',
+    );
+    expect(
+      providerV15Columns.map((column) => column['name']),
+      containsAll([
+        'preset_id',
+        'auth_type',
+        'capabilities_json',
+        'custom_headers_secret_id',
+        'is_enabled',
+      ]),
+    );
   });
 }

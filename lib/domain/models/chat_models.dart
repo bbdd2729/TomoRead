@@ -6,6 +6,8 @@ enum ChatMessageStatus { complete, streaming, failed, cancelled }
 
 enum AiProviderProtocol { openAiCompatible }
 
+enum AiProviderAuthType { bearer, apiKey, none }
+
 enum ChatPartStatus { pending, running, completed, error }
 
 enum ChatNoticeLevel { info, warning, error }
@@ -57,6 +59,11 @@ class AiProviderProfile {
     required this.createdAt,
     required this.updatedAt,
     this.protocol = AiProviderProtocol.openAiCompatible,
+    this.presetId,
+    this.authType = AiProviderAuthType.bearer,
+    this.capabilitiesJson = '{}',
+    this.customHeadersSecretId,
+    this.isEnabled = true,
     this.toolsEnabled = false,
     this.reasoningEnabled = true,
   });
@@ -64,14 +71,19 @@ class AiProviderProfile {
   final String id;
   final String name;
   final AiProviderProtocol protocol;
+  final String? presetId;
+  final AiProviderAuthType authType;
   final String baseUrl;
   final String modelId;
   final String secretKeyId;
   final double temperature;
   final int maxOutputTokens;
   final bool isActive;
+  final bool isEnabled;
   final bool toolsEnabled;
   final bool reasoningEnabled;
+  final String capabilitiesJson;
+  final String? customHeadersSecretId;
   final DateTime createdAt;
   final DateTime updatedAt;
 }

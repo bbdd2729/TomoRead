@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/services/ai_gateway.dart';
+import '../../domain/models/ai_provider_preset.dart';
 import '../../domain/models/chat_models.dart';
 import 'ai_agent_runner.dart';
 import 'message_part_accumulator.dart';
@@ -234,6 +235,10 @@ class ChatController extends AsyncNotifier<ChatPageState> {
   }
 
   Future<void> configureProvider({
+    String? profileId,
+    required String presetId,
+    required AiProviderAuthType authType,
+    required bool supportsModelList,
     required String name,
     required String baseUrl,
     required String modelId,
@@ -247,19 +252,25 @@ class ChatController extends AsyncNotifier<ChatPageState> {
       throw const FormatException('名称、Base URL 和模型不能为空。');
     }
     final current = state.value;
-    final existing = current?.profile;
+    final existing = profileId == null
+        ? null
+        : await ref.read(aiProviderRepositoryProvider).findById(profileId);
     final secretId =
         existing?.secretKeyId ??
         'secret-${DateTime.now().microsecondsSinceEpoch}';
     if (apiKey.trim().isNotEmpty) {
       await ref.read(aiSecretStoreProvider).write(secretId, apiKey.trim());
-    } else if (existing == null) {
+    } else if (existing == null && authType != AiProviderAuthType.none) {
       throw const AiGatewayException('missing_key', '首次配置必须填写 API Key。');
     }
     final profile = await ref
         .read(aiProviderRepositoryProvider)
         .save(
           id: existing?.id,
+          presetId: presetId,
+          authType: authType,
+          capabilitiesJson:
+              '{"modelList":$supportsModelList,"tools":$toolsEnabled,"reasoning":$reasoningEnabled}',
           name: name,
           baseUrl: baseUrl,
           modelId: modelId,
@@ -272,6 +283,45 @@ class ChatController extends AsyncNotifier<ChatPageState> {
     if (current != null) {
       state = AsyncData(current.copyWith(profile: profile, clearError: true));
     }
+  }
+
+  Future<void> activateProvider(String id) async {
+    final repository = ref.read(aiProviderRepositoryProvider);
+    await repository.activate(id);
+    final profile = await repository.findById(id);
+    final current = state.value;
+    if (current != null && profile != null) {
+      state = AsyncData(current.copyWith(profile: profile, clearError: true));
+    }
+  }
+
+  Future<void> setProviderEnabled(String id, bool enabled) async {
+    final repository = ref.read(aiProviderRepositoryProvider);
+    final existing = await repository.findById(id);
+    await repository.setEnabled(id, enabled);
+    final current = state.value;
+    if (current == null) return;
+    if (!enabled && current.profile?.id == id) {
+      state = AsyncData(current.copyWith(clearProfile: true, clearError: true));
+    } else if (enabled && existing != null) {
+      state = AsyncData(current.copyWith(clearError: true));
+    }
+  }
+
+  Future<AiProviderProbeResult> probeProvider(String id) async {
+    final profile = await ref.read(aiProviderRepositoryProvider).findById(id);
+    if (profile == null) {
+      throw const AiGatewayException('profile_missing', '模型配置不存在。');
+    }
+    final apiKey = profile.authType == AiProviderAuthType.none
+        ? ''
+        : await ref.read(aiSecretStoreProvider).read(profile.secretKeyId) ?? '';
+    if (profile.authType != AiProviderAuthType.none && apiKey.isEmpty) {
+      throw const AiGatewayException('missing_key', '该配置尚未保存 API Key。');
+    }
+    return ref
+        .read(aiProviderProbeServiceProvider)
+        .probe(profile, apiKey: apiKey);
   }
 
   void attach(PendingChatDraft draft) {
@@ -343,10 +393,11 @@ class ChatController extends AsyncNotifier<ChatPageState> {
       state = AsyncData(current.copyWith(errorMessage: '请先配置模型服务。'));
       return;
     }
-    final apiKey = await ref
-        .read(aiSecretStoreProvider)
-        .read(profile.secretKeyId);
-    if (apiKey == null || apiKey.isEmpty) {
+    final apiKey = profile.authType == AiProviderAuthType.none
+        ? ''
+        : await ref.read(aiSecretStoreProvider).read(profile.secretKeyId);
+    if (profile.authType != AiProviderAuthType.none &&
+        (apiKey == null || apiKey.isEmpty)) {
       state = AsyncData(
         current.copyWith(errorMessage: '找不到已保存的 API Key，请重新配置。'),
       );
@@ -478,7 +529,7 @@ class ChatController extends AsyncNotifier<ChatPageState> {
           .run(
             runId: runId,
             profile: profile,
-            apiKey: apiKey,
+        apiKey: apiKey ?? '',
             history: history,
             systemPrompt: _systemPrompt(thread, attachment),
             thread: thread,

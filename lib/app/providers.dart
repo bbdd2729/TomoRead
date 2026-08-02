@@ -14,6 +14,8 @@ import '../data/repositories/settings_repository.dart';
 import '../data/repositories/skill_repository.dart';
 import '../data/repositories/text_coloring_repository.dart';
 import '../data/services/ai_gateway.dart';
+import '../data/services/ai_provider_catalog.dart';
+import '../data/services/ai_provider_probe_service.dart';
 import '../data/services/ai_secret_store.dart';
 import '../data/services/ai_tool_registry.dart';
 import '../data/services/book_import_service.dart';
@@ -85,6 +87,14 @@ final aiSecretStoreProvider = Provider<AiSecretStore>((ref) => AiSecretStore());
 
 final aiGatewayProvider = Provider<AiGateway>(
   (ref) => const OpenAiCompatibleGateway(),
+);
+
+final aiProviderCatalogProvider = Provider<AiProviderCatalog>(
+  (ref) => const AiProviderCatalog(),
+);
+
+final aiProviderProbeServiceProvider = Provider<AiProviderProbeService>(
+  (ref) => const AiProviderProbeService(),
 );
 
 final aiToolRegistryProvider = Provider<AiToolRegistry>(

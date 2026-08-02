@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 14,
+        version: 15,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -76,6 +76,9 @@ class AppDatabase {
           }
           if (oldVersion < 14) {
             await _upgradeToVersion14(database);
+          }
+          if (oldVersion < 15) {
+            await _upgradeToVersion15(database);
           }
         },
       ),
@@ -325,6 +328,23 @@ class AppDatabase {
   Future<void> _upgradeToVersion14(Database database) =>
       _createPomodoroSessionsTable(database);
 
+  Future<void> _upgradeToVersion15(Database database) async {
+    for (final column in const [
+      ('preset_id', 'TEXT'),
+      ('auth_type', "TEXT NOT NULL DEFAULT 'bearer'"),
+      ('capabilities_json', "TEXT NOT NULL DEFAULT '{}'"),
+      ('custom_headers_secret_id', 'TEXT'),
+      ('is_enabled', 'INTEGER NOT NULL DEFAULT 1'),
+    ]) {
+      await _addColumnIfMissing(
+        database,
+        table: 'ai_provider_profiles',
+        column: column.$1,
+        definition: column.$2,
+      );
+    }
+  }
+
   Future<void> _createBooksIndexes(Database database) async {
     await database.execute(
       'CREATE INDEX IF NOT EXISTS books_category ON books(category)',
@@ -385,14 +405,19 @@ class AppDatabase {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         protocol TEXT NOT NULL,
+        preset_id TEXT,
+        auth_type TEXT NOT NULL DEFAULT 'bearer',
         base_url TEXT NOT NULL,
         model_id TEXT NOT NULL,
         secret_key_id TEXT NOT NULL,
         temperature REAL NOT NULL DEFAULT 0.3,
         max_output_tokens INTEGER NOT NULL DEFAULT 2048,
         is_active INTEGER NOT NULL DEFAULT 0,
+        is_enabled INTEGER NOT NULL DEFAULT 1,
         enable_tools INTEGER NOT NULL DEFAULT 0,
         enable_reasoning INTEGER NOT NULL DEFAULT 1,
+        capabilities_json TEXT NOT NULL DEFAULT '{}',
+        custom_headers_secret_id TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
