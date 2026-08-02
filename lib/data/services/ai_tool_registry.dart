@@ -4,8 +4,8 @@ import '../../domain/models/ai_agent_models.dart';
 import '../../domain/models/chat_models.dart';
 import '../repositories/annotation_repository.dart';
 import '../repositories/book_repository.dart';
+import '../repositories/content_chunk_repository.dart';
 import '../repositories/skill_repository.dart';
-import 'epub_content_service.dart';
 
 class AiToolContext {
   const AiToolContext({this.bookId, this.attachment});
@@ -79,13 +79,13 @@ class AiToolRegistry {
     this._books,
     this._annotations,
     this._skills,
-    this._epubContent,
+    this._chunks,
   );
 
   final BookRepository _books;
   final AnnotationRepository _annotations;
   final SkillRepository _skills;
-  final EpubContentService _epubContent;
+  final ContentChunkRepository _chunks;
 
   Future<AiToolSet> createToolSet(AiToolContext context) async {
     final tools = <String, AiRegisteredTool>{};
@@ -240,7 +240,7 @@ class AiToolRegistry {
       declaration: const AiToolDeclaration(
         name: 'search_book_text',
         displayName: '搜索书中原文',
-        description: '在当前 EPUB 全文中搜索关键词，返回少量带章节位置的原文片段。',
+        description: '在当前书籍的本地纯文本索引中搜索关键词，返回少量带章节位置的原文片段。',
         kind: AiToolKind.read,
         inputSchema: {
           'type': 'object',
@@ -260,28 +260,34 @@ class AiToolRegistry {
         final requested = arguments['limit'];
         final limit = requested is num ? requested.toInt().clamp(1, 8) : 5;
         final book = await _books.findById(bookId);
-        final manifest = await _books.loadManifest(bookId);
-        if (book == null || manifest == null || book.format != 'epub') {
+        if (book == null) {
           throw const AiToolException(
             'search_unavailable',
-            '当前书籍不支持 EPUB 原文搜索。',
+            '当前书籍不存在。',
           );
         }
-        final results = await _epubContent.search(
-          book: book,
-          manifest: manifest,
+        final state = await _chunks.loadState(bookId);
+        if (state?.status.name != 'ready') {
+          throw const AiToolException(
+            'search_index_unavailable',
+            '当前书籍的本地正文索引尚未就绪，请稍后重建索引。',
+          );
+        }
+        final results = await _chunks.search(
+          bookId: bookId,
           query: query,
-          maxResults: limit,
+          maxChapterIndex: book.chapterIndex,
+          limit: limit,
         );
         final citations = results
             .map(
               (result) => AiCitationSource(
                 bookId: bookId,
-                href: result.href,
-                locator: 'ratio:${result.chapterRatio.toStringAsFixed(6)}',
+                href: result.chunk.href,
+                locator: result.chunk.locatorStart,
                 quote: result.excerpt,
-                chapterIndex: result.chapterIndex,
-                chapterTitle: result.chapterTitle,
+                chapterIndex: result.chunk.chapterIndex,
+                chapterTitle: result.chunk.chapterTitle,
               ),
             )
             .toList();
@@ -291,8 +297,8 @@ class AiToolRegistry {
             'matches': results
                 .map(
                   (result) => {
-                    'chapterIndex': result.chapterIndex,
-                    'chapterTitle': result.chapterTitle,
+                    'chapterIndex': result.chunk.chapterIndex,
+                    'chapterTitle': result.chunk.chapterTitle,
                     'excerpt': result.excerpt,
                   },
                 )

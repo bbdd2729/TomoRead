@@ -8,16 +8,23 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/services/text_decoder_service.dart';
+import '../../data/services/content_chunk_service.dart';
 import '../../domain/models/pomodoro.dart';
 import '../../domain/models/display_projection.dart';
+import '../../domain/models/content_chunk.dart';
+import '../../domain/models/chat_models.dart';
+import '../../domain/models/reading_context.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_chapter.dart';
 import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
+import 'content_search_dialog.dart';
 import '../text_import/text_content_controller.dart';
 import '../text_import/text_projection_controller.dart';
 import '../text_import/text_projection_dialog.dart';
+import '../assistant/content_index_controller.dart';
+import '../chat/chat_controller.dart';
 
 enum _TextChapterAction { rename, split, mergeNext }
 
@@ -28,20 +35,25 @@ class TextReaderWorkspace extends HookConsumerWidget {
     required this.title,
     required this.readingSettings,
     required this.onExitReader,
+    required this.onOpenChat,
   });
 
   final String bookId;
   final String title;
   final ReadingSettings readingSettings;
   final VoidCallback onExitReader;
+  final VoidCallback onOpenChat;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final documentState = ref.watch(textBookDocumentProvider(bookId));
+    final contentIndexState = ref.watch(contentIndexStateProvider(bookId));
     final readingOverride = ref.watch(bookReadingOverrideProvider(bookId)).value;
     final settings = readingOverride?.settings ?? readingSettings;
     ref.watch(readingFontReadyProvider(settings.font));
     final chapterIndex = useState(0);
+    final scrollController = useScrollController();
+    final selectedContext = useState<ReadingContextSelection?>(null);
     final projectionConfigState = ref.watch(
       textProjectionConfigProvider(bookId),
     );
@@ -88,12 +100,61 @@ class TextReaderWorkspace extends HookConsumerWidget {
     );
 
     useEffect(() {
+      final current = document;
+      final index = contentIndexState.value;
+      if (current == null || contentIndexState.isLoading) return null;
+      final needsRebuild =
+          index == null ||
+          index.status == ContentIndexStatus.failed ||
+          index.contentHash != current.profile.contentHash ||
+          index.indexVersion != ContentChunkService.indexVersion;
+      if (needsRebuild && index?.status != ContentIndexStatus.indexing) {
+        unawaited(
+          ref.read(contentIndexControllerProvider).rebuildText(
+            bookId: bookId,
+            rawText: current.rawText,
+            contentHash: current.profile.contentHash,
+            chapters: current.chapters,
+          ),
+        );
+      }
+      return null;
+    }, [
+      bookId,
+      document?.profile.contentHash,
+      contentIndexState.isLoading,
+      contentIndexState.value?.status,
+      contentIndexState.value?.contentHash,
+    ]);
+
+    useEffect(() {
       final book = document?.book;
       if (book != null && document!.chapters.isNotEmpty) {
         chapterIndex.value = book.chapterIndex.clamp(
           0,
           document.chapters.length - 1,
         ).toInt();
+        final locatorParts = book.locator?.split('|');
+        final rawOffset = locatorParts?.length == 4 &&
+                locatorParts?.first == 'text:v1'
+            ? int.tryParse(locatorParts![2])
+            : null;
+        if (rawOffset != null) {
+          final chapter = document.chapters[chapterIndex.value];
+          final ratio = chapter.rawEnd <= chapter.rawStart
+              ? 0.0
+              : ((rawOffset - chapter.rawStart) /
+                        (chapter.rawEnd - chapter.rawStart))
+                    .clamp(0, 1)
+                    .toDouble();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (scrollController.hasClients) {
+              scrollController.jumpTo(
+                scrollController.position.maxScrollExtent * ratio,
+              );
+            }
+          });
+        }
         tracker.open(
           ReaderIdentity(bookId: bookId, format: ReaderFormat.text),
           ReaderPosition(progress: book.progress, locator: book.locator),
@@ -104,7 +165,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
         );
       }
       return book == null ? null : () => unawaited(tracker.close());
-    }, [bookId, document?.book.id]);
+    }, [bookId, document?.book.id, document?.book.locator]);
 
     useEffect(() {
       tracker.setForeground(
@@ -120,6 +181,8 @@ class TextReaderWorkspace extends HookConsumerWidget {
         return;
       }
       chapterIndex.value = index;
+      selectedContext.value = null;
+      if (scrollController.hasClients) scrollController.jumpTo(0);
       final chapter = current.chapters[index];
       final progress = current.chapters.length <= 1
           ? 1.0
@@ -324,6 +387,118 @@ class TextReaderWorkspace extends HookConsumerWidget {
       }
     }
 
+    Future<void> searchIndexedContent() async {
+      final chunk = await showDialog<ContentChunk>(
+        context: context,
+        builder: (context) => ContentSearchDialog(
+          bookId: bookId,
+          maxChapterIndex: null,
+        ),
+      );
+      final current = document;
+      if (chunk == null || current == null || !context.mounted) return;
+      chapterIndex.value = chunk.chapterIndex
+          .clamp(0, current.chapters.length - 1)
+          .toInt();
+      selectedContext.value = null;
+      await ref.read(bookRepositoryProvider).updateReadingPosition(
+        bookId: bookId,
+        chapterIndex: chapterIndex.value,
+        progress: current.chapters.length <= 1
+            ? 0
+            : chapterIndex.value / (current.chapters.length - 1),
+        locator: chunk.locatorStart,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final chapter = current.chapters[chapterIndex.value];
+        final ratio = chapter.rawEnd <= chapter.rawStart
+            ? 0.0
+            : ((chunk.rawStart - chapter.rawStart) /
+                      (chapter.rawEnd - chapter.rawStart))
+                  .clamp(0, 1)
+                  .toDouble();
+        if (scrollController.hasClients) {
+          scrollController.jumpTo(
+            scrollController.position.maxScrollExtent * ratio,
+          );
+        }
+      });
+    }
+
+    Future<void> openReadingAssistant() async {
+      final action = await showDialog<ReadingAssistantAction>(
+        context: context,
+        builder: (dialogContext) => SimpleDialog(
+          title: const Text('阅读助手'),
+          children: [
+            for (final action in ReadingAssistantAction.values)
+              ListTile(
+                enabled:
+                    action != ReadingAssistantAction.explainSelection ||
+                    selectedContext.value != null,
+                leading: Icon(switch (action) {
+                  ReadingAssistantAction.explainSelection => Icons.lightbulb_outline,
+                  ReadingAssistantAction.summarizeChapter => Icons.summarize_outlined,
+                  ReadingAssistantAction.generateQuestions => Icons.quiz_outlined,
+                  ReadingAssistantAction.extractPeopleAndTerms => Icons.people_outline,
+                  ReadingAssistantAction.buildTimeline => Icons.timeline,
+                }),
+                title: Text(action.label),
+                onTap:
+                    action == ReadingAssistantAction.explainSelection &&
+                        selectedContext.value == null
+                    ? null
+                    : () => Navigator.pop(dialogContext, action),
+              ),
+          ],
+        ),
+      );
+      if (action == null || !context.mounted) return;
+      final bundle = await ref.read(readingContextAssemblerProvider).assemble(
+        bookId: bookId,
+        currentChapterIndex: chapterIndex.value,
+        selection: action == ReadingAssistantAction.explainSelection
+            ? selectedContext.value
+            : null,
+        includeCurrentChapter:
+            action != ReadingAssistantAction.explainSelection,
+        allowFutureChapters: false,
+      );
+      if (bundle.segments.isEmpty || !context.mounted) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('当前章节索引尚未就绪，请稍后重试。')),
+          );
+        }
+        return;
+      }
+      final first = bundle.segments.first;
+      final quote = bundle.segments
+          .map(
+            (segment) =>
+                '[${segment.chapterTitle} · ${segment.locator}]\n${segment.text}',
+          )
+          .join('\n\n');
+      ref.read(pendingChatDraftProvider.notifier).set(
+        PendingChatDraft(
+          attachment: ChatContextAttachment(
+            bookId: bookId,
+            bookTitle: title,
+            href: first.href,
+            locator: first.locator,
+            chapterIndex: first.chapterIndex,
+            chapterTitle: first.chapterTitle,
+            quote: quote,
+          ),
+          prompt:
+              '${action.prompt}\n\n仅使用当前进度及之前的内容，避免剧透。'
+              '请使用书内搜索工具核对书内事实并附上可点击引用。'
+              '\n上下文校验：${bundle.contextHash}',
+        ),
+      );
+      onOpenChat();
+    }
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -347,6 +522,11 @@ class TextReaderWorkspace extends HookConsumerWidget {
             icon: const Icon(Icons.text_snippet_outlined),
           ),
           IconButton(
+            tooltip: '搜索本地正文',
+            onPressed: searchIndexedContent,
+            icon: const Icon(Icons.search),
+          ),
+          IconButton(
             tooltip: '编辑章节',
             onPressed: document == null ? null : editCurrentChapter,
             icon: const Icon(Icons.edit_note),
@@ -358,6 +538,11 @@ class TextReaderWorkspace extends HookConsumerWidget {
               builder: (context) => TextProjectionDialog(bookId: bookId),
             ),
             icon: const Icon(Icons.translate),
+          ),
+          IconButton(
+            tooltip: '阅读助手',
+            onPressed: openReadingAssistant,
+            icon: const Icon(Icons.auto_awesome_outlined),
           ),
           IconButton(
             tooltip: '复制当前章节原文',
@@ -412,6 +597,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
                     ),
                   Expanded(
                     child: SingleChildScrollView(
+                      controller: scrollController,
                       key: ValueKey(chapter.id),
                       padding: EdgeInsets.symmetric(
                         horizontal: settings.pageMargin,
@@ -431,7 +617,41 @@ class TextReaderWorkspace extends HookConsumerWidget {
                                     ),
                                   ),
                                 )
-                              : SelectableText(content, style: textStyle),
+                              : SelectableText(
+                                  content,
+                                  style: textStyle,
+                                  onSelectionChanged: (selection, _) {
+                                    if (selection.isCollapsed ||
+                                        projection == null) {
+                                      selectedContext.value = null;
+                                      return;
+                                    }
+                                    final range = projection.displayToRaw(
+                                      selection.start,
+                                      selection.end,
+                                    );
+                                    if (!range.isExact) {
+                                      selectedContext.value = null;
+                                      return;
+                                    }
+                                    final rawStart = start + range.start;
+                                    final rawEnd = start + range.end;
+                                    selectedContext.value =
+                                        ReadingContextSelection(
+                                          text: value.rawText.substring(
+                                            rawStart,
+                                            rawEnd,
+                                          ),
+                                          href: 'text:${chapter.id}',
+                                          locator: chapter.locator(
+                                            start: rawStart,
+                                            end: rawEnd,
+                                          ),
+                                          chapterIndex: index,
+                                          chapterTitle: chapter.title,
+                                        );
+                                  },
+                                ),
                         ),
                       ),
                     ),

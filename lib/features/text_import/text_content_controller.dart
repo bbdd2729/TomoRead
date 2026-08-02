@@ -45,6 +45,16 @@ class TextContentController {
           ),
           parsed.chapters,
         );
+    try {
+      await ref.read(contentChunkServiceProvider).rebuildText(
+        bookId: bookId,
+        rawText: decoded.text,
+        contentHash: decoded.contentHash,
+        chapters: parsed.chapters,
+      );
+    } on Object {
+      // The index state exposes the failure without invalidating decoded text.
+    }
     ref.invalidate(textContentProfileProvider(bookId));
     ref.invalidate(textChaptersProvider(bookId));
     ref.invalidate(textBookDocumentProvider(bookId));
@@ -154,6 +164,7 @@ class TextContentController {
     String bookId,
     List<TextChapter> chapters,
   ) async {
+    final document = await ref.read(textBookDocumentProvider(bookId).future);
     final normalized = <TextChapter>[
       for (var index = 0; index < chapters.length; index++)
         _copyChapter(chapters[index], ordinal: index),
@@ -161,6 +172,16 @@ class TextContentController {
     await ref
         .read(textContentRepositoryProvider)
         .replaceChapters(bookId, normalized);
+    try {
+      await ref.read(contentChunkServiceProvider).rebuildText(
+        bookId: bookId,
+        rawText: document.rawText,
+        contentHash: document.profile.contentHash,
+        chapters: normalized,
+      );
+    } on Object {
+      // Chapter edits succeed even if the derived lexical index needs retry.
+    }
     ref.invalidate(textChaptersProvider(bookId));
     ref.invalidate(textBookDocumentProvider(bookId));
     ref.invalidate(readerBookProvider(bookId));

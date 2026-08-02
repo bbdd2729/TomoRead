@@ -531,6 +531,7 @@ class _WorkspaceContent extends StatelessWidget {
                 title: readerTitle,
                 readingSettings: readingSettings,
                 onExitReader: onExitReader,
+                onOpenChat: onOpenChat,
               )
             : ReaderWorkspace(
                 bookId: readerBookId ?? 'demo-reading-art',

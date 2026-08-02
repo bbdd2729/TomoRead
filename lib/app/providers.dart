@@ -8,6 +8,7 @@ import '../data/repositories/annotation_repository.dart';
 import '../data/repositories/ai_provider_repository.dart';
 import '../data/repositories/book_repository.dart';
 import '../data/repositories/chat_repository.dart';
+import '../data/repositories/content_chunk_repository.dart';
 import '../data/repositories/font_repository.dart';
 import '../data/repositories/reading_session_repository.dart';
 import '../data/repositories/pomodoro_repository.dart';
@@ -24,17 +25,20 @@ import '../data/services/ai_tool_registry.dart';
 import '../data/services/book_import_service.dart';
 import '../data/services/book_storage_service.dart';
 import '../data/services/chapter_parser_service.dart';
+import '../data/services/content_chunk_service.dart';
 import '../data/services/epub_content_service.dart';
 import '../data/services/epub_extraction_service.dart';
 import '../data/services/epub_reader_session_service.dart';
 import '../data/services/epub_section_progress_service.dart';
 import '../data/services/font_catalog_service.dart';
 import '../data/services/reading_activity_tracker.dart';
+import '../data/services/reading_context_assembler.dart';
 import '../data/services/pomodoro_timer_service.dart';
 import '../data/services/stats_report_service.dart';
 import '../data/services/text_decoder_service.dart';
 import '../data/services/text_display_transform_service.dart';
 import '../domain/models/bookmark.dart';
+import '../domain/models/content_chunk.dart';
 import '../domain/models/epub_manifest.dart';
 import '../domain/models/epub_section_progress.dart';
 import '../domain/models/library_book.dart';
@@ -97,6 +101,45 @@ final textProjectionRevisionProvider = NotifierProvider<RevisionNotifier, int>(
   RevisionNotifier.new,
 );
 
+final contentChunkRepositoryProvider = Provider<ContentChunkRepository>(
+  (ref) => ContentChunkRepository(ref.watch(appDatabaseProvider)),
+);
+
+final contentChunkServiceProvider = Provider<ContentChunkService>(
+  (ref) => ContentChunkService(
+    repository: ref.watch(contentChunkRepositoryProvider),
+    epubContent: ref.watch(epubContentServiceProvider),
+  ),
+);
+
+final contentIndexRevisionProvider = NotifierProvider<RevisionNotifier, int>(
+  RevisionNotifier.new,
+);
+
+final contentIndexStateProvider = FutureProvider.autoDispose
+    .family<ContentIndexState?, String>((ref, bookId) {
+      ref.watch(contentIndexRevisionProvider);
+      return ref.watch(contentChunkRepositoryProvider).loadState(bookId);
+    });
+
+typedef ContentSearchRequest = ({
+  String bookId,
+  String query,
+  int? maxChapterIndex,
+  int limit,
+});
+
+final contentSearchProvider = FutureProvider.autoDispose
+    .family<List<ContentSearchResult>, ContentSearchRequest>((ref, request) {
+      ref.watch(contentIndexRevisionProvider);
+      return ref.watch(contentChunkRepositoryProvider).search(
+        bookId: request.bookId,
+        query: request.query,
+        maxChapterIndex: request.maxChapterIndex,
+        limit: request.limit,
+      );
+    });
+
 final fontRepositoryProvider = Provider<FontRepository>(
   (ref) => FontRepository(ref.watch(appDatabaseProvider)),
 );
@@ -146,7 +189,14 @@ final aiToolRegistryProvider = Provider<AiToolRegistry>(
     ref.watch(bookRepositoryProvider),
     ref.watch(annotationRepositoryProvider),
     ref.watch(skillRepositoryProvider),
-    ref.watch(epubContentServiceProvider),
+    ref.watch(contentChunkRepositoryProvider),
+  ),
+);
+
+final readingContextAssemblerProvider = Provider<ReadingContextAssembler>(
+  (ref) => ReadingContextAssembler(
+    chunks: ref.watch(contentChunkRepositoryProvider),
+    annotations: ref.watch(annotationRepositoryProvider),
   ),
 );
 
@@ -205,6 +255,7 @@ final bookImportServiceProvider = Provider<BookImportService>(
     textDecoder: ref.watch(textDecoderServiceProvider),
     chapterParser: ref.watch(chapterParserServiceProvider),
     textContentRepository: ref.watch(textContentRepositoryProvider),
+    contentChunkService: ref.watch(contentChunkServiceProvider),
   ),
 );
 

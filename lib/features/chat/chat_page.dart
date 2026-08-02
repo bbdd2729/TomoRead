@@ -106,6 +106,22 @@ class ChatPage extends HookConsumerWidget {
         return;
       }
       final index = citation.chapterIndex ?? book.chapterIndex;
+      if (book.format == 'txt' || book.format == 'markdown') {
+        await ref
+            .read(bookRepositoryProvider)
+            .updateReadingPosition(
+              bookId: book.id,
+              chapterIndex: index,
+              progress: book.chapterCount <= 1
+                  ? 0
+                  : index / (book.chapterCount - 1),
+              locator: citation.locator,
+            );
+        ref.invalidate(readerBookProvider(book.id));
+        ref.invalidate(libraryBooksProvider);
+        if (context.mounted) onOpenReader!(book);
+        return;
+      }
       final cfi = citation.locator.startsWith('cfi:')
           ? citation.locator.substring(4)
           : null;

@@ -10,8 +10,11 @@ import '../../domain/models/library_book.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/text_content_profile.dart';
 import '../repositories/book_repository.dart';
+import '../repositories/content_chunk_repository.dart';
 import '../repositories/text_content_repository.dart';
 import 'chapter_parser_service.dart';
+import 'content_chunk_service.dart';
+import 'epub_content_service.dart';
 import 'epub_parser.dart';
 import 'text_decoder_service.dart';
 
@@ -76,18 +79,26 @@ class BookImportService {
     TextDecoderService? textDecoder,
     ChapterParserService? chapterParser,
     TextContentRepository? textContentRepository,
+    ContentChunkService? contentChunkService,
     this.libraryRootProvider,
   }) : parser = epubParser ?? const EpubParser(),
        textDecoder = textDecoder ?? const TextDecoderService(),
        chapterParser = chapterParser ?? const ChapterParserService(),
        textContentRepository =
-           textContentRepository ?? TextContentRepository(repository.database);
+           textContentRepository ?? TextContentRepository(repository.database),
+       contentChunkService =
+           contentChunkService ??
+           ContentChunkService(
+             repository: ContentChunkRepository(repository.database),
+             epubContent: const EpubContentService(),
+           );
 
   final BookRepository repository;
   final EpubParser parser;
   final TextDecoderService textDecoder;
   final ChapterParserService chapterParser;
   final TextContentRepository textContentRepository;
+  final ContentChunkService contentChunkService;
   final Future<Directory> Function()? libraryRootProvider;
 
   Future<List<BookImportResult>> pickAndImportBooks() async {
@@ -175,6 +186,14 @@ class BookImportService {
       await repository.saveImportedBook(
         ImportedBook(book: book, manifest: parsed.manifest),
       );
+      try {
+        await contentChunkService.rebuildEpub(
+          book: book,
+          manifest: parsed.manifest,
+        );
+      } on Object {
+        // The independently rebuildable index records its own failure state.
+      }
       return BookImportResult.imported(sourcePath, book);
     } on EpubParseException catch (error) {
       if (await temporaryFile.exists()) await temporaryFile.delete();
@@ -315,6 +334,16 @@ class BookImportService {
         ),
         parsed.chapters,
       );
+      try {
+        await contentChunkService.rebuildText(
+          bookId: book.id,
+          rawText: decoded.text,
+          contentHash: decoded.contentHash,
+          chapters: parsed.chapters,
+        );
+      } on Object {
+        // Reading remains available while the failed index can be rebuilt.
+      }
       return BookImportResult.imported(sourcePath, book);
     } on TextDecodeException catch (error) {
       if (await temporaryFile.exists()) await temporaryFile.delete();

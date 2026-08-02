@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 19,
+        version: 20,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -91,6 +91,9 @@ class AppDatabase {
           }
           if (oldVersion < 19) {
             await _upgradeToVersion19(database);
+          }
+          if (oldVersion < 20) {
+            await _upgradeToVersion20(database);
           }
         },
       ),
@@ -182,6 +185,7 @@ class AppDatabase {
     await _createTextContentTables(database);
     await _createImportedFontsTable(database);
     await _createTextProjectionTables(database);
+    await _createContentChunkTables(database);
   }
 
   Future<void> _upgradeToVersion2(Database database) async {
@@ -403,6 +407,56 @@ class AppDatabase {
 
   Future<void> _upgradeToVersion19(Database database) =>
       _createTextProjectionTables(database);
+
+  Future<void> _upgradeToVersion20(Database database) =>
+      _createContentChunkTables(database);
+
+  Future<void> _createContentChunkTables(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS content_chunks (
+        id TEXT PRIMARY KEY,
+        book_id TEXT NOT NULL,
+        chapter_id TEXT NOT NULL,
+        chapter_index INTEGER NOT NULL,
+        chapter_title TEXT NOT NULL,
+        href TEXT NOT NULL,
+        locator_start TEXT NOT NULL,
+        locator_end TEXT NOT NULL,
+        raw_start INTEGER NOT NULL,
+        raw_end INTEGER NOT NULL,
+        ordinal INTEGER NOT NULL,
+        text_content TEXT NOT NULL,
+        text_hash TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        parser_version INTEGER NOT NULL,
+        index_version INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE,
+        UNIQUE(book_id, ordinal),
+        CHECK(raw_start >= 0 AND raw_end >= raw_start)
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS content_chunks_book_chapter
+      ON content_chunks(book_id, chapter_index, ordinal)
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS content_chunks_book_hash
+      ON content_chunks(book_id, content_hash)
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS content_index_states (
+        book_id TEXT PRIMARY KEY,
+        content_hash TEXT NOT NULL,
+        parser_version INTEGER NOT NULL,
+        index_version INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending', 'indexing', 'ready', 'failed')),
+        progress REAL NOT NULL DEFAULT 0,
+        error TEXT,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
+      )
+    ''');
+  }
 
   Future<void> _createTextProjectionTables(Database database) async {
     await database.execute('''

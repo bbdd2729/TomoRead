@@ -7,7 +7,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/appearance.dart';
 import '../../app/providers.dart';
+import '../../data/services/content_chunk_service.dart';
 import '../../domain/models/bookmark.dart';
+import '../../domain/models/content_chunk.dart';
 import '../../domain/models/chat_models.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
@@ -18,6 +20,7 @@ import '../../domain/models/reader_chapter.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_annotation.dart';
+import '../../domain/models/reading_context.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_coloring.dart';
 import '../../shared/widgets/resizable_pane.dart';
@@ -31,10 +34,11 @@ import 'pomodoro_widgets.dart';
 import 'text_coloring_controller.dart';
 import 'text_coloring_widgets.dart';
 import '../chat/chat_controller.dart';
+import '../assistant/content_index_controller.dart';
 import '../notes/notes_providers.dart';
 import '../settings/font_catalog_controller.dart';
 
-enum _MobileReaderToolbarAction { search, settings, pomodoro, focus }
+enum _MobileReaderToolbarAction { search, assistant, settings, pomodoro, focus }
 
 enum _SelectionContextAction {
   yellow,
@@ -115,6 +119,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
     final readerBook = ref.watch(readerBookProvider(bookId));
     final manifest = ref.watch(readerManifestProvider(bookId));
+    final contentIndexState = ref.watch(contentIndexStateProvider(bookId));
     final sectionProgressState = ref.watch(epubSectionProgressProvider(bookId));
     final annotationsState = ref.watch(annotationsForBookProvider(bookId));
     final appearance =
@@ -182,6 +187,37 @@ class ReaderWorkspace extends HookConsumerWidget {
       sidePanelWidth.value = appearance.readerSidePanelWidth;
       return null;
     }, [appearance.readerTocWidth, appearance.readerSidePanelWidth]);
+
+    useEffect(() {
+      final book = readerBook.value;
+      final bookManifest = manifest.value;
+      final index = contentIndexState.value;
+      if (book == null ||
+          bookManifest == null ||
+          contentIndexState.isLoading) {
+        return null;
+      }
+      final needsRebuild =
+          index == null ||
+          index.status == ContentIndexStatus.failed ||
+          index.contentHash != book.fileHash ||
+          index.indexVersion != ContentChunkService.indexVersion;
+      if (needsRebuild && index?.status != ContentIndexStatus.indexing) {
+        unawaited(
+          ref
+              .read(contentIndexControllerProvider)
+              .rebuildEpub(book: book, manifest: bookManifest),
+        );
+      }
+      return null;
+    }, [
+      bookId,
+      readerBook.value?.fileHash,
+      manifest.value?.chapterCount,
+      contentIndexState.isLoading,
+      contentIndexState.value?.status,
+      contentIndexState.value?.contentHash,
+    ]);
 
     useEffect(() {
       final savedIndex = readerBook.value?.chapterIndex;
@@ -414,6 +450,71 @@ class ReaderWorkspace extends HookConsumerWidget {
               prompt: prompt,
             ),
           );
+      onOpenChat();
+    }
+
+    Future<void> openReadingAssistant() async {
+      final actions = ReadingAssistantAction.values
+          .where((action) => action != ReadingAssistantAction.explainSelection)
+          .toList();
+      final action = await showDialog<ReadingAssistantAction>(
+        context: context,
+        builder: (dialogContext) => SimpleDialog(
+          title: const Text('阅读助手'),
+          children: [
+            for (final action in actions)
+              ListTile(
+                leading: Icon(switch (action) {
+                  ReadingAssistantAction.explainSelection => Icons.lightbulb_outline,
+                  ReadingAssistantAction.summarizeChapter => Icons.summarize_outlined,
+                  ReadingAssistantAction.generateQuestions => Icons.quiz_outlined,
+                  ReadingAssistantAction.extractPeopleAndTerms => Icons.people_outline,
+                  ReadingAssistantAction.buildTimeline => Icons.timeline,
+                }),
+                title: Text(action.label),
+                onTap: () => Navigator.pop(dialogContext, action),
+              ),
+          ],
+        ),
+      );
+      if (action == null || !context.mounted) return;
+      final bundle = await ref.read(readingContextAssemblerProvider).assemble(
+        bookId: bookId,
+        currentChapterIndex: activeChapterIndex,
+        includeCurrentChapter: true,
+        allowFutureChapters: false,
+      );
+      if (bundle.segments.isEmpty || !context.mounted) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('当前章节索引尚未就绪，请稍后重试。')),
+          );
+        }
+        return;
+      }
+      final first = bundle.segments.first;
+      ref.read(pendingChatDraftProvider.notifier).set(
+        PendingChatDraft(
+          attachment: ChatContextAttachment(
+            bookId: bookId,
+            bookTitle: readerBook.value?.title ?? title,
+            href: first.href,
+            locator: first.locator,
+            chapterIndex: first.chapterIndex,
+            chapterTitle: first.chapterTitle,
+            quote: bundle.segments
+                .map(
+                  (segment) =>
+                      '[${segment.chapterTitle} · ${segment.locator}]\n${segment.text}',
+                )
+                .join('\n\n'),
+          ),
+          prompt:
+              '${action.prompt}\n\n仅使用当前阅读进度及之前的内容，避免剧透。'
+              '请使用书内搜索工具核对书内事实并附上可点击引用。'
+              '\n上下文校验：${bundle.contextHash}',
+        ),
+      );
       onOpenChat();
     }
 
@@ -1059,6 +1160,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                   onCreateAnnotation: createAnnotation,
                   onOpenBookSettings: openBookSettings,
                   onOpenSearch: openSearch,
+                  onOpenAssistant: openReadingAssistant,
                   bookId: bookId,
                 ),
               ),
@@ -1125,6 +1227,7 @@ class _ReaderToolbar extends StatelessWidget {
     required this.onCreateAnnotation,
     required this.onOpenBookSettings,
     required this.onOpenSearch,
+    required this.onOpenAssistant,
     required this.bookId,
   });
 
@@ -1142,6 +1245,7 @@ class _ReaderToolbar extends StatelessWidget {
   final VoidCallback onCreateAnnotation;
   final VoidCallback onOpenBookSettings;
   final VoidCallback onOpenSearch;
+  final VoidCallback onOpenAssistant;
   final String bookId;
 
   @override
@@ -1205,6 +1309,12 @@ class _ReaderToolbar extends StatelessWidget {
                 onPressed: onOpenSearch,
                 icon: const Icon(Icons.search),
               ),
+            if (!mobileReaderControls)
+              IconButton(
+                tooltip: '阅读助手',
+                onPressed: onOpenAssistant,
+                icon: const Icon(Icons.auto_awesome_outlined),
+              ),
             if (!mobileReaderControls) const VerticalDivider(width: 20),
             if (!mobileReaderControls)
               IconButton(
@@ -1228,6 +1338,8 @@ class _ReaderToolbar extends StatelessWidget {
                   switch (action) {
                     case _MobileReaderToolbarAction.search:
                       onOpenSearch();
+                    case _MobileReaderToolbarAction.assistant:
+                      onOpenAssistant();
                     case _MobileReaderToolbarAction.settings:
                       onOpenBookSettings();
                     case _MobileReaderToolbarAction.pomodoro:
@@ -1247,6 +1359,13 @@ class _ReaderToolbar extends StatelessWidget {
                     child: ListTile(
                       leading: Icon(Icons.search),
                       title: Text('搜索书内内容'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: _MobileReaderToolbarAction.assistant,
+                    child: ListTile(
+                      leading: Icon(Icons.auto_awesome_outlined),
+                      title: Text('阅读助手'),
                     ),
                   ),
                   const PopupMenuItem(
