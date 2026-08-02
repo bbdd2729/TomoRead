@@ -86,6 +86,19 @@ class ContentChunkRepository {
         where: 'book_id = ?',
         whereArgs: [bookId],
       );
+      await transaction.update(
+        'semantic_index_states',
+        {
+          'status': 'stale',
+          'content_hash': contentHash,
+          'indexed_chunks': 0,
+          'failed_chunks': 0,
+          'error_code': null,
+          'updated_at': now.millisecondsSinceEpoch,
+        },
+        where: 'book_id = ?',
+        whereArgs: [bookId],
+      );
       for (final chunk in chunks) {
         await transaction.insert('content_chunks', _chunkToRow(chunk));
       }

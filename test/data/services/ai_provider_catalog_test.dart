@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tomoread/data/services/ai_provider_catalog.dart';
 import 'package:tomoread/domain/models/chat_models.dart';
+import 'package:tomoread/data/services/embedding_provider_catalog.dart';
+import 'package:tomoread/domain/models/embedding_models.dart';
 
 void main() {
   test('ships the documented compatible provider preset catalog', () {
@@ -37,5 +39,34 @@ void main() {
         reason: preset.id,
       );
     }
+  });
+
+  test('ships independent local and remote embedding presets', () {
+    final ids = EmbeddingProviderCatalog.presets
+        .map((preset) => preset.id)
+        .toList();
+
+    expect(
+      ids,
+      containsAll([
+        'ollama',
+        'lm-studio',
+        'openai',
+        'deepseek',
+        'dashscope',
+        'gemini-openai',
+        'custom',
+      ]),
+    );
+    expect(
+      const EmbeddingProviderCatalog().byId('ollama').mode,
+      EmbeddingProviderMode.localService,
+    );
+    expect(
+      const EmbeddingProviderCatalog()
+          .byId('ollama')
+          .recommendedModels,
+      isNotEmpty,
+    );
   });
 }

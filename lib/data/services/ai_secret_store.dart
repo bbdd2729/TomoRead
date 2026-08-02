@@ -12,4 +12,13 @@ class AiSecretStore {
   Future<String?> read(String id) => _storage.read(key: 'tomoread.ai.$id');
 
   Future<void> delete(String id) => _storage.delete(key: 'tomoread.ai.$id');
+
+  Future<void> writeEmbedding(String id, String value) =>
+      _storage.write(key: 'tomoread.embedding.$id', value: value);
+
+  Future<String?> readEmbedding(String id) =>
+      _storage.read(key: 'tomoread.embedding.$id');
+
+  Future<void> deleteEmbedding(String id) =>
+      _storage.delete(key: 'tomoread.embedding.$id');
 }

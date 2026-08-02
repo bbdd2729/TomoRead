@@ -98,7 +98,7 @@ void main() {
     addTearDown(appDatabase.close);
     final database = await appDatabase.database;
 
-    expect(await database.getVersion(), 22);
+    expect(await database.getVersion(), 23);
     final parts = await database.query('chat_message_parts');
     expect(parts.single['type'], 'text');
     expect(parts.single['text_content'], 'Legacy answer');
@@ -185,5 +185,14 @@ void main() {
       syncMessageColumns.map((column) => column['name']),
       containsAll(['updated_at', 'sync_revision']),
     );
+    final embeddingTables = await database.rawQuery('''
+      SELECT name FROM sqlite_master
+      WHERE type = 'table'
+        AND name IN (
+          'embedding_provider_profiles', 'content_embeddings',
+          'semantic_index_states'
+        )
+    ''');
+    expect(embeddingTables, hasLength(3));
   });
 }

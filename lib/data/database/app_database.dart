@@ -23,7 +23,7 @@ class AppDatabase {
   final bool _singleInstance;
   Future<Database>? _database;
 
-  static const schemaVersion = 22;
+  static const schemaVersion = 23;
 
   Future<Database> get database => _database ??= _open();
 
@@ -266,6 +266,9 @@ class AppDatabase {
           if (oldVersion < 22) {
             await _upgradeToVersion22(database);
           }
+          if (oldVersion < 23) {
+            await _upgradeToVersion23(database);
+          }
         },
       ),
     );
@@ -363,6 +366,7 @@ class AppDatabase {
     await _createImportedFontsTable(database);
     await _createTextProjectionTables(database);
     await _createContentChunkTables(database);
+    await _createEmbeddingTables(database);
     await _createVisualArtifactTables(database);
     await _createSyncTables(database);
   }
@@ -654,6 +658,91 @@ class AppDatabase {
       );
     }
     await _createSyncTables(database);
+  }
+
+  Future<void> _upgradeToVersion23(Database database) =>
+      _createEmbeddingTables(database);
+
+  Future<void> _createEmbeddingTables(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS embedding_provider_profiles (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        protocol TEXT NOT NULL CHECK(protocol IN ('openai_compatible')),
+        preset_id TEXT,
+        mode TEXT NOT NULL CHECK(mode IN ('localService', 'remote')),
+        auth_type TEXT NOT NULL CHECK(auth_type IN ('bearer', 'apiKey', 'none')),
+        base_url TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        model_version TEXT NOT NULL,
+        secret_key_id TEXT NOT NULL,
+        distance_metric TEXT NOT NULL CHECK(distance_metric IN ('cosine', 'dotProduct', 'euclidean')),
+        dimensions INTEGER,
+        max_input_characters INTEGER NOT NULL,
+        batch_size INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 0,
+        is_enabled INTEGER NOT NULL DEFAULT 1,
+        remote_content_consent INTEGER NOT NULL DEFAULT 0,
+        capability_status TEXT NOT NULL CHECK(capability_status IN ('untested', 'ready', 'unavailable', 'incompatible')),
+        capability_error_code TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        CHECK(dimensions IS NULL OR dimensions > 0),
+        CHECK(max_input_characters > 0),
+        CHECK(batch_size > 0)
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS content_embeddings (
+        chunk_id TEXT NOT NULL,
+        profile_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        model_version TEXT NOT NULL,
+        dimensions INTEGER NOT NULL,
+        distance_metric TEXT NOT NULL CHECK(distance_metric IN ('cosine', 'dotProduct', 'euclidean')),
+        content_hash TEXT NOT NULL,
+        text_hash TEXT NOT NULL,
+        vector_blob BLOB NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('ready', 'failed', 'stale')),
+        error_code TEXT,
+        generated_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(chunk_id, profile_id),
+        FOREIGN KEY(chunk_id) REFERENCES content_chunks(id) ON DELETE CASCADE,
+        FOREIGN KEY(profile_id) REFERENCES embedding_provider_profiles(id) ON DELETE CASCADE,
+        CHECK(dimensions > 0)
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS content_embeddings_profile_status
+      ON content_embeddings(profile_id, status, model_id, model_version)
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS semantic_index_states (
+        book_id TEXT NOT NULL,
+        profile_id TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        model_version TEXT NOT NULL,
+        dimensions INTEGER,
+        index_version INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending', 'indexing', 'ready', 'cancelled', 'failed', 'stale')),
+        total_chunks INTEGER NOT NULL DEFAULT 0,
+        indexed_chunks INTEGER NOT NULL DEFAULT 0,
+        failed_chunks INTEGER NOT NULL DEFAULT 0,
+        error_code TEXT,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(book_id, profile_id),
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE,
+        FOREIGN KEY(profile_id) REFERENCES embedding_provider_profiles(id) ON DELETE CASCADE,
+        CHECK(dimensions IS NULL OR dimensions > 0),
+        CHECK(total_chunks >= 0 AND indexed_chunks >= 0 AND failed_chunks >= 0)
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS semantic_index_states_profile_status
+      ON semantic_index_states(profile_id, status, updated_at DESC)
+    ''');
   }
 
   Future<void> _createSyncTables(Database database) async {
