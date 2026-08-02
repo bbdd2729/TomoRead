@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 20,
+        version: 21,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -94,6 +94,9 @@ class AppDatabase {
           }
           if (oldVersion < 20) {
             await _upgradeToVersion20(database);
+          }
+          if (oldVersion < 21) {
+            await _upgradeToVersion21(database);
           }
         },
       ),
@@ -186,6 +189,7 @@ class AppDatabase {
     await _createImportedFontsTable(database);
     await _createTextProjectionTables(database);
     await _createContentChunkTables(database);
+    await _createVisualArtifactTables(database);
   }
 
   Future<void> _upgradeToVersion2(Database database) async {
@@ -410,6 +414,42 @@ class AppDatabase {
 
   Future<void> _upgradeToVersion20(Database database) =>
       _createContentChunkTables(database);
+
+  Future<void> _upgradeToVersion21(Database database) =>
+      _createVisualArtifactTables(database);
+
+  Future<void> _createVisualArtifactTables(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS visual_artifacts (
+        id TEXT PRIMARY KEY,
+        book_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK(kind IN ('wordCloud', 'mindMap')),
+        scope TEXT NOT NULL CHECK(scope IN ('currentChapter', 'readChapters', 'wholeBook')),
+        title TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS visual_artifacts_book_created
+      ON visual_artifacts(book_id, created_at DESC)
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS word_cloud_cache (
+        cache_key TEXT PRIMARY KEY,
+        book_id TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS word_cloud_cache_book_created
+      ON word_cloud_cache(book_id, created_at DESC)
+    ''');
+  }
 
   Future<void> _createContentChunkTables(Database database) async {
     await database.execute('''

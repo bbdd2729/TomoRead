@@ -17,6 +17,7 @@ import '../data/repositories/skill_repository.dart';
 import '../data/repositories/text_coloring_repository.dart';
 import '../data/repositories/text_content_repository.dart';
 import '../data/repositories/text_projection_repository.dart';
+import '../data/repositories/visual_artifact_repository.dart';
 import '../data/services/ai_gateway.dart';
 import '../data/services/ai_provider_catalog.dart';
 import '../data/services/ai_provider_probe_service.dart';
@@ -37,6 +38,9 @@ import '../data/services/pomodoro_timer_service.dart';
 import '../data/services/stats_report_service.dart';
 import '../data/services/text_decoder_service.dart';
 import '../data/services/text_display_transform_service.dart';
+import '../data/services/mind_map_generation_service.dart';
+import '../data/services/visual_artifact_export_service.dart';
+import '../data/services/word_frequency_service.dart';
 import '../domain/models/bookmark.dart';
 import '../domain/models/content_chunk.dart';
 import '../domain/models/epub_manifest.dart';
@@ -48,6 +52,7 @@ import '../domain/models/text_content_profile.dart';
 import '../domain/models/reading_settings.dart';
 import '../domain/models/reading_font.dart';
 import '../domain/models/reading_annotation.dart';
+import '../domain/models/visual_artifact.dart';
 import '../features/chat/ai_agent_runner.dart';
 import 'appearance.dart';
 
@@ -139,6 +144,40 @@ final contentSearchProvider = FutureProvider.autoDispose
         limit: request.limit,
       );
     });
+
+final visualArtifactRepositoryProvider = Provider<VisualArtifactRepository>(
+  (ref) => VisualArtifactRepository(ref.watch(appDatabaseProvider)),
+);
+
+final visualArtifactRevisionProvider = NotifierProvider<RevisionNotifier, int>(
+  RevisionNotifier.new,
+);
+
+final visualArtifactsForBookProvider = FutureProvider.autoDispose
+    .family<List<VisualArtifact>, String>((ref, bookId) {
+      ref.watch(visualArtifactRevisionProvider);
+      return ref.watch(visualArtifactRepositoryProvider).listForBook(bookId);
+    });
+
+final wordFrequencyServiceProvider = Provider<WordFrequencyService>(
+  (ref) => WordFrequencyService(
+    chunks: ref.watch(contentChunkRepositoryProvider),
+    artifacts: ref.watch(visualArtifactRepositoryProvider),
+  ),
+);
+
+final mindMapGenerationServiceProvider = Provider<MindMapGenerationService>(
+  (ref) => MindMapGenerationService(
+    chunks: ref.watch(contentChunkRepositoryProvider),
+    artifacts: ref.watch(visualArtifactRepositoryProvider),
+    gateway: ref.watch(aiGatewayProvider),
+  ),
+);
+
+final visualArtifactExportServiceProvider =
+    Provider<VisualArtifactExportService>(
+      (ref) => const VisualArtifactExportService(),
+    );
 
 final fontRepositoryProvider = Provider<FontRepository>(
   (ref) => FontRepository(ref.watch(appDatabaseProvider)),

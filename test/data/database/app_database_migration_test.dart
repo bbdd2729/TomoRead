@@ -98,7 +98,7 @@ void main() {
     addTearDown(appDatabase.close);
     final database = await appDatabase.database;
 
-    expect(await database.getVersion(), 20);
+    expect(await database.getVersion(), 21);
     final parts = await database.query('chat_message_parts');
     expect(parts.single['type'], 'text');
     expect(parts.single['text_content'], 'Legacy answer');
@@ -163,5 +163,11 @@ void main() {
         AND name IN ('content_chunks', 'content_index_states')
     ''');
     expect(contentIndexTables, hasLength(2));
+    final visualArtifactTables = await database.rawQuery('''
+      SELECT name FROM sqlite_master
+      WHERE type = 'table'
+        AND name IN ('visual_artifacts', 'word_cloud_cache')
+    ''');
+    expect(visualArtifactTables, hasLength(2));
   });
 }

@@ -17,6 +17,7 @@ import '../../domain/models/reading_context.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_chapter.dart';
+import '../../domain/models/visual_artifact.dart';
 import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
 import 'content_search_dialog.dart';
@@ -25,6 +26,7 @@ import '../text_import/text_projection_controller.dart';
 import '../text_import/text_projection_dialog.dart';
 import '../assistant/content_index_controller.dart';
 import '../chat/chat_controller.dart';
+import '../visualization/reader_visualization_dialog.dart';
 
 enum _TextChapterAction { rename, split, mergeNext }
 
@@ -499,6 +501,65 @@ class TextReaderWorkspace extends HookConsumerWidget {
       onOpenChat();
     }
 
+    Future<void> navigateToArtifactCitation(
+      ArtifactCitation citation,
+    ) async {
+      final current = document;
+      if (current == null || current.chapters.isEmpty) return;
+      final nextIndex = citation.chapterIndex
+          .clamp(0, current.chapters.length - 1)
+          .toInt();
+      chapterIndex.value = nextIndex;
+      selectedContext.value = null;
+      final chapter = current.chapters[nextIndex];
+      final locatorParts = citation.locator.split('|');
+      final rawOffset = locatorParts.length == 4 &&
+              locatorParts.first == 'text:v1'
+          ? int.tryParse(locatorParts[2])
+          : null;
+      final progress = current.chapters.length <= 1
+          ? 0.0
+          : nextIndex / (current.chapters.length - 1);
+      await ref.read(bookRepositoryProvider).updateReadingPosition(
+        bookId: bookId,
+        chapterIndex: nextIndex,
+        progress: progress,
+        locator: citation.locator,
+      );
+      tracker.recordInteraction(
+        ReaderPosition(progress: progress, locator: citation.locator),
+        ReadingInteraction.navigation,
+      );
+      if (!context.mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!scrollController.hasClients) return;
+        final ratio = rawOffset == null || chapter.rawEnd <= chapter.rawStart
+            ? 0.0
+            : ((rawOffset - chapter.rawStart) /
+                      (chapter.rawEnd - chapter.rawStart))
+                  .clamp(0, 1)
+                  .toDouble();
+        scrollController.jumpTo(
+          scrollController.position.maxScrollExtent * ratio,
+        );
+      });
+    }
+
+    Future<void> openVisualization() async {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => ReaderVisualizationDialog(
+          bookId: bookId,
+          bookTitle: title,
+          currentChapterIndex: chapterIndex.value,
+          onOpenCitation: (citation) {
+            Navigator.pop(dialogContext);
+            unawaited(navigateToArtifactCitation(citation));
+          },
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -543,6 +604,11 @@ class TextReaderWorkspace extends HookConsumerWidget {
             tooltip: '阅读助手',
             onPressed: openReadingAssistant,
             icon: const Icon(Icons.auto_awesome_outlined),
+          ),
+          IconButton(
+            tooltip: '词云与思维导图',
+            onPressed: openVisualization,
+            icon: const Icon(Icons.account_tree_outlined),
           ),
           IconButton(
             tooltip: '复制当前章节原文',

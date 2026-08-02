@@ -177,6 +177,22 @@ class AiCitationEvent extends AiStreamEvent {
   final AiCitationSource source;
 }
 
+class AiArtifactEvent extends AiStreamEvent {
+  const AiArtifactEvent({
+    required this.artifactType,
+    required this.title,
+    required this.payloadJson,
+    this.artifactId,
+    this.bookId,
+  });
+
+  final String artifactType;
+  final String title;
+  final String payloadJson;
+  final String? artifactId;
+  final String? bookId;
+}
+
 class AiUsageEvent extends AiStreamEvent {
   const AiUsageEvent(this.usage);
 

@@ -23,6 +23,7 @@ import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_context.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_coloring.dart';
+import '../../domain/models/visual_artifact.dart';
 import '../../shared/widgets/resizable_pane.dart';
 import '../../shared/widgets/book_cover.dart';
 import 'epub_webview.dart';
@@ -37,8 +38,16 @@ import '../chat/chat_controller.dart';
 import '../assistant/content_index_controller.dart';
 import '../notes/notes_providers.dart';
 import '../settings/font_catalog_controller.dart';
+import '../visualization/reader_visualization_dialog.dart';
 
-enum _MobileReaderToolbarAction { search, assistant, settings, pomodoro, focus }
+enum _MobileReaderToolbarAction {
+  search,
+  assistant,
+  visualization,
+  settings,
+  pomodoro,
+  focus,
+}
 
 enum _SelectionContextAction {
   yellow,
@@ -516,6 +525,38 @@ class ReaderWorkspace extends HookConsumerWidget {
         ),
       );
       onOpenChat();
+    }
+
+    Future<void> navigateToArtifactCitation(
+      ArtifactCitation citation,
+    ) async {
+      final currentManifest = manifest.value;
+      final hrefIndex = currentManifest == null
+          ? null
+          : epubSpineIndexForHref(currentManifest, citation.href);
+      final nextIndex = hrefIndex ?? citation.chapterIndex;
+      final ratio = citation.locator.startsWith('ratio:')
+          ? double.tryParse(citation.locator.substring(6)) ?? 0.0
+          : 0.0;
+      await selectChapter(
+        nextIndex,
+        scrollPosition: ratio.clamp(0, 1).toDouble(),
+      );
+    }
+
+    Future<void> openVisualization() async {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => ReaderVisualizationDialog(
+          bookId: bookId,
+          bookTitle: readerBook.value?.title ?? title,
+          currentChapterIndex: activeChapterIndex,
+          onOpenCitation: (citation) {
+            Navigator.pop(dialogContext);
+            unawaited(navigateToArtifactCitation(citation));
+          },
+        ),
+      );
     }
 
     Future<void> createAnnotation([ReaderTextSelection? source]) async {
@@ -1161,6 +1202,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                   onOpenBookSettings: openBookSettings,
                   onOpenSearch: openSearch,
                   onOpenAssistant: openReadingAssistant,
+                  onOpenVisualization: openVisualization,
                   bookId: bookId,
                 ),
               ),
@@ -1228,6 +1270,7 @@ class _ReaderToolbar extends StatelessWidget {
     required this.onOpenBookSettings,
     required this.onOpenSearch,
     required this.onOpenAssistant,
+    required this.onOpenVisualization,
     required this.bookId,
   });
 
@@ -1246,6 +1289,7 @@ class _ReaderToolbar extends StatelessWidget {
   final VoidCallback onOpenBookSettings;
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenAssistant;
+  final VoidCallback onOpenVisualization;
   final String bookId;
 
   @override
@@ -1315,6 +1359,12 @@ class _ReaderToolbar extends StatelessWidget {
                 onPressed: onOpenAssistant,
                 icon: const Icon(Icons.auto_awesome_outlined),
               ),
+            if (!mobileReaderControls)
+              IconButton(
+                tooltip: '词云与思维导图',
+                onPressed: onOpenVisualization,
+                icon: const Icon(Icons.account_tree_outlined),
+              ),
             if (!mobileReaderControls) const VerticalDivider(width: 20),
             if (!mobileReaderControls)
               IconButton(
@@ -1340,6 +1390,8 @@ class _ReaderToolbar extends StatelessWidget {
                       onOpenSearch();
                     case _MobileReaderToolbarAction.assistant:
                       onOpenAssistant();
+                    case _MobileReaderToolbarAction.visualization:
+                      onOpenVisualization();
                     case _MobileReaderToolbarAction.settings:
                       onOpenBookSettings();
                     case _MobileReaderToolbarAction.pomodoro:
@@ -1369,10 +1421,24 @@ class _ReaderToolbar extends StatelessWidget {
                     ),
                   ),
                   const PopupMenuItem(
+                    value: _MobileReaderToolbarAction.visualization,
+                    child: ListTile(
+                      leading: Icon(Icons.account_tree_outlined),
+                      title: Text('词云与思维导图'),
+                    ),
+                  ),
+                  const PopupMenuItem(
                     value: _MobileReaderToolbarAction.settings,
                     child: ListTile(
                       leading: Icon(Icons.format_size),
                       title: Text('本书阅读设置'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: _MobileReaderToolbarAction.pomodoro,
+                    child: ListTile(
+                      leading: Icon(Icons.timer_outlined),
+                      title: Text('阅读专注计时'),
                     ),
                   ),
                   PopupMenuItem(
@@ -2800,13 +2866,6 @@ class _BookReadingSettingsDialog extends HookConsumerWidget {
                     settings: textColoringSettings,
                     title: '本书文字词条',
                     bookId: bookId,
-                  ),
-                  const PopupMenuItem(
-                    value: _MobileReaderToolbarAction.pomodoro,
-                    child: ListTile(
-                      leading: Icon(Icons.timer_outlined),
-                      title: Text('阅读专注计时'),
-                    ),
                   ),
                 ),
                 icon: const Icon(Icons.format_color_text_outlined),
