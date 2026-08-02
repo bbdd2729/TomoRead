@@ -14,6 +14,7 @@ import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
+import '../../domain/models/text_coloring.dart';
 import 'epub_webview_android.dart';
 import 'reader_navigation_command.dart';
 
@@ -23,6 +24,7 @@ class EpubWebView extends HookConsumerWidget {
     required this.bookId,
     required this.href,
     required this.settings,
+    required this.textColoring,
     required this.annotations,
     required this.searchQuery,
     required this.focusedAnnotationId,
@@ -49,6 +51,7 @@ class EpubWebView extends HookConsumerWidget {
   final String bookId;
   final String href;
   final ReadingSettings settings;
+  final ResolvedTextColoring textColoring;
   final List<ReadingAnnotation> annotations;
   final String? searchQuery;
   final String? focusedAnnotationId;
@@ -77,6 +80,7 @@ class EpubWebView extends HookConsumerWidget {
         bookId: bookId,
         href: href,
         settings: settings,
+        textColoring: textColoring,
         initialScrollRatio: initialScrollRatio,
         initialAnchor: initialAnchor,
         initialCfi: initialCfi,
@@ -112,6 +116,10 @@ class EpubWebView extends HookConsumerWidget {
     );
     final runtimeSearchScript = _runtimeSearchScript(searchQuery);
     final runtimeSettingsScript = _runtimeSettingsScript(context, settings);
+    final runtimeTextColoringScript = _runtimeTextColoringScript(
+      context,
+      textColoring,
+    );
     final resourceDirectory = readerSession.value?.directoryPath;
     // Foliate owns both pagination and continuous scrolling. Keeping the two
     // modes in the same runtime prevents the legacy one-chapter WebView from
@@ -185,6 +193,14 @@ class EpubWebView extends HookConsumerWidget {
         await controller.executeScript(runtimeSettingsScript);
       } catch (_) {
         // The runtime is reconfigured after its module becomes available.
+      }
+    }
+
+    Future<void> updateFoliateTextColoring() async {
+      try {
+        await controller.executeScript(runtimeTextColoringScript);
+      } catch (_) {
+        // Text coloring is a display preference and may safely retry later.
       }
     }
 
@@ -405,6 +421,13 @@ class EpubWebView extends HookConsumerWidget {
       }
       return null;
     }, [initialized.value, styleScript, useFoliateRuntime]);
+
+    useEffect(() {
+      if (initialized.value && useFoliateRuntime) {
+        unawaited(updateFoliateTextColoring());
+      }
+      return null;
+    }, [initialized.value, runtimeTextColoringScript, useFoliateRuntime]);
 
     useEffect(
       () {
@@ -889,6 +912,13 @@ a { color: ${_cssColor(colorScheme.primary)}; }
     ReadingSettings settings,
   ) => _runtimeCall(
     "runtime.command({ type: 'setSettings', payload: { settings: ${jsonEncode(_runtimeSettings(context, settings))} } })",
+  );
+
+  String _runtimeTextColoringScript(
+    BuildContext context,
+    ResolvedTextColoring textColoring,
+  ) => _runtimeCall(
+    'runtime.setTextColoring(${jsonEncode(textColoring.toRuntimeJson(dark: Theme.of(context).brightness == Brightness.dark))})',
   );
 
   String _runtimeCommandScript(ReaderNavigationCommand command) {

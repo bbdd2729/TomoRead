@@ -34,7 +34,7 @@ class AppDatabase {
     return _databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 11,
+        version: 12,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -67,6 +67,9 @@ class AppDatabase {
           }
           if (oldVersion < 11) {
             await _upgradeToVersion11(database);
+          }
+          if (oldVersion < 12) {
+            await _upgradeToVersion12(database);
           }
         },
       ),
@@ -153,6 +156,7 @@ class AppDatabase {
     await _createAiAgentTables(database);
     await _createAnnotationTagsTable(database);
     await _createReadingSessionsTable(database);
+    await _createTextColoringTables(database);
   }
 
   Future<void> _upgradeToVersion2(Database database) async {
@@ -300,6 +304,9 @@ class AppDatabase {
       WHERE content <> ''
     ''');
   }
+
+  Future<void> _upgradeToVersion12(Database database) =>
+      _createTextColoringTables(database);
 
   Future<void> _createBooksIndexes(Database database) async {
     await database.execute(
@@ -542,6 +549,44 @@ class AppDatabase {
     await database.execute(
       'CREATE INDEX IF NOT EXISTS reading_sessions_group_time ON reading_sessions(session_group_id, started_at ASC)',
     );
+  }
+
+  Future<void> _createTextColoringTables(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS book_text_coloring_overrides (
+        book_id TEXT PRIMARY KEY,
+        enabled INTEGER,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE,
+        CHECK(enabled IS NULL OR enabled IN (0, 1))
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS text_color_terms (
+        id TEXT PRIMARY KEY,
+        book_id TEXT,
+        term TEXT NOT NULL,
+        normalized_term TEXT NOT NULL,
+        color_token TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
+      )
+    ''');
+    await database.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS text_color_terms_global_normalized
+      ON text_color_terms(normalized_term)
+      WHERE book_id IS NULL
+    ''');
+    await database.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS text_color_terms_book_normalized
+      ON text_color_terms(book_id, normalized_term)
+      WHERE book_id IS NOT NULL
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS text_color_terms_book_updated
+      ON text_color_terms(book_id, updated_at DESC)
+    ''');
   }
 
   static Future<String> _defaultPath() async {

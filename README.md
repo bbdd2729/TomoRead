@@ -31,6 +31,7 @@ TomoRead 是一款基于 Flutter 的跨平台 AI 阅读器，面向本地 EPUB/P
 - [x] 桌面端可拖动侧栏宽度，移动端使用抽屉和底部面板
 - [x] 全局阅读设置与单本书覆盖设置
 - [x] 字体、字号、行距、页边距、配色、阅读方向和翻页方式
+- [x] EPUB 文本前景色：英文、数字、标点、引号/括号内容及全局/单书自定义词条
 - [x] 书签、高亮、彩色标注、笔记及自定义文本选择菜单
 
 ### 书库与知识整理
@@ -103,6 +104,8 @@ lib/
 - [AI 对话架构](.agent/ai-chat-architecture.md)
 - [全局笔记架构](.agent/global-notes-architecture.md)
 - [阅读统计架构](.agent/reading-statistics-architecture.md)
+- [阅读器文本前景色设计](.agent/reader-text-coloring-architecture.md)
+- [以 ColorTxt 为目标的功能差距与路线图](.agent/colortxt-feature-gap-analysis.md)
 
 ## 本地开发
 
@@ -160,6 +163,7 @@ Android 会生成以下产物：
 - [x] 全局笔记、筛选、编辑、导出和原文跳转
 - [x] 阅读活动采集与多维统计页面
 - [x] OpenAI 兼容 AI 对话、原文引用和安全密钥存储
+- [x] EPUB 文本 token 与自定义词条前景色（亮/暗色板、单书覆盖）
 - [x] Windows/Linux 构建与可选平台 Release 工作流
 
 ### 近期

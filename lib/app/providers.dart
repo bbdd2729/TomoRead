@@ -11,6 +11,7 @@ import '../data/repositories/chat_repository.dart';
 import '../data/repositories/reading_session_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/repositories/skill_repository.dart';
+import '../data/repositories/text_coloring_repository.dart';
 import '../data/services/ai_gateway.dart';
 import '../data/services/ai_secret_store.dart';
 import '../data/services/ai_tool_registry.dart';
@@ -60,6 +61,10 @@ final chatRepositoryProvider = Provider<ChatRepository>(
 
 final skillRepositoryProvider = Provider<SkillRepository>(
   (ref) => SkillRepository(ref.watch(appDatabaseProvider)),
+);
+
+final textColoringRepositoryProvider = Provider<TextColoringRepository>(
+  (ref) => TextColoringRepository(ref.watch(appDatabaseProvider)),
 );
 
 final readingSessionRepositoryProvider = Provider<ReadingSessionRepository>(

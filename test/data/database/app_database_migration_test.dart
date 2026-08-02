@@ -83,7 +83,7 @@ void main() {
     addTearDown(appDatabase.close);
     final database = await appDatabase.database;
 
-    expect(await database.getVersion(), 11);
+    expect(await database.getVersion(), 12);
     final parts = await database.query('chat_message_parts');
     expect(parts.single['type'], 'text');
     expect(parts.single['text_content'], 'Legacy answer');
@@ -94,5 +94,11 @@ void main() {
       providerColumns.map((column) => column['name']),
       containsAll(['enable_tools', 'enable_reasoning']),
     );
+    final textColoringTables = await database.rawQuery('''
+      SELECT name FROM sqlite_master
+      WHERE type = 'table'
+        AND name IN ('book_text_coloring_overrides', 'text_color_terms')
+    ''');
+    expect(textColoringTables, hasLength(2));
   });
 }

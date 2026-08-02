@@ -14,6 +14,7 @@ import '../../domain/models/epub_location.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_settings.dart';
+import '../../domain/models/text_coloring.dart';
 import 'reader_navigation_command.dart';
 
 class AndroidEpubWebView extends HookConsumerWidget {
@@ -22,6 +23,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     required this.bookId,
     required this.href,
     required this.settings,
+    required this.textColoring,
     required this.initialScrollRatio,
     required this.initialAnchor,
     required this.initialCfi,
@@ -42,6 +44,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final String bookId;
   final String href;
   final ReadingSettings settings;
+  final ResolvedTextColoring textColoring;
   final double initialScrollRatio;
   final String? initialAnchor;
   final String? initialCfi;
@@ -65,6 +68,10 @@ class AndroidEpubWebView extends HookConsumerWidget {
     final epubManifest = ref.watch(readerManifestProvider(bookId));
     final error = useState<Object?>(null);
     final runtimeSettingsScript = _runtimeSettingsScript(context, settings);
+    final runtimeTextColoringScript = _runtimeTextColoringScript(
+      context,
+      textColoring,
+    );
     final runtimeScript = epubManifest.value == null
         ? null
         : _runtimeOpenScript(
@@ -78,6 +85,8 @@ class AndroidEpubWebView extends HookConsumerWidget {
           );
     final runtimeScriptRef = useRef<String?>(runtimeScript);
     runtimeScriptRef.value = runtimeScript;
+    final textColoringScriptRef = useRef(runtimeTextColoringScript);
+    textColoringScriptRef.value = runtimeTextColoringScript;
     final runtimeLoaded = useRef(false);
     final messageHandlerRef = useRef<void Function(String)?>(null);
     messageHandlerRef.value = (rawMessage) =>
@@ -92,6 +101,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
               final script = runtimeScriptRef.value;
               if (script != null) {
                 unawaited(webViewController.runJavaScript(script));
+                unawaited(
+                  webViewController.runJavaScript(textColoringScriptRef.value),
+                );
               }
             },
           ),
@@ -146,6 +158,11 @@ class AndroidEpubWebView extends HookConsumerWidget {
       unawaited(controller.runJavaScript(runtimeSettingsScript));
       return null;
     }, [controller, runtimeSettingsScript]);
+
+    useEffect(() {
+      unawaited(controller.runJavaScript(runtimeTextColoringScript));
+      return null;
+    }, [controller, runtimeTextColoringScript]);
 
     useEffect(() {
       final command = navigationCommand;
@@ -371,6 +388,23 @@ class AndroidEpubWebView extends HookConsumerWidget {
     })});
     })();''';
   }
+
+  String _runtimeTextColoringScript(
+    BuildContext context,
+    ResolvedTextColoring textColoring,
+  ) => _runtimeCall(
+    'runtime.setTextColoring(${jsonEncode(textColoring.toRuntimeJson(dark: Theme.of(context).brightness == Brightness.dark))})',
+  );
+
+  String _runtimeCall(String invocation) => '''(() => {
+    let attempts = 0;
+    const run = () => {
+      const runtime = window.TomoReadEpubRuntime;
+      if (runtime) { void $invocation; }
+      else if (attempts++ < 100) { window.setTimeout(run, 20); }
+    };
+    run();
+  })();''';
 
   String _cssColor(Color color) =>
       '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';

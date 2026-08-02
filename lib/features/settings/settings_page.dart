@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/appearance.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reading_settings.dart';
+import '../../domain/models/text_coloring.dart';
 import '../../shared/widgets/page_header.dart';
+import '../reader/text_coloring_controller.dart';
+import '../reader/text_coloring_widgets.dart';
 
 enum _SettingsSection { appearance, reading }
 
-class SettingsPage extends HookWidget {
+class SettingsPage extends HookConsumerWidget {
   const SettingsPage({
     super.key,
     required this.appearance,
@@ -23,8 +27,11 @@ class SettingsPage extends HookWidget {
   final ValueChanged<ReadingSettings> onReadingSettingsChanged;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final section = useState(_SettingsSection.appearance);
+    final textColoringState = ref.watch(textColoringSettingsProvider);
+    final textColoring =
+        textColoringState.value ?? TextColoringSettings.defaults();
     final sectionContent = switch (section.value) {
       _SettingsSection.appearance => _AppearanceSettings(
         appearance: appearance,
@@ -33,6 +40,11 @@ class SettingsPage extends HookWidget {
       _SettingsSection.reading => _ReadingDefaultsSettings(
         settings: readingSettings,
         onChanged: onReadingSettingsChanged,
+        textColoring: textColoring,
+        textColoringLoading: textColoringState.isLoading,
+        onTextColoringChanged: (value) => ref
+            .read(textColoringSettingsProvider.notifier)
+            .update(value),
       ),
     };
 
@@ -284,10 +296,16 @@ class _ReadingDefaultsSettings extends StatelessWidget {
   const _ReadingDefaultsSettings({
     required this.settings,
     required this.onChanged,
+    required this.textColoring,
+    required this.textColoringLoading,
+    required this.onTextColoringChanged,
   });
 
   final ReadingSettings settings;
   final ValueChanged<ReadingSettings> onChanged;
+  final TextColoringSettings textColoring;
+  final bool textColoringLoading;
+  final ValueChanged<TextColoringSettings> onTextColoringChanged;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -380,6 +398,15 @@ class _ReadingDefaultsSettings extends StatelessWidget {
             onChanged(settings.copyWith(tapToTurnPages: value)),
         title: const Text('点击区域翻页（实验性）'),
         subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
+      ),
+      const SizedBox(height: 32),
+      const Divider(),
+      const SizedBox(height: 24),
+      const _SettingsHeading('文本前景色'),
+      TextColoringSettingsPanel(
+        settings: textColoring,
+        loading: textColoringLoading,
+        onChanged: onTextColoringChanged,
       ),
     ],
   );

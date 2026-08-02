@@ -19,12 +19,15 @@ import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
+import '../../domain/models/text_coloring.dart';
 import '../../shared/widgets/resizable_pane.dart';
 import '../../shared/widgets/book_cover.dart';
 import 'epub_webview.dart';
 import 'reader_navigation_command.dart';
 import 'reader_runtime_controller.dart';
 import 'reader_search_dialog.dart';
+import 'text_coloring_controller.dart';
+import 'text_coloring_widgets.dart';
 import '../chat/chat_controller.dart';
 import '../notes/notes_providers.dart';
 
@@ -36,6 +39,7 @@ enum _SelectionContextAction {
   blue,
   pink,
   note,
+  textColor,
   askAi,
   explainAi,
   summarizeAi,
@@ -92,6 +96,10 @@ class ReaderWorkspace extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final readingOverride = ref.watch(bookReadingOverrideProvider(bookId));
+    final textColoringOverride = ref.watch(
+      bookTextColoringOverrideProvider(bookId),
+    );
+    final textColoringState = ref.watch(resolvedTextColoringProvider(bookId));
     final runtimeController = ref.read(
       readerRuntimeControllerProvider.notifier,
     );
@@ -130,6 +138,8 @@ class ReaderWorkspace extends HookConsumerWidget {
     final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
     final annotations = annotationsState.value ?? const <ReadingAnnotation>[];
     final settings = override?.settings ?? readingSettings;
+    final textColoring =
+        textColoringState.value ?? ResolvedTextColoring.disabled();
     final isPaginated = settings.layoutMode == ReaderLayoutMode.paginated;
     final totalChapters = manifest.value?.spine.length ?? 0;
     final sectionProgress =
@@ -305,6 +315,8 @@ class ReaderWorkspace extends HookConsumerWidget {
           bookId: bookId,
           defaults: readingSettings,
           readingOverride: override,
+          textColoringSettings: textColoring.settings,
+          textColoringOverride: textColoringOverride.value,
         ),
       );
       if (result == null || !context.mounted) return;
@@ -314,7 +326,38 @@ class ReaderWorkspace extends HookConsumerWidget {
       } else {
         await repository.saveBookOverride(result.bookOverride!);
       }
+      await ref
+          .read(textColoringControllerProvider)
+          .saveBookOverride(bookId, result.textColoringOverride);
       ref.invalidate(bookReadingOverrideProvider(bookId));
+    }
+
+    Future<void> addTextColorTerm(ReaderTextSelection selection) async {
+      final draft = await showDialog<TextColorTermDraft>(
+        context: context,
+        builder: (context) => TextColorTermChoiceDialog(
+          text: selection.text,
+          settings: textColoring.settings,
+        ),
+      );
+      if (draft == null || !context.mounted) return;
+      try {
+        await ref
+            .read(textColoringControllerProvider)
+            .assignTerm(
+              term: selection.text,
+              tone: draft.tone,
+              bookId: draft.global ? null : bookId,
+            );
+        if (selectedText.value?.locator == selection.locator) {
+          selectedText.value = null;
+        }
+      } on TextColoringException catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
     }
 
     Future<void> saveAnnotation(
@@ -415,6 +458,14 @@ class ReaderWorkspace extends HookConsumerWidget {
               title: Text('添加笔记'),
             ),
           ),
+          PopupMenuItem(
+            value: _SelectionContextAction.textColor,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.format_color_text_outlined),
+              title: Text('添加文字颜色'),
+            ),
+          ),
           PopupMenuDivider(),
           PopupMenuItem(
             value: _SelectionContextAction.askAi,
@@ -454,6 +505,8 @@ class ReaderWorkspace extends HookConsumerWidget {
           await saveAnnotation(menu.selection, AnnotationColor.pink);
         case _SelectionContextAction.note:
           await createAnnotation(menu.selection);
+        case _SelectionContextAction.textColor:
+          await addTextColorTerm(menu.selection);
         case _SelectionContextAction.askAi:
           openAiWithSelection(menu.selection, '关于这段文字，我想问：');
         case _SelectionContextAction.explainAi:
@@ -765,6 +818,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                             )
                           : _ReaderArticle(
                               settings: settings,
+                              textColoring: textColoring,
                               chapter: chapter.value,
                               error: chapter.error,
                               bookId: readerBook.value == null ? null : bookId,
@@ -1574,6 +1628,7 @@ class _ReaderBottomSheet extends StatelessWidget {
 class _ReaderArticle extends StatelessWidget {
   const _ReaderArticle({
     required this.settings,
+    required this.textColoring,
     required this.chapter,
     required this.error,
     required this.bookId,
@@ -1599,6 +1654,7 @@ class _ReaderArticle extends StatelessWidget {
   });
 
   final ReadingSettings settings;
+  final ResolvedTextColoring textColoring;
   final ReaderChapter? chapter;
   final Object? error;
   final String? bookId;
@@ -1643,6 +1699,7 @@ class _ReaderArticle extends StatelessWidget {
           bookId: bookId!,
           href: chapter!.href,
           settings: settings,
+          textColoring: textColoring,
           initialScrollRatio: initialScrollRatio,
           initialAnchor: initialAnchor,
           initialCfi: initialCfi,
@@ -2300,28 +2357,46 @@ class _ReaderProgressSliderState extends State<_ReaderProgressSlider> {
 }
 
 class _BookSettingsResult {
-  const _BookSettingsResult(this.bookOverride);
+  const _BookSettingsResult({
+    required this.bookOverride,
+    required this.textColoringOverride,
+  });
 
   final BookReadingOverride? bookOverride;
+  final bool? textColoringOverride;
 }
+
+enum _BookTextColoringMode { followGlobal, enabled, disabled }
 
 class _BookReadingSettingsDialog extends HookWidget {
   const _BookReadingSettingsDialog({
     required this.bookId,
     required this.defaults,
     required this.readingOverride,
+    required this.textColoringSettings,
+    required this.textColoringOverride,
   });
 
   final String bookId;
   final ReadingSettings defaults;
   final BookReadingOverride? readingOverride;
+  final TextColoringSettings textColoringSettings;
+  final bool? textColoringOverride;
 
   @override
   Widget build(BuildContext context) {
     final useOverride = useState(readingOverride != null);
     final settings = useState(readingOverride?.settings ?? defaults);
+    final textColoringMode = useState(
+      switch (textColoringOverride) {
+        true => _BookTextColoringMode.enabled,
+        false => _BookTextColoringMode.disabled,
+        null => _BookTextColoringMode.followGlobal,
+      },
+    );
     return AlertDialog(
       title: const Text('本书阅读设置'),
+      scrollable: true,
       content: SizedBox(
         width: 420,
         child: Column(
@@ -2467,6 +2542,52 @@ class _BookReadingSettingsDialog extends HookWidget {
                 subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
               ),
             ],
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '文本前景色',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<_BookTextColoringMode>(
+              segments: const [
+                ButtonSegment(
+                  value: _BookTextColoringMode.followGlobal,
+                  label: Text('跟随全局'),
+                ),
+                ButtonSegment(
+                  value: _BookTextColoringMode.enabled,
+                  label: Text('开启'),
+                ),
+                ButtonSegment(
+                  value: _BookTextColoringMode.disabled,
+                  label: Text('关闭'),
+                ),
+              ],
+              selected: {textColoringMode.value},
+              onSelectionChanged: (value) =>
+                  textColoringMode.value = value.first,
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (context) => TextColorTermsManagerDialog(
+                    settings: textColoringSettings,
+                    title: '本书文字词条',
+                    bookId: bookId,
+                  ),
+                ),
+                icon: const Icon(Icons.format_color_text_outlined),
+                label: const Text('管理本书词条'),
+              ),
+            ),
           ],
         ),
       ),
@@ -2479,12 +2600,17 @@ class _BookReadingSettingsDialog extends HookWidget {
           onPressed: () => Navigator.pop(
             context,
             _BookSettingsResult(
-              useOverride.value
+              bookOverride: useOverride.value
                   ? BookReadingOverride(
                       bookId: bookId,
                       settings: settings.value,
                     )
                   : null,
+              textColoringOverride: switch (textColoringMode.value) {
+                _BookTextColoringMode.followGlobal => null,
+                _BookTextColoringMode.enabled => true,
+                _BookTextColoringMode.disabled => false,
+              },
             ),
           ),
           child: const Text('保存'),

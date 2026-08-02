@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '24'
+const runtimeVersion = '26'
 const stage = document.getElementById('reader-stage')
 
 let session
@@ -10,6 +10,7 @@ let paginator
 let annotations = []
 let focusedAnnotationId
 let searchQuery = ''
+let textColoring = { enabled: false, tokens: [], colors: {}, terms: [] }
 let pageTransition = 'slide'
 let tapNavigationEnabled = false
 let readingDirection = 'ltr'
@@ -239,6 +240,155 @@ const applySearchHighlights = doc => {
   style.textContent = '::highlight(tomoread-search) { background: #ffb74d99; }'
 }
 
+const textColorHighlightPrefix = 'tomoread-text-color-'
+
+const clearTextColoring = doc => {
+  const highlights = doc.defaultView.CSS?.highlights
+  if (highlights) {
+    for (const name of [...highlights.keys()]) {
+      if (name.startsWith(textColorHighlightPrefix)) highlights.delete(name)
+    }
+  }
+  const style = doc.getElementById('tomoread-runtime-text-coloring')
+  if (style) style.textContent = ''
+}
+
+const textNodeIsColorable = node => {
+  const element = node.parentElement
+  if (!element || !node.textContent?.trim()) return false
+  if (element.closest('script, style, code, pre, textarea, input, select, option')) return false
+  if (element.closest('[hidden], [aria-hidden="true"]')) return false
+  return element.getClientRects().length > 0
+}
+
+const semanticColorRules = enabledTokens => {
+  const rules = []
+  if (enabledTokens.has('quoted')) {
+    rules.push({
+      key: 'token-quoted',
+      regex: /“[^”\n]+”|‘[^’\n]+’|「[^」\n]+」|『[^』\n]+』|"[^"\n]+"/gu,
+      inset: 1,
+    })
+  }
+  if (enabledTokens.has('bracketed')) {
+    rules.push({
+      key: 'token-bracketed',
+      regex: /（[^）\n]+）|\([^()\n]+\)|【[^】\n]+】|\[[^\]\n]+\]/gu,
+      inset: 1,
+    })
+  }
+  if (enabledTokens.has('latin')) {
+    rules.push({
+      key: 'token-latin',
+      regex: /[A-Za-z]+(?:['’\-][A-Za-z]+)*/gu,
+      inset: 0,
+    })
+  }
+  if (enabledTokens.has('number')) {
+    rules.push({
+      key: 'token-number',
+      regex: /\p{N}+(?:[.,]\p{N}+)*/gu,
+      inset: 0,
+    })
+  }
+  if (enabledTokens.has('punctuation')) {
+    rules.push({
+      key: 'token-punctuation',
+      regex: /[\p{P}\p{S}]/gu,
+      inset: 0,
+    })
+  }
+  return rules
+}
+
+const applyTextColoring = doc => {
+  clearTextColoring(doc)
+  const highlights = doc.defaultView.CSS?.highlights
+  const Highlight = doc.defaultView.Highlight
+  if (!textColoring.enabled || !highlights || !Highlight) return
+
+  const configuredColors = Object.entries(textColoring.colors ?? {})
+    .filter(([key, value]) => /^[a-z0-9-]+$/i.test(key)
+      && /^#[0-9a-f]{6}$/i.test(String(value)))
+  if (!configuredColors.length) return
+  const colors = new Map(configuredColors)
+  const groups = new Map(
+    configuredColors.map(([key]) => [key, new Highlight()]),
+  )
+  let style = doc.getElementById('tomoread-runtime-text-coloring')
+  if (!style) {
+    style = doc.createElement('style')
+    style.id = 'tomoread-runtime-text-coloring'
+    doc.head.append(style)
+  }
+  style.textContent = configuredColors
+    .map(([key, value]) => `::highlight(${textColorHighlightPrefix}${key}) { color: ${value}; }`)
+    .join('\n')
+
+  const terms = [...(textColoring.terms ?? [])]
+    .filter(term => typeof term?.text === 'string'
+      && term.text.length > 0
+      && Array.from(term.text).length <= 100
+      && colors.has(term.colorKey))
+    .sort((a, b) => Array.from(b.text).length - Array.from(a.text).length
+      || (a.scope === b.scope ? 0 : a.scope === 'book' ? -1 : 1))
+    .map(term => ({
+      key: term.colorKey,
+      regex: new RegExp(
+        term.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        'giu',
+      ),
+    }))
+  const enabledTokens = new Set(textColoring.tokens ?? [])
+  const tokenRules = semanticColorRules(enabledTokens)
+  const nodeFilter = doc.defaultView.NodeFilter ?? NodeFilter
+  const walker = doc.createTreeWalker(
+    doc.body,
+    nodeFilter.SHOW_TEXT,
+    {
+      acceptNode: node => textNodeIsColorable(node)
+        ? nodeFilter.FILTER_ACCEPT
+        : nodeFilter.FILTER_REJECT,
+    },
+  )
+  let node
+  while (node = walker.nextNode()) {
+    const source = node.textContent
+    const occupied = []
+    const addRange = (key, start, end) => {
+      if (!colors.has(key) || start < 0 || end <= start || end > source.length) return
+      if (occupied.some(range => start < range.end && end > range.start)) return
+      const range = doc.createRange()
+      range.setStart(node, start)
+      range.setEnd(node, end)
+      groups.get(key).add(range)
+      occupied.push({ start, end })
+    }
+
+    for (const term of terms) {
+      term.regex.lastIndex = 0
+      let match
+      while (match = term.regex.exec(source)) {
+        addRange(term.key, match.index, match.index + match[0].length)
+      }
+    }
+    for (const rule of tokenRules) {
+      rule.regex.lastIndex = 0
+      let match
+      while (match = rule.regex.exec(source)) {
+        addRange(
+          rule.key,
+          match.index + rule.inset,
+          match.index + match[0].length - rule.inset,
+        )
+      }
+    }
+  }
+  for (const [key, ranges] of groups) {
+    highlights.set(`${textColorHighlightPrefix}${key}`, ranges)
+  }
+}
+
 const readSelection = (doc, index) => {
   const selection = doc.getSelection()
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null
@@ -396,6 +546,7 @@ const reportPaginatorPosition = async ({
 const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   applyAnnotations(doc, index)
   applySearchHighlights(doc)
+  applyTextColoring(doc)
   applySelectionListener(doc, index)
   // A section can emit more than one `load` event while Foliate rebuilds its
   // views. Registering click handlers each time sends duplicate page commands.
@@ -631,6 +782,18 @@ const setSearchQuery = nextQuery => {
   for (const { doc } of paginator?.getContents?.() ?? []) applySearchHighlights(doc)
 }
 
+const setTextColoring = nextTextColoring => {
+  textColoring = nextTextColoring ?? {
+    enabled: false,
+    tokens: [],
+    colors: {},
+    terms: [],
+  }
+  for (const { doc } of paginator?.getContents?.() ?? []) {
+    applyTextColoring(doc)
+  }
+}
+
 window.TomoReadEpubRuntime = Object.freeze({
   runtimeVersion,
   loadManifest,
@@ -641,6 +804,7 @@ window.TomoReadEpubRuntime = Object.freeze({
   command: executeCommand,
   setAnnotations,
   setSearchQuery,
+  setTextColoring,
   setSettings: applySettings,
   postMessage,
 })
