@@ -10,17 +10,20 @@ class AppDatabase {
     DatabaseFactory? databaseFactory,
     Future<String> Function()? pathProvider,
   }) : _databaseFactory = databaseFactory ?? _platformDatabaseFactory,
-       _pathProvider = pathProvider ?? _defaultPath;
+       _pathProvider = pathProvider ?? _defaultPath,
+       _singleInstance = true;
 
   AppDatabase.inMemory()
     : _databaseFactory = databaseFactoryFfi,
-      _pathProvider = (() async => inMemoryDatabasePath);
+      _pathProvider = (() async => inMemoryDatabasePath),
+      _singleInstance = false;
 
   final DatabaseFactory _databaseFactory;
   final Future<String> Function() _pathProvider;
+  final bool _singleInstance;
   Future<Database>? _database;
 
-  static const schemaVersion = 21;
+  static const schemaVersion = 22;
 
   Future<Database> get database => _database ??= _open();
 
@@ -196,6 +199,7 @@ class AppDatabase {
       databasePath,
       options: OpenDatabaseOptions(
         version: schemaVersion,
+        singleInstance: _singleInstance,
         onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
         onCreate: (database, version) => _createSchema(database),
         onUpgrade: (database, oldVersion, newVersion) async {
@@ -259,6 +263,9 @@ class AppDatabase {
           if (oldVersion < 21) {
             await _upgradeToVersion21(database);
           }
+          if (oldVersion < 22) {
+            await _upgradeToVersion22(database);
+          }
         },
       ),
     );
@@ -276,7 +283,9 @@ class AppDatabase {
     await database.execute('''
             CREATE TABLE app_settings (
               setting_key TEXT PRIMARY KEY,
-              setting_value TEXT NOT NULL
+              setting_value TEXT NOT NULL,
+              updated_at INTEGER NOT NULL DEFAULT 0,
+              sync_revision INTEGER NOT NULL DEFAULT 1
             )
           ''');
     await database.execute('''
@@ -299,7 +308,8 @@ class AppDatabase {
               tags_json TEXT NOT NULL DEFAULT '[]',
               is_favorite INTEGER NOT NULL DEFAULT 0,
               created_at INTEGER NOT NULL,
-              updated_at INTEGER NOT NULL
+              updated_at INTEGER NOT NULL,
+              sync_revision INTEGER NOT NULL DEFAULT 1
             )
           ''');
     await _createBooksIndexes(database);
@@ -314,7 +324,8 @@ class AppDatabase {
               layout_mode TEXT NOT NULL DEFAULT 'scroll',
               page_transition TEXT NOT NULL DEFAULT 'slide',
               tap_to_turn_pages INTEGER NOT NULL DEFAULT 0,
-              updated_at INTEGER NOT NULL
+              updated_at INTEGER NOT NULL,
+              sync_revision INTEGER NOT NULL DEFAULT 1
             )
           ''');
     await database.execute('''
@@ -325,6 +336,8 @@ class AppDatabase {
               chapter_title TEXT NOT NULL,
               label TEXT,
               created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL DEFAULT 0,
+              sync_revision INTEGER NOT NULL DEFAULT 1,
               UNIQUE(book_id, locator)
             )
           ''');
@@ -351,6 +364,7 @@ class AppDatabase {
     await _createTextProjectionTables(database);
     await _createContentChunkTables(database);
     await _createVisualArtifactTables(database);
+    await _createSyncTables(database);
   }
 
   Future<void> _upgradeToVersion2(Database database) async {
@@ -579,6 +593,162 @@ class AppDatabase {
   Future<void> _upgradeToVersion21(Database database) =>
       _createVisualArtifactTables(database);
 
+  Future<void> _upgradeToVersion22(Database database) async {
+    final tableRows = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    final tables = tableRows
+        .map((row) => row['name'])
+        .whereType<String>()
+        .toSet();
+    for (final column in const [
+      ('books', 'sync_revision', 'INTEGER NOT NULL DEFAULT 1'),
+      ('bookmarks', 'updated_at', 'INTEGER NOT NULL DEFAULT 0'),
+      ('bookmarks', 'sync_revision', 'INTEGER NOT NULL DEFAULT 1'),
+      ('reading_annotations', 'sync_revision', 'INTEGER NOT NULL DEFAULT 1'),
+      ('annotation_tags', 'updated_at', 'INTEGER NOT NULL DEFAULT 0'),
+      ('annotation_tags', 'sync_revision', 'INTEGER NOT NULL DEFAULT 1'),
+      ('app_settings', 'updated_at', 'INTEGER NOT NULL DEFAULT 0'),
+      ('app_settings', 'sync_revision', 'INTEGER NOT NULL DEFAULT 1'),
+      ('book_reading_overrides', 'sync_revision', 'INTEGER NOT NULL DEFAULT 1'),
+      ('text_display_rules', 'sync_revision', 'INTEGER NOT NULL DEFAULT 1'),
+      (
+        'book_text_projection_settings',
+        'sync_revision',
+        'INTEGER NOT NULL DEFAULT 1',
+      ),
+      ('chat_threads', 'sync_revision', 'INTEGER NOT NULL DEFAULT 1'),
+      ('chat_messages', 'updated_at', 'INTEGER NOT NULL DEFAULT 0'),
+      ('chat_messages', 'sync_revision', 'INTEGER NOT NULL DEFAULT 1'),
+      ('imported_fonts', 'updated_at', 'INTEGER NOT NULL DEFAULT 0'),
+      ('imported_fonts', 'sync_revision', 'INTEGER NOT NULL DEFAULT 1'),
+    ]) {
+      if (!tables.contains(column.$1)) continue;
+      await _addColumnIfMissing(
+        database,
+        table: column.$1,
+        column: column.$2,
+        definition: column.$3,
+      );
+    }
+    if (tables.contains('bookmarks')) {
+      await database.execute(
+        'UPDATE bookmarks SET updated_at = created_at WHERE updated_at = 0',
+      );
+    }
+    if (tables.contains('annotation_tags')) {
+      await database.execute(
+        'UPDATE annotation_tags SET updated_at = created_at WHERE updated_at = 0',
+      );
+    }
+    if (tables.contains('chat_messages')) {
+      await database.execute('''
+        UPDATE chat_messages
+        SET updated_at = COALESCE(completed_at, created_at)
+        WHERE updated_at = 0
+      ''');
+    }
+    if (tables.contains('imported_fonts')) {
+      await database.execute(
+        'UPDATE imported_fonts SET updated_at = created_at WHERE updated_at = 0',
+      );
+    }
+    await _createSyncTables(database);
+  }
+
+  Future<void> _createSyncTables(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS sync_devices (
+        id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        last_seen_at INTEGER NOT NULL
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS sync_records (
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        device_id TEXT NOT NULL,
+        operation TEXT NOT NULL CHECK(operation IN ('upsert', 'delete')),
+        payload_json TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        PRIMARY KEY(entity_type, entity_id),
+        CHECK(revision > 0)
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS sync_changes (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        modified_at INTEGER NOT NULL,
+        device_id TEXT NOT NULL,
+        operation TEXT NOT NULL CHECK(operation IN ('upsert', 'delete')),
+        payload_hash TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        UNIQUE(entity_type, entity_id, revision, device_id, payload_hash)
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS sync_changes_sequence
+      ON sync_changes(sequence)
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS sync_tombstones (
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        deleted_at INTEGER NOT NULL,
+        device_id TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        purge_after INTEGER NOT NULL,
+        acknowledged_devices_json TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY(entity_type, entity_id),
+        CHECK(revision > 0)
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS sync_tombstones_purge
+      ON sync_tombstones(purge_after)
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS sync_conflicts (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        field_names_json TEXT NOT NULL,
+        local_payload_json TEXT NOT NULL,
+        incoming_payload_json TEXT NOT NULL,
+        local_revision INTEGER NOT NULL,
+        incoming_revision INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        resolved_at INTEGER,
+        resolution_payload_json TEXT
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS sync_conflicts_pending
+      ON sync_conflicts(resolved_at, created_at)
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS sync_state (
+        backend_id TEXT NOT NULL,
+        remote_id TEXT NOT NULL,
+        cursor TEXT,
+        last_success_at INTEGER,
+        last_summary_json TEXT,
+        error_code TEXT,
+        credential_ref TEXT,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(backend_id, remote_id)
+      )
+    ''');
+  }
+
   Future<void> _createVisualArtifactTables(Database database) async {
     await database.execute('''
       CREATE TABLE IF NOT EXISTS visual_artifacts (
@@ -671,6 +841,7 @@ class AppDatabase {
         priority INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
+        sync_revision INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE,
         CHECK(length(find_text) BETWEEN 1 AND 200),
         CHECK(length(replace_text) <= 200)
@@ -685,6 +856,7 @@ class AppDatabase {
         book_id TEXT PRIMARY KEY,
         settings_json TEXT NOT NULL,
         updated_at INTEGER NOT NULL,
+        sync_revision INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
       )
     ''');
@@ -701,7 +873,9 @@ class AppDatabase {
         format TEXT NOT NULL CHECK(format IN ('ttf', 'otf', 'woff', 'woff2')),
         source TEXT NOT NULL,
         license_label TEXT,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL DEFAULT 0,
+        sync_revision INTEGER NOT NULL DEFAULT 1
       )
     ''');
     await database.execute('''
@@ -732,6 +906,7 @@ class AppDatabase {
         render_style TEXT NOT NULL DEFAULT 'highlight',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
+        sync_revision INTEGER NOT NULL DEFAULT 1,
         chapter_index INTEGER,
         chapter_title TEXT,
         FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
@@ -755,6 +930,8 @@ class AppDatabase {
         normalized_tag TEXT NOT NULL,
         display_tag TEXT NOT NULL,
         created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL DEFAULT 0,
+        sync_revision INTEGER NOT NULL DEFAULT 1,
         PRIMARY KEY(annotation_id, normalized_tag),
         FOREIGN KEY(annotation_id) REFERENCES reading_annotations(id) ON DELETE CASCADE
       )
@@ -795,6 +972,7 @@ class AppDatabase {
         title TEXT NOT NULL DEFAULT '',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
+        sync_revision INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE SET NULL
       )
     ''');
@@ -818,6 +996,8 @@ class AppDatabase {
         stop_reason TEXT,
         created_at INTEGER NOT NULL,
         completed_at INTEGER,
+        updated_at INTEGER NOT NULL DEFAULT 0,
+        sync_revision INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY(thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
       )
     ''');
