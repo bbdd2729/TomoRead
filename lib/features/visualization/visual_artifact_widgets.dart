@@ -210,6 +210,7 @@ class MindMapView extends StatelessWidget {
 
 class _MindMapNodeBranch extends StatefulWidget {
   const _MindMapNodeBranch({
+    super.key,
     required this.node,
     required this.depth,
     this.onOpenCitation,

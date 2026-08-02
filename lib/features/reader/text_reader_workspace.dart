@@ -9,7 +9,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/services/text_decoder_service.dart';
 import '../../data/services/content_chunk_service.dart';
-import '../../domain/models/pomodoro.dart';
 import '../../domain/models/display_projection.dart';
 import '../../domain/models/content_chunk.dart';
 import '../../domain/models/chat_models.dart';

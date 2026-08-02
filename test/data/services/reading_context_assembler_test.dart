@@ -4,7 +4,6 @@ import 'package:tomoread/data/repositories/annotation_repository.dart';
 import 'package:tomoread/data/repositories/content_chunk_repository.dart';
 import 'package:tomoread/data/services/reading_context_assembler.dart';
 import 'package:tomoread/domain/models/content_chunk.dart';
-import 'package:tomoread/domain/models/reading_context.dart';
 
 void main() {
   test('assembles budgeted context without future chapter spoilers', () async {
