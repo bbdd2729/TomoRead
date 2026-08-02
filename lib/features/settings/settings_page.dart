@@ -44,7 +44,7 @@ class SettingsPage extends HookConsumerWidget {
         textColoringLoading: textColoringState.isLoading,
         onTextColoringChanged: (value) => ref
             .read(textColoringSettingsProvider.notifier)
-            .update(value),
+            .saveSettings(value),
       ),
     };
 

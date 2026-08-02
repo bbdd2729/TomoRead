@@ -14,6 +14,7 @@ EPUB 首版已完成以下闭环：
 - SQLite v12 持久化、同范围重复词条更新、全局 500 条/单书 300 条和单条 100 字符限制；
 - Foliate.js 章节 iframe 内使用 `Range` + CSS Custom Highlight API 渲染，词条优先于语义 token，单书词条在同长度冲突时优先于全局词条；
 - 与背景标注、搜索高亮、CFI/locator 和原始 EPUB DOM 隔离；运行环境不支持 Custom Highlight 时静默降级。
+- `TextColoringSettingsNotifier` 的持久化命令命名为 `saveSettings`，不得命名为 `update`，以避免覆盖 Riverpod `AsyncNotifier.update` 的框架方法。
 
 当前限制：仅支持 EPUB；词条、引号和括号只在单个 `Text` 节点内匹配，不跨内联标签或段落；词条管理首版只提供查看和删除，改色可通过重新选择同一词条并保存完成；尚无搜索、批量操作、导入导出与 PDF 渲染；规范化目前包含首尾裁剪、连续空白折叠和大小写归一，Unicode NFC 归一化留待后续补齐；上限词条集的异步取消与性能基线尚未完成。
 

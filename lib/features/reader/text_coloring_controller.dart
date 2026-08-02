@@ -26,7 +26,7 @@ class TextColoringSettingsNotifier
   Future<TextColoringSettings> build() =>
       ref.watch(textColoringRepositoryProvider).loadSettings();
 
-  Future<void> update(TextColoringSettings settings) async {
+  Future<void> saveSettings(TextColoringSettings settings) async {
     final previous = state;
     state = AsyncData(settings);
     try {
@@ -38,7 +38,7 @@ class TextColoringSettingsNotifier
     }
   }
 
-  Future<void> restoreDefaults() => update(TextColoringSettings.defaults());
+  Future<void> restoreDefaults() => saveSettings(TextColoringSettings.defaults());
 }
 
 final bookTextColoringOverrideProvider = FutureProvider.autoDispose
