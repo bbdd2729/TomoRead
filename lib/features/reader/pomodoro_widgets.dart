@@ -6,9 +6,14 @@ import '../../domain/models/pomodoro.dart';
 import 'pomodoro_controller.dart';
 
 class PomodoroToolbarButton extends ConsumerWidget {
-  const PomodoroToolbarButton({super.key, required this.bookId});
+  const PomodoroToolbarButton({
+    super.key,
+    required this.bookId,
+    this.onOpen,
+  });
 
   final String bookId;
+  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -16,10 +21,13 @@ class PomodoroToolbarButton extends ConsumerWidget {
     final value = timer.value;
     return TextButton.icon(
       key: const Key('reader-pomodoro'),
-      onPressed: () => showDialog<void>(
-        context: context,
-        builder: (context) => PomodoroDialog(bookId: bookId),
-      ),
+      onPressed: () {
+        onOpen?.call();
+        showDialog<void>(
+          context: context,
+          builder: (context) => PomodoroDialog(bookId: bookId),
+        );
+      },
       icon: Icon(value?.isRunning == true ? Icons.timer : Icons.timer_outlined),
       label: Text(
         value == null || value.isIdle

@@ -1,7 +1,7 @@
 import './foliate-paginator.js'
 import * as CFI from './epubcfi.js'
 
-const runtimeVersion = '28'
+const runtimeVersion = '29'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
@@ -26,6 +26,10 @@ let nextCommandId = 1
 let interactionOverlay
 let interactionOverlayKeyHandler
 let navigationBackButton
+let autoScrollFrame
+let autoScrollStartedAt = 0
+let autoScrollAppliedDistance = 0
+let autoScrollOptions
 const navigationHistory = []
 
 const postMessage = message => {
@@ -38,6 +42,73 @@ const postMessage = message => {
     window.TomoRead.postMessage(JSON.stringify(payload))
   }
 }
+
+const stopAutoScroll = (reason = 'explicit') => {
+  if (autoScrollFrame == null && !autoScrollOptions) return
+  if (autoScrollFrame != null) cancelAnimationFrame(autoScrollFrame)
+  autoScrollFrame = undefined
+  autoScrollOptions = undefined
+  autoScrollAppliedDistance = 0
+  postMessage({ type: 'autoScrollChanged', active: false, reason })
+}
+
+const activeScrollDocument = () => (paginator?.getContents?.() ?? [])
+  .find(content => content.index === currentSectionIndex)?.doc
+
+const autoScrollPixelsPerSecond = () => {
+  const doc = activeScrollDocument()
+  const viewport = doc?.defaultView?.innerHeight ?? window.innerHeight
+  if (autoScrollOptions?.unit === 'screensPerMinute') {
+    return viewport * autoScrollOptions.speed / 60
+  }
+  const rootStyle = doc?.defaultView?.getComputedStyle(doc.documentElement)
+  const fontSize = Number.parseFloat(rootStyle?.fontSize) || 16
+  const lineHeight = Number.parseFloat(rootStyle?.lineHeight) || fontSize * 1.6
+  return lineHeight * autoScrollOptions.speed / 60
+}
+
+const startAutoScroll = options => {
+  stopAutoScroll('restart')
+  if (!paginator || paginator.getAttribute('flow') !== 'scrolled') {
+    postMessage({ type: 'autoScrollChanged', active: false, reason: 'layoutUnavailable' })
+    return
+  }
+  const speed = Number(options?.speed)
+  autoScrollOptions = {
+    unit: options?.unit === 'screensPerMinute' ? 'screensPerMinute' : 'linesPerMinute',
+    speed: Number.isFinite(speed) ? Math.max(.1, Math.min(240, speed)) : 30,
+  }
+  autoScrollStartedAt = performance.now()
+  autoScrollAppliedDistance = 0
+  const tick = timestamp => {
+    if (!autoScrollOptions || !paginator) return
+    if (currentSectionIndex >= getSections().length - 1 && currentRatio >= .999) {
+      stopAutoScroll('reachedEnd')
+      return
+    }
+    const targetDistance = autoScrollPixelsPerSecond()
+      * Math.max(0, timestamp - autoScrollStartedAt) / 1000
+    const delta = targetDistance - autoScrollAppliedDistance
+    if (delta > 0) paginator.scrollBy(delta, delta)
+    autoScrollAppliedDistance = targetDistance
+    autoScrollFrame = requestAnimationFrame(tick)
+  }
+  autoScrollFrame = requestAnimationFrame(tick)
+  postMessage({ type: 'autoScrollChanged', active: true })
+}
+
+const scrollByViewport = amount => {
+  if (!paginator || paginator.getAttribute('flow') !== 'scrolled') return
+  const doc = activeScrollDocument()
+  const viewport = doc?.defaultView?.innerHeight ?? window.innerHeight
+  const delta = viewport * Math.max(-1, Math.min(1, Number(amount) || 0))
+  paginator.scrollBy(delta, delta)
+}
+
+window.addEventListener('blur', () => stopAutoScroll('windowBlur'))
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') stopAutoScroll('visibility')
+})
 
 const loadManifest = async () => {
   const response = await fetch('./manifest.json')
@@ -60,6 +131,9 @@ const applySettings = settings => {
   tapNavigationEnabled = settings.tapNavigationEnabled === true
   readingDirection = settings.direction === 'rtl' ? 'rtl' : 'ltr'
   paginator.setAttribute('flow', settings.flow ?? 'paginated')
+  if (paginator.getAttribute('flow') !== 'scrolled') {
+    stopAutoScroll('layoutUnavailable')
+  }
   paginator.setAttribute('max-column-count', String(settings.columnCount ?? 1))
   paginator.setAttribute('max-inline-size', `${settings.maxInlineSize ?? 760}px`)
   paginator.setAttribute('margin', `${settings.margin ?? 32}px`)
@@ -913,6 +987,10 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   let wheelDelta = 0
   let wheelResetTimer
   let wheelNavigationPending = false
+  doc.addEventListener('pointerdown', () => stopAutoScroll('pointer'))
+  doc.addEventListener('selectionchange', () => {
+    if (!doc.getSelection()?.isCollapsed) stopAutoScroll('selection')
+  })
   doc.addEventListener('click', event => {
     const link = event.target.closest?.('a[href]')
     if (link) {
@@ -978,6 +1056,7 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     void command.finally(() => { tapNavigationPending = false })
   })
   doc.addEventListener('wheel', event => {
+    stopAutoScroll('wheel')
     if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
     event.preventDefault()
     if (paginator?.getAttribute('flow') === 'scrolled') {
@@ -1103,16 +1182,30 @@ const executeCommand = command => {
           postMessage({ type: 'runtimeOpened', runtimeVersion })
           break
         case 'goToLocation':
+          stopAutoScroll('navigation')
           await goToHrefUnsafe(payload.href, payload.ratio, payload.anchor, payload.cfi)
           break
         case 'nextPage':
+          stopAutoScroll('navigation')
           await turnUnsafe('next')
           break
         case 'previousPage':
+          stopAutoScroll('navigation')
           await turnUnsafe('previous')
           break
         case 'goToPage':
+          stopAutoScroll('navigation')
           await goToPageUnsafe(payload.pageIndex)
+          break
+        case 'scrollBy':
+          stopAutoScroll('navigation')
+          scrollByViewport(payload.amount)
+          break
+        case 'startAutoScroll':
+          startAutoScroll(payload)
+          break
+        case 'stopAutoScroll':
+          stopAutoScroll('explicit')
           break
         case 'setSettings':
           applySettings(payload.settings)

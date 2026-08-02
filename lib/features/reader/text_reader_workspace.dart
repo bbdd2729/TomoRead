@@ -8,6 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/services/text_decoder_service.dart';
 import '../../data/services/content_chunk_service.dart';
+import '../../domain/models/bookmark.dart';
 import '../../domain/models/display_projection.dart';
 import '../../domain/models/document_locator.dart';
 import '../../domain/models/content_chunk.dart';
@@ -16,12 +17,16 @@ import '../../domain/models/reading_context.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_position_metrics.dart';
 import '../../domain/models/reading_settings.dart';
+import '../../domain/models/reader_commands.dart';
 import '../../domain/models/text_chapter.dart';
 import '../../domain/models/text_coloring.dart';
 import '../../domain/models/text_coloring_layout.dart';
 import '../../domain/models/visual_artifact.dart';
 import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
+import 'reader_auto_scroll.dart';
+import 'reader_command_controller.dart';
+import 'reader_command_shortcuts.dart';
 import 'content_search_dialog.dart';
 import 'text_coloring_controller.dart';
 import 'text_coloring_text.dart';
@@ -54,6 +59,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final documentState = ref.watch(textBookDocumentProvider(bookId));
+    final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
     final contentIndexState = ref.watch(contentIndexStateProvider(bookId));
     final readingOverride = ref.watch(bookReadingOverrideProvider(bookId)).value;
     final settings = readingOverride?.settings ?? readingSettings;
@@ -70,6 +76,14 @@ class TextReaderWorkspace extends HookConsumerWidget {
     final textColoringOverride = ref.watch(
       bookTextColoringOverrideProvider(bookId),
     );
+    final readerCommandState = ref.watch(readerCommandSettingsProvider);
+    final defaultReaderCommands = useMemoized(ReaderCommandSettings.defaults);
+    final readerCommands = readerCommandState.value ?? defaultReaderCommands;
+    final autoScrollController = useMemoized(
+      () => ReaderAutoScrollController(preference: readerCommands.autoScroll),
+    );
+    useListenable(autoScrollController);
+    final focusMode = useState(false);
     final disabledTextColoring = useMemoized(ResolvedTextColoring.disabled);
     final textColoring = textColoringState.value ?? disabledTextColoring;
     final selectedColorText = useState<String?>(null);
@@ -144,6 +158,14 @@ class TextReaderWorkspace extends HookConsumerWidget {
       () => () => unawaited(coloringLayoutJob.cancel()),
       [coloringLayoutJob],
     );
+    useEffect(() {
+      autoScrollController.updatePreference(readerCommands.autoScroll);
+      return null;
+    }, [autoScrollController, readerCommands.autoScroll]);
+    useEffect(
+      () => autoScrollController.dispose,
+      [autoScrollController],
+    );
 
     useEffect(() {
       final current = document;
@@ -216,8 +238,19 @@ class TextReaderWorkspace extends HookConsumerWidget {
         (lifecycle == null || lifecycle == AppLifecycleState.resumed) &&
             !breakActive,
       );
+      if ((lifecycle != null && lifecycle != AppLifecycleState.resumed) ||
+          breakActive) {
+        autoScrollController.stop(AutoScrollStopReason.lifecycle);
+      }
       return null;
-    }, [lifecycle, breakActive]);
+    }, [lifecycle, breakActive, autoScrollController]);
+
+    useEffect(() {
+      if (settings.layoutMode != ReaderLayoutMode.scroll) {
+        autoScrollController.stop(AutoScrollStopReason.layoutUnavailable);
+      }
+      return null;
+    }, [settings.layoutMode, autoScrollController]);
 
     useEffect(() {
       final current = document;
@@ -274,6 +307,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
     ]);
 
     Future<void> selectChapter(int index) async {
+      autoScrollController.stop(AutoScrollStopReason.chapterChange);
       final current = document;
       if (current == null || index < 0 || index >= current.chapters.length) {
         return;
@@ -299,6 +333,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> openChapters(List<TextChapter> chapters) async {
+      autoScrollController.stop(AutoScrollStopReason.dialog);
       final selected = await showDialog<int>(
         context: context,
         builder: (context) => AlertDialog(
@@ -328,6 +363,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> changeEncoding() async {
+      autoScrollController.stop(AutoScrollStopReason.dialog);
       final profile = document?.profile;
       if (profile == null) return;
       final encoding = await showDialog<String>(
@@ -367,6 +403,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> editCurrentChapter() async {
+      autoScrollController.stop(AutoScrollStopReason.dialog);
       final current = document;
       if (current == null || current.chapters.isEmpty) return;
       final index = chapterIndex.value.clamp(
@@ -486,7 +523,39 @@ class TextReaderWorkspace extends HookConsumerWidget {
       }
     }
 
+    String? currentTextLocator() {
+      final chapter = activeChapter;
+      if (chapter == null) return null;
+      final offset = (chapter.rawStart +
+              (chapter.rawEnd - chapter.rawStart) * currentScrollRatio.value)
+          .round()
+          .clamp(chapter.rawStart, chapter.rawEnd)
+          .toInt();
+      return chapter.locator(start: offset, end: offset);
+    }
+
+    Future<void> toggleBookmark() async {
+      final locator = currentTextLocator();
+      final chapter = activeChapter;
+      if (locator == null || chapter == null) return;
+      final repository = ref.read(bookmarkRepositoryProvider);
+      final existing = (bookmarks.value ?? const <Bookmark>[])
+          .where((bookmark) => bookmark.locator == locator)
+          .firstOrNull;
+      if (existing == null) {
+        await repository.add(
+          bookId: bookId,
+          locator: locator,
+          chapterTitle: chapter.title,
+        );
+      } else {
+        await repository.remove(existing.id);
+      }
+      ref.invalidate(bookmarksForBookProvider(bookId));
+    }
+
     Future<void> searchIndexedContent() async {
+      autoScrollController.stop(AutoScrollStopReason.dialog);
       final chunk = await showDialog<ContentChunk>(
         context: context,
         builder: (context) => ContentSearchDialog(
@@ -526,6 +595,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> openReadingAssistant() async {
+      autoScrollController.stop(AutoScrollStopReason.dialog);
       final action = await showDialog<ReadingAssistantAction>(
         context: context,
         builder: (dialogContext) => SimpleDialog(
@@ -644,6 +714,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> openVisualization() async {
+      autoScrollController.stop(AutoScrollStopReason.dialog);
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => ReaderVisualizationDialog(
@@ -659,6 +730,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> addSelectedTextColor() async {
+      autoScrollController.stop(AutoScrollStopReason.selection);
       final selection = selectedColorText.value;
       if (selection == null || selection.trim().isEmpty) return;
       final draft = await showDialog<TextColorTermDraft>(
@@ -687,6 +759,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> openTextColoringSettings() async {
+      autoScrollController.stop(AutoScrollStopReason.dialog);
       final result = await showDialog<_TextColoringOverrideResult>(
         context: context,
         builder: (context) => _TextColoringBookDialog(
@@ -701,22 +774,164 @@ class TextReaderWorkspace extends HookConsumerWidget {
           .saveBookOverride(bookId, result.value);
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: '返回书库',
-          onPressed: onExitReader,
-          icon: const Icon(Icons.arrow_back),
+    Future<void> openProjectionSettings() async {
+      autoScrollController.stop(AutoScrollStopReason.dialog);
+      await showDialog<void>(
+        context: context,
+        builder: (context) => TextProjectionDialog(bookId: bookId),
+      );
+    }
+
+    void scrollByCommand(double direction) {
+      autoScrollController.stop(AutoScrollStopReason.userInput);
+      if (!scrollController.hasClients) return;
+      final position = scrollController.position;
+      final target = (scrollController.offset +
+              position.viewportDimension * 0.85 * direction)
+          .clamp(position.minScrollExtent, position.maxScrollExtent)
+          .toDouble();
+      unawaited(
+        scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
         ),
-        title: Text(title, overflow: TextOverflow.ellipsis),
-        actions: [
-          PomodoroToolbarButton(bookId: bookId),
+      );
+    }
+
+    Future<void> adjustFontSize(double delta) async {
+      autoScrollController.stop(AutoScrollStopReason.layoutUnavailable);
+      final size = (settings.fontSize + delta).clamp(14, 28).toDouble();
+      if (size == settings.fontSize) return;
+      await ref.read(settingsRepositoryProvider).saveBookOverride(
+        BookReadingOverride(
+          bookId: bookId,
+          settings: settings.copyWith(fontSize: size),
+        ),
+      );
+      ref.invalidate(bookReadingOverrideProvider(bookId));
+    }
+
+    Future<void> toggleTextColoring() async {
+      autoScrollController.stop(AutoScrollStopReason.layoutUnavailable);
+      await ref
+          .read(textColoringControllerProvider)
+          .saveBookOverride(bookId, !textColoring.enabled);
+    }
+
+    void togglePomodoro() {
+      final controller = ref.read(pomodoroControllerProvider.notifier);
+      if (pomodoro?.isRunning == true) {
+        unawaited(controller.pause());
+      } else {
+        unawaited(controller.startOrResume(bookId: bookId));
+      }
+    }
+
+    void toggleAutoScroll() {
+      if (settings.layoutMode != ReaderLayoutMode.scroll) return;
+      if (autoScrollController.active) {
+        autoScrollController.stop();
+      } else if (scrollController.hasClients) {
+        autoScrollController.start();
+      }
+    }
+
+    void toggleFocusMode() {
+      autoScrollController.stop(AutoScrollStopReason.layoutUnavailable);
+      focusMode.value = !focusMode.value;
+    }
+
+    final commandCallbacks = <ReaderCommand, VoidCallback>{
+      ReaderCommand.previousPage: () {
+        if (scrollController.hasClients && scrollController.offset > 1) {
+          scrollByCommand(-1);
+        } else if (chapterIndex.value > 0) {
+          unawaited(selectChapter(chapterIndex.value - 1));
+        }
+      },
+      ReaderCommand.nextPage: () {
+        final chapterCount = document?.chapters.length ?? 0;
+        if (scrollController.hasClients &&
+            scrollController.offset <
+                scrollController.position.maxScrollExtent - 1) {
+          scrollByCommand(1);
+        } else if (chapterIndex.value + 1 < chapterCount) {
+          unawaited(selectChapter(chapterIndex.value + 1));
+        }
+      },
+      ReaderCommand.scrollUp: () => scrollByCommand(-0.25),
+      ReaderCommand.scrollDown: () => scrollByCommand(0.25),
+      ReaderCommand.openTableOfContents: () {
+        final chapters = document?.chapters;
+        if (chapters != null) unawaited(openChapters(chapters));
+      },
+      ReaderCommand.toggleBookmark: () => unawaited(toggleBookmark()),
+      ReaderCommand.search: () => unawaited(searchIndexedContent()),
+      ReaderCommand.toggleFocusMode: toggleFocusMode,
+      ReaderCommand.increaseFontSize: () => unawaited(adjustFontSize(1)),
+      ReaderCommand.decreaseFontSize: () => unawaited(adjustFontSize(-1)),
+      ReaderCommand.toggleTextColoring: () => unawaited(toggleTextColoring()),
+      ReaderCommand.togglePomodoro: togglePomodoro,
+      ReaderCommand.toggleAutoScroll: toggleAutoScroll,
+    };
+
+    final scaffold = Scaffold(
+      appBar: focusMode.value
+          ? null
+          : AppBar(
+              leading: IconButton(
+                tooltip: '返回书库',
+                onPressed: onExitReader,
+                icon: const Icon(Icons.arrow_back),
+              ),
+              title: Text(title, overflow: TextOverflow.ellipsis),
+              actions: [
+          PomodoroToolbarButton(
+            bookId: bookId,
+            onOpen: () => autoScrollController.stop(
+              AutoScrollStopReason.dialog,
+            ),
+          ),
+          IconButton(
+            key: const Key('text-reader-auto-scroll'),
+            tooltip: settings.layoutMode == ReaderLayoutMode.scroll
+                ? autoScrollController.active
+                      ? '停止自动滚动'
+                      : '开始自动滚动'
+                : '自动滚动仅支持滚动布局',
+            onPressed: settings.layoutMode == ReaderLayoutMode.scroll
+                ? toggleAutoScroll
+                : null,
+            isSelected: autoScrollController.active,
+            icon: Icon(
+              autoScrollController.active
+                  ? Icons.pause_circle_outline
+                  : Icons.slow_motion_video_outlined,
+            ),
+          ),
           IconButton(
             tooltip: '章节目录',
             onPressed: document == null
                 ? null
                 : () => openChapters(document.chapters),
             icon: const Icon(Icons.format_list_bulleted),
+          ),
+          IconButton(
+            key: const Key('text-reader-bookmark'),
+            tooltip: (bookmarks.value ?? const <Bookmark>[]).any(
+              (bookmark) => bookmark.locator == currentTextLocator(),
+            )
+                ? '移除书签'
+                : '添加书签',
+            onPressed: document == null ? null : toggleBookmark,
+            icon: Icon(
+              (bookmarks.value ?? const <Bookmark>[]).any(
+                (bookmark) => bookmark.locator == currentTextLocator(),
+              )
+                  ? Icons.bookmark
+                  : Icons.bookmark_border,
+            ),
           ),
           IconButton(
             tooltip: '文本编码',
@@ -735,10 +950,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
           ),
           IconButton(
             tooltip: '文本显示投影',
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (context) => TextProjectionDialog(bookId: bookId),
-            ),
+            onPressed: openProjectionSettings,
             icon: const Icon(Icons.translate),
           ),
           IconButton(
@@ -768,8 +980,8 @@ class TextReaderWorkspace extends HookConsumerWidget {
             onPressed: rawChapterText.isEmpty ? null : copyOriginalChapter,
             icon: const Icon(Icons.content_copy_outlined),
           ),
-        ],
-      ),
+              ],
+            ),
       body: Stack(
         children: [
           documentState.when(
@@ -830,62 +1042,106 @@ class TextReaderWorkspace extends HookConsumerWidget {
                       ),
                       actions: const [SizedBox.shrink()],
                     ),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      controller: scrollController,
-                      key: ValueKey(chapter.id),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: settings.pageMargin,
-                        vertical: 32,
+                  Material(
+                    key: const Key('text-reader-sticky-chapter-title'),
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    elevation: 1,
+                    child: InkWell(
+                      onTap: focusMode.value ? toggleFocusMode : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                chapter.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                            ),
+                            if (autoScrollController.active) ...[
+                              const SizedBox(width: 8),
+                              const Icon(Icons.slow_motion_video, size: 18),
+                            ],
+                          ],
+                        ),
                       ),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 820),
-                          child: TextColoringSelectableText(
-                            key: const Key('text-reader-selectable-content'),
-                            layout: layout,
-                            style: textStyle,
-                            onSelectionChanged: (selection, _) {
-                              if (selection.isCollapsed) {
-                                selectedContext.value = null;
-                                selectedColorText.value = null;
-                                return;
-                              }
-                              final displayRange = layout.visibleToDisplay(
-                                selection.start,
-                                selection.end,
-                              );
-                              if (!displayRange.isExact) {
-                                selectedContext.value = null;
-                                selectedColorText.value = null;
-                                return;
-                              }
-                              final range = projection.displayToRaw(
-                                displayRange.start,
-                                displayRange.end,
-                              );
-                              if (!range.isExact) {
-                                selectedContext.value = null;
-                                selectedColorText.value = null;
-                                return;
-                              }
-                              final rawStart = start + range.start;
-                              final rawEnd = start + range.end;
-                              selectedColorText.value = layout.text.substring(
-                                selection.start,
-                                selection.end,
-                              );
-                              selectedContext.value = ReadingContextSelection(
-                                text: value.rawText.substring(rawStart, rawEnd),
-                                href: 'text:${chapter.id}',
-                                locator: chapter.locator(
-                                  start: rawStart,
-                                  end: rawEnd,
-                                ),
-                                chapterIndex: index,
-                                chapterTitle: chapter.title,
-                              );
-                            },
+                    ),
+                  ),
+                  Expanded(
+                    child: ReaderAutoScrollRegion(
+                      controller: autoScrollController,
+                      scrollController: scrollController,
+                      lineExtent: settings.fontSize * settings.lineHeight,
+                      child: SingleChildScrollView(
+                        controller: scrollController,
+                        key: ValueKey(chapter.id),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: settings.pageMargin,
+                          vertical: 32,
+                        ),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 820),
+                            child: TextColoringSelectableText(
+                              key: const Key('text-reader-selectable-content'),
+                              layout: layout,
+                              style: textStyle,
+                              onSelectionChanged: (selection, _) {
+                                if (!selection.isCollapsed) {
+                                  autoScrollController.stop(
+                                    AutoScrollStopReason.selection,
+                                  );
+                                }
+                                if (selection.isCollapsed) {
+                                  selectedContext.value = null;
+                                  selectedColorText.value = null;
+                                  return;
+                                }
+                                final displayRange = layout.visibleToDisplay(
+                                  selection.start,
+                                  selection.end,
+                                );
+                                if (!displayRange.isExact) {
+                                  selectedContext.value = null;
+                                  selectedColorText.value = null;
+                                  return;
+                                }
+                                final range = projection.displayToRaw(
+                                  displayRange.start,
+                                  displayRange.end,
+                                );
+                                if (!range.isExact) {
+                                  selectedContext.value = null;
+                                  selectedColorText.value = null;
+                                  return;
+                                }
+                                final rawStart = start + range.start;
+                                final rawEnd = start + range.end;
+                                selectedColorText.value = layout.text.substring(
+                                  selection.start,
+                                  selection.end,
+                                );
+                                selectedContext.value =
+                                    ReadingContextSelection(
+                                      text: value.rawText.substring(
+                                        rawStart,
+                                        rawEnd,
+                                      ),
+                                      href: 'text:${chapter.id}',
+                                      locator: chapter.locator(
+                                        start: rawStart,
+                                        end: rawEnd,
+                                      ),
+                                      chapterIndex: index,
+                                      chapterTitle: chapter.title,
+                                    );
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -933,6 +1189,11 @@ class TextReaderWorkspace extends HookConsumerWidget {
           const Positioned(right: 20, bottom: 70, child: PomodoroBreakBanner()),
         ],
       ),
+    );
+    return ReaderCommandShortcuts(
+      settings: readerCommands,
+      callbacks: commandCallbacks,
+      child: scaffold,
     );
   }
 }

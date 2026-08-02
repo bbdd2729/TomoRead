@@ -129,6 +129,17 @@ void main() {
       ),
     );
   });
+
+  test('EPUB automatic scrolling uses elapsed animation-frame time', () async {
+    final runtime = await rootBundle.loadString(
+      'assets/epub_reader_runtime/tomoread-reader.js',
+    );
+
+    expect(runtime, contains("case 'startAutoScroll':"));
+    expect(runtime, contains('timestamp - autoScrollStartedAt'));
+    expect(runtime, contains("stopAutoScroll('selection')"));
+    expect(runtime, isNot(contains('setInterval(startAutoScroll')));
+  });
 }
 
 LibraryBook _book(String filePath) => LibraryBook(

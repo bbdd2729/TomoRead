@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -24,11 +23,14 @@ import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_context.dart';
 import '../../domain/models/reading_position_metrics.dart';
 import '../../domain/models/reading_settings.dart';
+import '../../domain/models/reader_commands.dart';
 import '../../domain/models/text_coloring.dart';
 import '../../domain/models/visual_artifact.dart';
 import '../../shared/widgets/resizable_pane.dart';
 import '../../shared/widgets/book_cover.dart';
 import 'epub_webview.dart';
+import 'reader_command_controller.dart';
+import 'reader_command_shortcuts.dart';
 import 'reader_navigation_command.dart';
 import 'reader_runtime_controller.dart';
 import 'reader_search_dialog.dart';
@@ -78,22 +80,6 @@ class _PendingReaderProgress {
   final String locator;
 }
 
-class _ReaderPreviousIntent extends Intent {
-  const _ReaderPreviousIntent();
-}
-
-class _ReaderNextIntent extends Intent {
-  const _ReaderNextIntent();
-}
-
-class _ReaderSearchIntent extends Intent {
-  const _ReaderSearchIntent();
-}
-
-class _ReaderFocusIntent extends Intent {
-  const _ReaderFocusIntent();
-}
-
 class ReaderWorkspace extends HookConsumerWidget {
   const ReaderWorkspace({
     super.key,
@@ -119,6 +105,9 @@ class ReaderWorkspace extends HookConsumerWidget {
       bookTextColoringOverrideProvider(bookId),
     );
     final textColoringState = ref.watch(resolvedTextColoringProvider(bookId));
+    final readerCommandState = ref.watch(readerCommandSettingsProvider);
+    final defaultReaderCommands = useMemoized(ReaderCommandSettings.defaults);
+    final readerCommands = readerCommandState.value ?? defaultReaderCommands;
     final runtimeController = ref.read(
       readerRuntimeControllerProvider.notifier,
     );
@@ -153,6 +142,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final pageIndex = useState(0);
     final pageCount = useState(1);
     final navigationCommand = useState<ReaderNavigationCommand?>(null);
+    final autoScrollActive = useState(false);
     final navigationSequence = useRef(0);
     final focusedAnnotationId = useState<String?>(null);
     final annotationFocusRevision = useState(0);
@@ -287,6 +277,16 @@ class ReaderWorkspace extends HookConsumerWidget {
         (lifecycleState == null || lifecycleState == AppLifecycleState.resumed) &&
             !pomodoroBreakActive,
       );
+      if ((lifecycleState != null &&
+              lifecycleState != AppLifecycleState.resumed) ||
+          pomodoroBreakActive) {
+        if (autoScrollActive.value) {
+          autoScrollActive.value = false;
+          navigationCommand.value = ReaderNavigationCommand.stopAutoScroll(
+            id: ++navigationSequence.value,
+          );
+        }
+      }
       return null;
     }, [lifecycleState, pomodoroBreakActive]);
 
@@ -294,6 +294,12 @@ class ReaderWorkspace extends HookConsumerWidget {
       // A new book or reader-mode switch has no valid runtime page position.
       pageIndex.value = 0;
       pageCount.value = 1;
+      if (isPaginated && autoScrollActive.value) {
+        autoScrollActive.value = false;
+        navigationCommand.value = ReaderNavigationCommand.stopAutoScroll(
+          id: ++navigationSequence.value,
+        );
+      }
       return null;
     }, [bookId, isPaginated]);
 
@@ -315,6 +321,14 @@ class ReaderWorkspace extends HookConsumerWidget {
       final pending = pendingProgressWrite.value;
       pendingProgressWrite.value = null;
       if (pending != null) await persistProgress(pending);
+    }
+
+    void stopAutoScroll() {
+      if (!autoScrollActive.value) return;
+      autoScrollActive.value = false;
+      navigationCommand.value = ReaderNavigationCommand.stopAutoScroll(
+        id: ++navigationSequence.value,
+      );
     }
 
     void scheduleProgressWrite({
@@ -354,6 +368,12 @@ class ReaderWorkspace extends HookConsumerWidget {
       String? anchor,
       String? cfi,
     }) async {
+      if (autoScrollActive.value) {
+        autoScrollActive.value = false;
+        navigationCommand.value = ReaderNavigationCommand.stopAutoScroll(
+          id: ++navigationSequence.value,
+        );
+      }
       if (totalChapters == 0 || index < 0 || index >= totalChapters) return;
       final target = manifest.value?.spine[index];
       if (target == null) return;
@@ -391,6 +411,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> openBookSettings() async {
+      stopAutoScroll();
       final result = await showDialog<_BookSettingsResult>(
         context: context,
         builder: (context) => _BookReadingSettingsDialog(
@@ -491,6 +512,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> openReadingAssistant() async {
+      stopAutoScroll();
       final actions = ReadingAssistantAction.values
           .where((action) => action != ReadingAssistantAction.explainSelection)
           .toList();
@@ -573,6 +595,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> openVisualization() async {
+      stopAutoScroll();
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => ReaderVisualizationDialog(
@@ -588,6 +611,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> createAnnotation([ReaderTextSelection? source]) async {
+      stopAutoScroll();
       final selection = source ?? selectedText.value;
       if (selection == null) return;
       final draft = await showDialog<_AnnotationDraft>(
@@ -601,6 +625,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     Future<void> openSelectionContextMenu(
       ReaderSelectionContextMenu menu,
     ) async {
+      stopAutoScroll();
       selectedText.value = menu.selection;
       final overlay =
           Overlay.of(context).context.findRenderObject() as RenderBox?;
@@ -718,6 +743,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> openSearch() async {
+      stopAutoScroll();
       final book = readerBook.value;
       final currentManifest = manifest.value;
       if (book == null || currentManifest == null) return;
@@ -753,6 +779,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> editBookmark(Bookmark bookmark) async {
+      stopAutoScroll();
       final label = await showDialog<String?>(
         context: context,
         builder: (context) => _BookmarkLabelDialog(bookmark: bookmark),
@@ -782,6 +809,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     Future<void> editAnnotation(ReadingAnnotation annotation) async {
+      stopAutoScroll();
       final draft = await showDialog<_AnnotationNoteDraft>(
         context: context,
         builder: (context) => _AnnotationNoteDialog(annotation: annotation),
@@ -810,35 +838,21 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     void goToPrevious() {
-      if (isPaginated) {
-        navigationCommand.value = ReaderNavigationCommand.previousPage(
-          id: ++navigationSequence.value,
-        );
-        return;
-      }
-      if (activeChapterIndex > 0) {
-        unawaited(
-          selectChapter(
-            activeChapterIndex - 1,
-            scrollPosition: isPaginated ? 1 : 0,
-          ),
-        );
-      }
+      autoScrollActive.value = false;
+      navigationCommand.value = ReaderNavigationCommand.previousPage(
+        id: ++navigationSequence.value,
+      );
     }
 
     void goToNext() {
-      if (isPaginated) {
-        navigationCommand.value = ReaderNavigationCommand.nextPage(
-          id: ++navigationSequence.value,
-        );
-        return;
-      }
-      if (totalChapters > 0 && activeChapterIndex < totalChapters - 1) {
-        unawaited(selectChapter(activeChapterIndex + 1));
-      }
+      autoScrollActive.value = false;
+      navigationCommand.value = ReaderNavigationCommand.nextPage(
+        id: ++navigationSequence.value,
+      );
     }
 
     void seekToOverallProgress(double value) {
+      autoScrollActive.value = false;
       if (totalChapters == 0) return;
       final targetLocation = sectionProgress.locationForProgress(value);
       final targetChapter = targetLocation.chapterIndex
@@ -862,6 +876,12 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     void toggleToc() {
+      if (autoScrollActive.value) {
+        navigationCommand.value = ReaderNavigationCommand.stopAutoScroll(
+          id: ++navigationSequence.value,
+        );
+        autoScrollActive.value = false;
+      }
       final visible = !tocVisible.value;
       tocVisible.value = visible;
       unawaited(
@@ -872,6 +892,12 @@ class ReaderWorkspace extends HookConsumerWidget {
     }
 
     void toggleSidePanel() {
+      if (autoScrollActive.value) {
+        navigationCommand.value = ReaderNavigationCommand.stopAutoScroll(
+          id: ++navigationSequence.value,
+        );
+        autoScrollActive.value = false;
+      }
       final visible = !sidePanelVisible.value;
       sidePanelVisible.value = visible;
       unawaited(
@@ -885,49 +911,72 @@ class ReaderWorkspace extends HookConsumerWidget {
 
     void toggleControls() => controlsVisible.value = !controlsVisible.value;
 
-    Widget withReaderShortcuts(Widget child) => Shortcuts(
-      shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
-            _ReaderPreviousIntent(),
-        SingleActivator(LogicalKeyboardKey.pageUp): _ReaderPreviousIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowRight, alt: true):
-            _ReaderNextIntent(),
-        SingleActivator(LogicalKeyboardKey.pageDown): _ReaderNextIntent(),
-        SingleActivator(LogicalKeyboardKey.keyF, control: true):
-            _ReaderSearchIntent(),
-        SingleActivator(LogicalKeyboardKey.keyM, control: true):
-            _ReaderFocusIntent(),
-      },
-      child: Actions(
-        actions: {
-          _ReaderPreviousIntent: CallbackAction<_ReaderPreviousIntent>(
-            onInvoke: (_) {
-              goToPrevious();
-              return null;
-            },
-          ),
-          _ReaderNextIntent: CallbackAction<_ReaderNextIntent>(
-            onInvoke: (_) {
-              goToNext();
-              return null;
-            },
-          ),
-          _ReaderSearchIntent: CallbackAction<_ReaderSearchIntent>(
-            onInvoke: (_) {
-              unawaited(openSearch());
-              return null;
-            },
-          ),
-          _ReaderFocusIntent: CallbackAction<_ReaderFocusIntent>(
-            onInvoke: (_) {
-              toggleControls();
-              return null;
-            },
-          ),
-        },
-        child: Focus(autofocus: true, child: child),
-      ),
-    );
+    void scrollByCommand(double amount) {
+      autoScrollActive.value = false;
+      navigationCommand.value = ReaderNavigationCommand.scrollBy(
+        id: ++navigationSequence.value,
+        amount: amount,
+      );
+    }
+
+    void toggleAutoScroll() {
+      if (settings.layoutMode != ReaderLayoutMode.scroll) return;
+      if (autoScrollActive.value) {
+        stopAutoScroll();
+        return;
+      }
+      autoScrollActive.value = true;
+      navigationCommand.value = ReaderNavigationCommand.startAutoScroll(
+        id: ++navigationSequence.value,
+        unit: readerCommands.autoScroll.unit.name,
+        speed: readerCommands.autoScroll.speed,
+      );
+    }
+
+    Future<void> adjustFontSize(double delta) async {
+      stopAutoScroll();
+      final size = (settings.fontSize + delta).clamp(14, 28).toDouble();
+      if (size == settings.fontSize) return;
+      await ref.read(settingsRepositoryProvider).saveBookOverride(
+        BookReadingOverride(
+          bookId: bookId,
+          settings: settings.copyWith(fontSize: size),
+        ),
+      );
+      ref.invalidate(bookReadingOverrideProvider(bookId));
+    }
+
+    Future<void> toggleTextColoring() async {
+      stopAutoScroll();
+      await ref
+          .read(textColoringControllerProvider)
+          .saveBookOverride(bookId, !textColoring.enabled);
+    }
+
+    void togglePomodoro() {
+      final controller = ref.read(pomodoroControllerProvider.notifier);
+      if (pomodoro?.isRunning == true) {
+        unawaited(controller.pause());
+      } else {
+        unawaited(controller.startOrResume(bookId: bookId));
+      }
+    }
+
+    final commandCallbacks = <ReaderCommand, VoidCallback>{
+      ReaderCommand.previousPage: goToPrevious,
+      ReaderCommand.nextPage: goToNext,
+      ReaderCommand.scrollUp: () => scrollByCommand(-0.25),
+      ReaderCommand.scrollDown: () => scrollByCommand(0.25),
+      ReaderCommand.openTableOfContents: toggleToc,
+      ReaderCommand.toggleBookmark: () => unawaited(toggleBookmark()),
+      ReaderCommand.search: () => unawaited(openSearch()),
+      ReaderCommand.toggleFocusMode: toggleControls,
+      ReaderCommand.increaseFontSize: () => unawaited(adjustFontSize(1)),
+      ReaderCommand.decreaseFontSize: () => unawaited(adjustFontSize(-1)),
+      ReaderCommand.toggleTextColoring: () => unawaited(toggleTextColoring()),
+      ReaderCommand.togglePomodoro: togglePomodoro,
+      ReaderCommand.toggleAutoScroll: toggleAutoScroll,
+    };
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -948,60 +997,66 @@ class ReaderWorkspace extends HookConsumerWidget {
             (!showToc || canShowBothPanels);
         final panelTopInset = controlsVisible.value ? 64.0 : 8.0;
         final panelBottomInset = controlsVisible.value ? 72.0 : 8.0;
-        Future<void> openMobileToc() => showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (sheetContext) => _MobileReaderTocDrawer(
-            title: title,
-            book: readerBook.value,
-            chapterCount: totalChapters,
-            toc: manifest.value?.toc ?? const [],
-            activeChapterIndex: activeChapterIndex,
-            onSelected: (item) {
-              final target = Uri.tryParse(item.href);
-              unawaited(
-                selectChapter(
-                  item.spineIndex,
-                  anchor: target?.fragment.isEmpty ?? true
-                      ? null
-                      : target!.fragment,
-                ),
-              );
-              Navigator.of(sheetContext).pop();
-            },
-          ),
-        );
-        Future<void> openMobileSidePanel() => showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (sheetContext) => _MobileReaderSideDrawer(
-            showBookmarks: showBookmarks.value,
-            bookmarks: bookmarkItems,
-            annotations: annotations,
-            onPanelChanged: (value) => showBookmarks.value = value,
-            onSelectBookmark: (bookmark) async {
-              await selectBookmark(bookmark);
-              if (sheetContext.mounted) Navigator.of(sheetContext).pop();
-            },
-            onRemoveBookmark: removeBookmark,
-            onEditBookmark: editBookmark,
-            onSelectAnnotation: (annotation) {
-              selectAnnotation(annotation);
-              Navigator.of(sheetContext).pop();
-            },
-            onEditAnnotation: editAnnotation,
-            onRemoveAnnotation: (annotation) async {
-              await ref
-                  .read(annotationControllerProvider)
-                  .remove(annotation.id);
-              if (focusedAnnotationId.value == annotation.id) {
-                focusedAnnotationId.value = null;
-              }
-            },
-          ),
-        );
+        Future<void> openMobileToc() {
+          stopAutoScroll();
+          return showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (sheetContext) => _MobileReaderTocDrawer(
+              title: title,
+              book: readerBook.value,
+              chapterCount: totalChapters,
+              toc: manifest.value?.toc ?? const [],
+              activeChapterIndex: activeChapterIndex,
+              onSelected: (item) {
+                final target = Uri.tryParse(item.href);
+                unawaited(
+                  selectChapter(
+                    item.spineIndex,
+                    anchor: target?.fragment.isEmpty ?? true
+                        ? null
+                        : target!.fragment,
+                  ),
+                );
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+          );
+        }
+        Future<void> openMobileSidePanel() {
+          stopAutoScroll();
+          return showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (sheetContext) => _MobileReaderSideDrawer(
+              showBookmarks: showBookmarks.value,
+              bookmarks: bookmarkItems,
+              annotations: annotations,
+              onPanelChanged: (value) => showBookmarks.value = value,
+              onSelectBookmark: (bookmark) async {
+                await selectBookmark(bookmark);
+                if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+              },
+              onRemoveBookmark: removeBookmark,
+              onEditBookmark: editBookmark,
+              onSelectAnnotation: (annotation) {
+                selectAnnotation(annotation);
+                Navigator.of(sheetContext).pop();
+              },
+              onEditAnnotation: editAnnotation,
+              onRemoveAnnotation: (annotation) async {
+                await ref
+                    .read(annotationControllerProvider)
+                    .remove(annotation.id);
+                if (focusedAnnotationId.value == annotation.id) {
+                  focusedAnnotationId.value = null;
+                }
+              },
+            ),
+          );
+        }
         final readerBody = Stack(
           children: [
             Positioned.fill(
@@ -1093,6 +1148,9 @@ class ReaderWorkspace extends HookConsumerWidget {
                                 if (navigationCommand.value?.id == id) {
                                   navigationCommand.value = null;
                                 }
+                              },
+                              onAutoScrollChanged: (active) {
+                                autoScrollActive.value = active;
                               },
                               onTextSelectionChanged: (selection) {
                                 selectedText.value = selection;
@@ -1214,6 +1272,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                   mobileReaderControls: isMobile,
                   bookmarked: isBookmarked,
                   canCreateAnnotation: selectedText.value != null,
+                  autoScrollActive: autoScrollActive.value,
+                  canAutoScroll: settings.layoutMode == ReaderLayoutMode.scroll,
                   onExitReader: () {
                     unawaited(flushPendingProgress());
                     onExitReader();
@@ -1231,6 +1291,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                   onOpenSearch: openSearch,
                   onOpenAssistant: openReadingAssistant,
                   onOpenVisualization: openVisualization,
+                  onToggleAutoScroll: toggleAutoScroll,
                   bookId: bookId,
                 ),
               ),
@@ -1258,13 +1319,15 @@ class ReaderWorkspace extends HookConsumerWidget {
                   positionMetrics: positionMetrics,
                   onSeekProgress: seekToOverallProgress,
                   onPrevious:
-                      activeChapterIndex > 0 ||
+                      scrollRatio.value > 0.001 ||
+                          activeChapterIndex > 0 ||
                           (isPaginated && pageIndex.value > 0)
                       ? goToPrevious
                       : null,
                   onNext:
                       totalChapters > 0 &&
                           (activeChapterIndex < totalChapters - 1 ||
+                              scrollRatio.value < 0.999 ||
                               (isPaginated &&
                                   pageIndex.value < pageCount.value - 1))
                       ? goToNext
@@ -1274,7 +1337,11 @@ class ReaderWorkspace extends HookConsumerWidget {
             ),
           ],
         );
-        return withReaderShortcuts(readerBody);
+        return ReaderCommandShortcuts(
+          settings: readerCommands,
+          callbacks: commandCallbacks,
+          child: readerBody,
+        );
       },
     );
   }
@@ -1288,6 +1355,8 @@ class _ReaderToolbar extends StatelessWidget {
     required this.mobileReaderControls,
     required this.bookmarked,
     required this.canCreateAnnotation,
+    required this.autoScrollActive,
+    required this.canAutoScroll,
     required this.onToggleToc,
     required this.onToggleSidePanel,
     required this.onExitReader,
@@ -1298,6 +1367,7 @@ class _ReaderToolbar extends StatelessWidget {
     required this.onOpenSearch,
     required this.onOpenAssistant,
     required this.onOpenVisualization,
+    required this.onToggleAutoScroll,
     required this.bookId,
   });
 
@@ -1307,6 +1377,8 @@ class _ReaderToolbar extends StatelessWidget {
   final bool mobileReaderControls;
   final bool bookmarked;
   final bool canCreateAnnotation;
+  final bool autoScrollActive;
+  final bool canAutoScroll;
   final VoidCallback onToggleToc;
   final VoidCallback onToggleSidePanel;
   final VoidCallback onExitReader;
@@ -1317,6 +1389,7 @@ class _ReaderToolbar extends StatelessWidget {
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenAssistant;
   final VoidCallback onOpenVisualization;
+  final VoidCallback onToggleAutoScroll;
   final String bookId;
 
   @override
@@ -1373,7 +1446,26 @@ class _ReaderToolbar extends StatelessWidget {
               ),
             SizedBox(width: mobileReaderControls ? 4 : 12),
             Expanded(child: Text(title, overflow: TextOverflow.ellipsis)),
-            if (!mobileReaderControls) PomodoroToolbarButton(bookId: bookId),
+            IconButton(
+              key: const Key('reader-auto-scroll'),
+              tooltip: canAutoScroll
+                  ? autoScrollActive
+                        ? '停止自动滚动'
+                        : '开始自动滚动'
+                  : '自动滚动仅支持滚动布局',
+              onPressed: canAutoScroll ? onToggleAutoScroll : null,
+              isSelected: autoScrollActive,
+              icon: Icon(
+                autoScrollActive
+                    ? Icons.pause_circle_outline
+                    : Icons.slow_motion_video_outlined,
+              ),
+            ),
+            if (!mobileReaderControls)
+              PomodoroToolbarButton(
+                bookId: bookId,
+                onOpen: autoScrollActive ? onToggleAutoScroll : null,
+              ),
             if (!mobileReaderControls)
               IconButton(
                 tooltip: '搜索书内内容',
@@ -1422,6 +1514,7 @@ class _ReaderToolbar extends StatelessWidget {
                     case _MobileReaderToolbarAction.settings:
                       onOpenBookSettings();
                     case _MobileReaderToolbarAction.pomodoro:
+                      if (autoScrollActive) onToggleAutoScroll();
                       unawaited(
                         showDialog<void>(
                           context: context,
@@ -1912,6 +2005,7 @@ class _ReaderArticle extends StatelessWidget {
     required this.onRequestPrevious,
     required this.onRequestNext,
     required this.onNavigationCommandFinished,
+    required this.onAutoScrollChanged,
     required this.onTextSelectionChanged,
     required this.onSelectionContextMenu,
     required this.onToggleControls,
@@ -1939,6 +2033,7 @@ class _ReaderArticle extends StatelessWidget {
   final VoidCallback onRequestPrevious;
   final VoidCallback onRequestNext;
   final ValueChanged<int> onNavigationCommandFinished;
+  final ValueChanged<bool> onAutoScrollChanged;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
   final ValueChanged<ReaderSelectionContextMenu> onSelectionContextMenu;
   final VoidCallback onToggleControls;
@@ -1980,6 +2075,7 @@ class _ReaderArticle extends StatelessWidget {
           onRequestPrevious: onRequestPrevious,
           onRequestNext: onRequestNext,
           onNavigationCommandFinished: onNavigationCommandFinished,
+          onAutoScrollChanged: onAutoScrollChanged,
           onTextSelectionChanged: onTextSelectionChanged,
           onSelectionContextMenu: (menu) {
             final box = webViewContext.findRenderObject() as RenderBox?;

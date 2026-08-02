@@ -39,6 +39,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     required this.onRequestPrevious,
     required this.onRequestNext,
     required this.onNavigationCommandFinished,
+    required this.onAutoScrollChanged,
     required this.onTextSelectionChanged,
     required this.onSelectionContextMenu,
     required this.onToggleControls,
@@ -61,6 +62,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final VoidCallback onRequestPrevious;
   final VoidCallback onRequestNext;
   final ValueChanged<int> onNavigationCommandFinished;
+  final ValueChanged<bool> onAutoScrollChanged;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
   final ValueChanged<ReaderSelectionContextMenu> onSelectionContextMenu;
   final VoidCallback onToggleControls;
@@ -129,6 +131,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
       },
       reportReady,
       reportFailure,
+      onAutoScrollChanged,
     );
     final controller = useMemoized(() {
       late final WebViewController webViewController;
@@ -322,6 +325,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     VoidCallback onRuntimeReady,
     VoidCallback onReady,
     ValueChanged<Object> onFailure,
+    ValueChanged<bool> onAutoScrollChanged,
   ) {
     Object? runtimeMessage;
     try {
@@ -380,6 +384,11 @@ class AndroidEpubWebView extends HookConsumerWidget {
       onFailure(
         StateError(runtimeMessage['message'] ?? 'Unknown runtime error'),
       );
+      return;
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'autoScrollChanged') {
+      onAutoScrollChanged(runtimeMessage['active'] == true);
       return;
     }
     if (runtimeMessage is Map<String, dynamic> &&
@@ -518,13 +527,24 @@ class AndroidEpubWebView extends HookConsumerWidget {
       ReaderNavigationKind.goToLocation => 'goToLocation',
       ReaderNavigationKind.nextPage => 'nextPage',
       ReaderNavigationKind.previousPage => 'previousPage',
+      ReaderNavigationKind.scrollBy => 'scrollBy',
+      ReaderNavigationKind.startAutoScroll => 'startAutoScroll',
+      ReaderNavigationKind.stopAutoScroll => 'stopAutoScroll',
     };
     return '''(() => {
       const runtime = window.TomoReadEpubRuntime;
       if (runtime) void runtime.command(${jsonEncode({
       'id': command.id,
       'type': type,
-      'payload': {'href': command.href, 'ratio': command.ratio, 'anchor': command.anchor, 'cfi': command.cfi},
+      'payload': {
+        'href': command.href,
+        'ratio': command.ratio,
+        'anchor': command.anchor,
+        'cfi': command.cfi,
+        'amount': command.amount,
+        'unit': command.unit,
+        'speed': command.speed,
+      },
     })});
     })();''';
   }

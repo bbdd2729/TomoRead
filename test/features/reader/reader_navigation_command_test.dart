@@ -26,4 +26,19 @@ void main() {
     expect(command.href, isNull);
     expect(command.ratio, isNull);
   });
+
+  test('scroll commands preserve viewport and speed payloads', () {
+    const scroll = ReaderNavigationCommand.scrollBy(id: 3, amount: 0.5);
+    const automatic = ReaderNavigationCommand.startAutoScroll(
+      id: 4,
+      unit: 'screensPerMinute',
+      speed: 0.8,
+    );
+
+    expect(scroll.kind, ReaderNavigationKind.scrollBy);
+    expect(scroll.amount, 0.5);
+    expect(automatic.kind, ReaderNavigationKind.startAutoScroll);
+    expect(automatic.unit, 'screensPerMinute');
+    expect(automatic.speed, 0.8);
+  });
 }

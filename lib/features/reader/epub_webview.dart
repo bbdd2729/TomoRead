@@ -42,6 +42,7 @@ class EpubWebView extends HookConsumerWidget {
     required this.onRequestPrevious,
     required this.onRequestNext,
     required this.onNavigationCommandFinished,
+    required this.onAutoScrollChanged,
     required this.onTextSelectionChanged,
     required this.onSelectionContextMenu,
     required this.onToggleControls,
@@ -70,6 +71,7 @@ class EpubWebView extends HookConsumerWidget {
   final VoidCallback onRequestPrevious;
   final VoidCallback onRequestNext;
   final ValueChanged<int> onNavigationCommandFinished;
+  final ValueChanged<bool> onAutoScrollChanged;
   final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
   final ValueChanged<ReaderSelectionContextMenu> onSelectionContextMenu;
   final VoidCallback onToggleControls;
@@ -94,6 +96,7 @@ class EpubWebView extends HookConsumerWidget {
         onRequestPrevious: onRequestPrevious,
         onRequestNext: onRequestNext,
         onNavigationCommandFinished: onNavigationCommandFinished,
+        onAutoScrollChanged: onAutoScrollChanged,
         onTextSelectionChanged: onTextSelectionChanged,
         onSelectionContextMenu: onSelectionContextMenu,
         onToggleControls: onToggleControls,
@@ -355,6 +358,8 @@ class EpubWebView extends HookConsumerWidget {
             if (runtimeError is String && runtimeError.isNotEmpty) {
               initializationError.value = StateError(runtimeError);
             }
+          } else if (message['type'] == 'autoScrollChanged') {
+            onAutoScrollChanged(message['active'] == true);
           } else if (message['type'] == 'commandCompleted') {
             final commandId = message['id'];
             if (commandId is num) {
@@ -964,12 +969,23 @@ a { color: ${_cssColor(colorScheme.primary)}; }
       ReaderNavigationKind.goToLocation => 'goToLocation',
       ReaderNavigationKind.nextPage => 'nextPage',
       ReaderNavigationKind.previousPage => 'previousPage',
+      ReaderNavigationKind.scrollBy => 'scrollBy',
+      ReaderNavigationKind.startAutoScroll => 'startAutoScroll',
+      ReaderNavigationKind.stopAutoScroll => 'stopAutoScroll',
     };
     return _runtimeCall(
       'runtime.command(${jsonEncode({
         'id': command.id,
         'type': type,
-        'payload': {'href': command.href, 'ratio': command.ratio, 'anchor': command.anchor, 'cfi': command.cfi},
+        'payload': {
+          'href': command.href,
+          'ratio': command.ratio,
+          'anchor': command.anchor,
+          'cfi': command.cfi,
+          'amount': command.amount,
+          'unit': command.unit,
+          'speed': command.speed,
+        },
       })})',
     );
   }
