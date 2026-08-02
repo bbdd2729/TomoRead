@@ -101,6 +101,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     final textColoringScriptRef = useRef(runtimeTextColoringScript);
     textColoringScriptRef.value = runtimeTextColoringScript;
     final runtimeLoaded = useRef(false);
+    final runtimeBridgeReady = useRef(false);
     void reportReady() {
       if (!active.value) return;
       readinessTimer.value?.cancel();
@@ -122,6 +123,10 @@ class AndroidEpubWebView extends HookConsumerWidget {
       context,
       rawMessage,
       epubManifest.value,
+      () {
+        runtimeBridgeReady.value = true;
+        reportReady();
+      },
       reportReady,
       reportFailure,
     );
@@ -135,6 +140,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
             onPageStarted: (_) {
               if (!active.value) return;
               readinessTimer.value?.cancel();
+              runtimeBridgeReady.value = false;
               error.value = null;
               loadPhase.value = _AndroidEpubLoadPhase.loading;
             },
@@ -156,13 +162,17 @@ class AndroidEpubWebView extends HookConsumerWidget {
                     onError: reportFailure,
                   ),
                 );
-                readinessTimer.value?.cancel();
-                readinessTimer.value = Timer(
-                  const Duration(seconds: 12),
-                  () => reportFailure(
-                    StateError('EPUB renderer did not become ready in time.'),
-                  ),
-                );
+                if (!runtimeBridgeReady.value) {
+                  readinessTimer.value?.cancel();
+                  readinessTimer.value = Timer(
+                    const Duration(seconds: 12),
+                    () => reportFailure(
+                      StateError(
+                        'EPUB renderer did not become ready in time.',
+                      ),
+                    ),
+                  );
+                }
               }
             },
             onWebResourceError: (webError) {
@@ -309,6 +319,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     BuildContext context,
     String rawMessage,
     EpubManifest? manifest,
+    VoidCallback onRuntimeReady,
     VoidCallback onReady,
     ValueChanged<Object> onFailure,
   ) {
@@ -317,6 +328,11 @@ class AndroidEpubWebView extends HookConsumerWidget {
       runtimeMessage = jsonDecode(rawMessage);
     } on FormatException {
       // Legacy scroll and tap messages use a compact pipe format.
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'runtimeReady') {
+      onRuntimeReady();
+      return;
     }
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'epubInteraction') {
