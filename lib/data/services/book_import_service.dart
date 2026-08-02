@@ -208,7 +208,12 @@ class BookImportService {
     final results = <BookImportResult>[];
     for (final request in requests) {
       if (cancellationToken?.isCancelled == true) break;
-      results.add(await importBookFile(request.sourcePath));
+      final result = await importBookFile(request.sourcePath);
+      results.add(result);
+      if (request.source.temporary &&
+          result.status != BookImportStatus.needsEncoding) {
+        await _deleteTemporarySource(request.sourcePath);
+      }
       onProgress?.call(results.length, requests.length);
     }
     return List.unmodifiable(results);
@@ -497,6 +502,19 @@ class BookImportService {
     }
     hashSink.close();
     return digestSink.digest.toString();
+  }
+
+  Future<void> _deleteTemporarySource(String sourcePath) async {
+    try {
+      final temporaryRoot = await getTemporaryDirectory();
+      final normalizedSource = path.normalize(path.absolute(sourcePath));
+      final normalizedRoot = path.normalize(path.absolute(temporaryRoot.path));
+      if (!path.isWithin(normalizedRoot, normalizedSource)) return;
+      final source = File(normalizedSource);
+      if (await source.exists()) await source.delete();
+    } on FileSystemException {
+      // Android cache cleanup retries stale files on the next app start.
+    }
   }
 
   Future<_LibraryDirectories> _libraryDirectories() async {

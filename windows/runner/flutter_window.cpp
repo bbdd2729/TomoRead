@@ -1,5 +1,7 @@
 #include "flutter_window.h"
 
+#include <shellapi.h>
+
 #include <optional>
 #include <set>
 #include <vector>
@@ -40,6 +42,28 @@ flutter::EncodableList ListInstalledFontFamilies() {
   return result;
 }
 
+flutter::EncodableList DecodeDroppedFiles(HDROP drop) {
+  flutter::EncodableList result;
+  const UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+  for (UINT index = 0; index < count; index++) {
+    const UINT length = DragQueryFileW(drop, index, nullptr, 0);
+    if (length == 0) {
+      continue;
+    }
+    std::vector<wchar_t> value(length + 1, L'\0');
+    if (DragQueryFileW(drop, index, value.data(), length + 1) == 0) {
+      continue;
+    }
+    flutter::EncodableMap item;
+    item[flutter::EncodableValue("kind")] =
+        flutter::EncodableValue("desktopDrop");
+    item[flutter::EncodableValue("path")] =
+        flutter::EncodableValue(Utf8FromUtf16(value.data()));
+    result.emplace_back(item);
+  }
+  return result;
+}
+
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -63,6 +87,7 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  DragAcceptFiles(GetHandle(), TRUE);
   font_catalog_channel_ = std::make_unique<
       flutter::MethodChannel<flutter::EncodableValue>>(
       flutter_controller_->engine()->messenger(),
@@ -73,6 +98,20 @@ bool FlutterWindow::OnCreate() {
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
         if (call.method_name() == "listFonts") {
           result->Success(flutter::EncodableValue(ListInstalledFontFamilies()));
+        } else {
+          result->NotImplemented();
+        }
+      });
+  import_inbox_channel_ = std::make_unique<
+      flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(),
+      "dev.tomoread/import_inbox",
+      &flutter::StandardMethodCodec::GetInstance());
+  import_inbox_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() == "getInitialSources") {
+          result->Success(flutter::EncodableValue(flutter::EncodableList()));
         } else {
           result->NotImplemented();
         }
@@ -93,6 +132,8 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
+    DragAcceptFiles(GetHandle(), FALSE);
+    import_inbox_channel_.reset();
     font_catalog_channel_.reset();
     flutter_controller_ = nullptr;
   }
@@ -104,6 +145,17 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_DROPFILES) {
+    const auto drop = reinterpret_cast<HDROP>(wparam);
+    const auto files = DecodeDroppedFiles(drop);
+    DragFinish(drop);
+    if (import_inbox_channel_ && !files.empty()) {
+      import_inbox_channel_->InvokeMethod(
+          "incomingSources",
+          std::make_unique<flutter::EncodableValue>(files));
+    }
+    return 0;
+  }
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

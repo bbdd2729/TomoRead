@@ -12,6 +12,7 @@ struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
   FlMethodChannel* font_catalog_channel;
+  FlMethodChannel* import_inbox_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -39,6 +40,63 @@ static void font_catalog_method_call_cb(FlMethodChannel* channel,
   g_autoptr(FlMethodResponse) response =
       FL_METHOD_RESPONSE(fl_method_success_response_new(values));
   fl_method_call_respond(method_call, response, nullptr);
+}
+
+static void import_inbox_method_call_cb(FlMethodChannel* channel,
+                                        FlMethodCall* method_call,
+                                        gpointer user_data) {
+  (void)channel;
+  (void)user_data;
+  if (g_strcmp0(fl_method_call_get_name(method_call),
+                "getInitialSources") != 0) {
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+    fl_method_call_respond(method_call, response, nullptr);
+    return;
+  }
+  g_autoptr(FlValue) values = fl_value_new_list();
+  g_autoptr(FlMethodResponse) response =
+      FL_METHOD_RESPONSE(fl_method_success_response_new(values));
+  fl_method_call_respond(method_call, response, nullptr);
+}
+
+static void import_drag_data_received_cb(GtkWidget* widget,
+                                         GdkDragContext* context,
+                                         gint x,
+                                         gint y,
+                                         GtkSelectionData* selection_data,
+                                         guint info,
+                                         guint time,
+                                         gpointer user_data) {
+  (void)widget;
+  (void)x;
+  (void)y;
+  (void)info;
+  MyApplication* self = MY_APPLICATION(user_data);
+  g_auto(GStrv) uris = gtk_selection_data_get_uris(selection_data);
+  g_autoptr(FlValue) values = fl_value_new_list();
+  if (uris != nullptr) {
+    for (gchar** current = uris; *current != nullptr; current++) {
+      g_autoptr(GError) error = nullptr;
+      g_autofree gchar* filename =
+          g_filename_from_uri(*current, nullptr, &error);
+      if (filename == nullptr) {
+        continue;
+      }
+      FlValue* item = fl_value_new_map();
+      fl_value_set_string_take(item, "kind",
+                               fl_value_new_string("desktopDrop"));
+      fl_value_set_string_take(item, "path", fl_value_new_string(filename));
+      fl_value_append_take(values, item);
+    }
+  }
+  const gboolean accepted = fl_value_get_length(values) > 0;
+  if (accepted && self->import_inbox_channel != nullptr) {
+    fl_method_channel_invoke_method(self->import_inbox_channel,
+                                    "incomingSources", values, nullptr,
+                                    nullptr, nullptr);
+  }
+  gtk_drag_finish(context, accepted, FALSE, time);
 }
 
 // Called when first Flutter frame received.
@@ -108,6 +166,19 @@ static void my_application_activate(GApplication* application) {
       "dev.tomoread/font_catalog", FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(
       self->font_catalog_channel, font_catalog_method_call_cb, nullptr, nullptr);
+  self->import_inbox_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "dev.tomoread/import_inbox", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->import_inbox_channel, import_inbox_method_call_cb, nullptr, nullptr);
+
+  GtkTargetEntry import_targets[] = {
+      {const_cast<gchar*>("text/uri-list"), 0, 0},
+  };
+  gtk_drag_dest_set(GTK_WIDGET(view), GTK_DEST_DEFAULT_ALL, import_targets,
+                    G_N_ELEMENTS(import_targets), GDK_ACTION_COPY);
+  g_signal_connect(view, "drag-data-received",
+                   G_CALLBACK(import_drag_data_received_cb), self);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
@@ -156,6 +227,7 @@ static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   g_clear_object(&self->font_catalog_channel);
+  g_clear_object(&self->import_inbox_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 

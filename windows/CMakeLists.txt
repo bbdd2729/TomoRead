@@ -75,6 +75,12 @@ set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
+install(FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/../packaging/windows/register-file-associations.ps1"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../packaging/windows/unregister-file-associations.ps1"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 

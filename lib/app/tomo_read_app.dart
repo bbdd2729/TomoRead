@@ -2,15 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../data/database/app_database.dart';
+import '../features/library/import_inbox_host.dart';
 import '../features/workspace/app_shell.dart';
 import 'app_theme.dart';
 import 'appearance.dart';
 import 'providers.dart';
 
 class TomoReadApp extends StatelessWidget {
-  const TomoReadApp({super.key, this.database});
+  const TomoReadApp({
+    super.key,
+    this.database,
+    this.initialImportArguments = const [],
+  });
 
   final AppDatabase? database;
+  final List<String> initialImportArguments;
 
   @override
   Widget build(BuildContext context) {
@@ -18,13 +24,15 @@ class TomoReadApp extends StatelessWidget {
       overrides: [
         if (database != null) appDatabaseProvider.overrideWithValue(database!),
       ],
-      child: const _TomoReadRoot(),
+      child: _TomoReadRoot(initialImportArguments: initialImportArguments),
     );
   }
 }
 
 class _TomoReadRoot extends ConsumerWidget {
-  const _TomoReadRoot();
+  const _TomoReadRoot({required this.initialImportArguments});
+
+  final List<String> initialImportArguments;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,18 +68,21 @@ class _TomoReadRoot extends ConsumerWidget {
             ),
           ),
         ),
-        data: (stored) => AppShell(
-          appearance: stored.appearance,
-          readingSettings: stored.readingSettings,
-          onImportBooks: () async {
-            await ref.read(libraryBooksProvider.notifier).importFromPicker();
-          },
-          onAppearanceChanged: (value) {
-            ref.read(appSettingsProvider.notifier).updateAppearance(value);
-          },
-          onReadingSettingsChanged: (value) {
-            ref.read(appSettingsProvider.notifier).updateReadingSettings(value);
-          },
+        data: (stored) => ImportInboxHost(
+          initialArguments: initialImportArguments,
+          builder: (pickFiles) => AppShell(
+            appearance: stored.appearance,
+            readingSettings: stored.readingSettings,
+            onImportBooks: pickFiles,
+            onAppearanceChanged: (value) {
+              ref.read(appSettingsProvider.notifier).updateAppearance(value);
+            },
+            onReadingSettingsChanged: (value) {
+              ref
+                  .read(appSettingsProvider.notifier)
+                  .updateReadingSettings(value);
+            },
+          ),
         ),
       ),
     );

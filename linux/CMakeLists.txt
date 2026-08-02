@@ -94,6 +94,15 @@ set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
+install(FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/../packaging/linux/com.tomoread.reader.tomoread.desktop"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/applications"
+  COMPONENT Runtime)
+install(PROGRAMS
+  "${CMAKE_CURRENT_SOURCE_DIR}/../packaging/linux/register-file-associations.sh"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 

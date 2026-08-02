@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=TomoRead
+Comment=Read EPUB, PDF, TXT and Markdown books
+Exec=@EXECUTABLE@ %F
+Icon=tomoread
+Terminal=false
+Categories=Office;Viewer;
+MimeType=application/epub+zip;application/pdf;text/plain;text/markdown;text/x-markdown;
+StartupNotify=true

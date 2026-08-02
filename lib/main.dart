@@ -4,7 +4,7 @@ import 'app/tomo_read_app.dart';
 
 export 'app/tomo_read_app.dart';
 
-void main() {
+void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const TomoReadApp());
+  runApp(TomoReadApp(initialImportArguments: arguments));
 }
