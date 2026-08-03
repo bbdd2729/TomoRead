@@ -20,8 +20,13 @@
           return
         }
         const payload = { bridgeVersion: 1, type: 'runtimeError', message }
-        window.TomoRead?.postMessage(JSON.stringify(payload))
-        window.chrome?.webview?.postMessage(payload)
+        if (window.chrome?.webview?.postMessage) {
+          window.chrome.webview.postMessage(payload)
+        } else if (window.flutter_inappwebview?.callHandler) {
+          window.flutter_inappwebview.callHandler('TomoRead', JSON.stringify(payload))
+        } else {
+          window.TomoRead?.postMessage(JSON.stringify(payload))
+        }
       }
       window.addEventListener('error', reportRuntimeError)
       window.addEventListener('unhandledrejection', reportRuntimeError)

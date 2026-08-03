@@ -2,7 +2,7 @@
 'use strict'
 
 const CFI = globalThis.TomoReadEpubCfi
-const runtimeVersion = '35'
+const runtimeVersion = '36'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
@@ -38,6 +38,10 @@ const postMessage = message => {
   const payload = { ...message, bridgeVersion }
   if (window.chrome?.webview?.postMessage) {
     window.chrome.webview.postMessage(payload)
+    return
+  }
+  if (window.flutter_inappwebview?.callHandler) {
+    window.flutter_inappwebview.callHandler('TomoRead', JSON.stringify(payload))
     return
   }
   if (window.TomoRead?.postMessage) {
@@ -120,7 +124,10 @@ const loadManifest = async () => {
 
 const getSections = () => session.manifest.spine ?? []
 
-const sectionUrl = href => new URL(`../${href.split('#')[0]}`, location.href).href
+const sectionUrl = href => new URL(
+  `${session?.resourceBase ?? '../'}${href.split('#')[0]}`,
+  location.href,
+).href
 
 const findSection = href => {
   const path = href.split('#')[0]
