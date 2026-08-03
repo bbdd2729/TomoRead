@@ -108,11 +108,11 @@ class HybridSearchService {
         maxChapterIndex: maxChapterIndex,
         maxRawOffset: maxRawOffset,
       );
-      final semanticScores = await Isolate.run(
-        () => _scoreCandidates(
-          queryVectors.single,
-          candidates,
-          profile.distanceMetric,
+      final semanticScores = await _scoreCandidatesInBackground(
+        (
+          query: queryVectors.single,
+          candidates: candidates,
+          metric: profile.distanceMetric,
         ),
       );
       final chunksById = <String, ContentChunk>{
@@ -213,6 +213,16 @@ class HybridSearchService {
     return '${text.substring(0, end)}${end < text.length ? '…' : ''}';
   }
 }
+
+Future<Map<String, double>> _scoreCandidatesInBackground(
+  ({
+    List<double> query,
+    List<SemanticEmbeddingCandidate> candidates,
+    EmbeddingDistanceMetric metric,
+  }) request,
+) => Isolate.run(
+  () => _scoreCandidates(request.query, request.candidates, request.metric),
+);
 
 Map<String, double> _scoreCandidates(
   List<double> query,
