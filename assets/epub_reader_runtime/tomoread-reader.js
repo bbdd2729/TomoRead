@@ -2,7 +2,7 @@
 'use strict'
 
 const CFI = globalThis.TomoReadEpubCfi
-const runtimeVersion = '36'
+const runtimeVersion = '37'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
@@ -33,6 +33,52 @@ let autoScrollStartedAt = 0
 let autoScrollAppliedDistance = 0
 let autoScrollOptions
 const navigationHistory = []
+const pendingFlutterBridgeMessages = []
+
+const canUseFlutterBridge = () =>
+  typeof window.flutter_inappwebview?.callHandler === 'function'
+
+const sendToFlutterBridge = payload => {
+  try {
+    const result = window.flutter_inappwebview.callHandler(
+      'TomoRead',
+      JSON.stringify(payload),
+    )
+    // A rejected bridge call must not interrupt the reader runtime. The
+    // diagnostic is deliberately kept in the WebView console so Flutter can
+    // forward it through its existing console log handler.
+    result?.catch?.(error => console.debug('TomoRead Flutter bridge error', error))
+    return true
+  } catch (error) {
+    console.debug('TomoRead Flutter bridge is not available yet', error)
+    return false
+  }
+}
+
+const flushFlutterBridgeMessages = () => {
+  if (!canUseFlutterBridge()) return
+  while (pendingFlutterBridgeMessages.length > 0) {
+    const payload = pendingFlutterBridgeMessages.shift()
+    if (!sendToFlutterBridge(payload)) {
+      pendingFlutterBridgeMessages.unshift(payload)
+      return
+    }
+  }
+}
+
+// flutter_inappwebview injects its bridge asynchronously. The runtime can
+// execute before that event, especially with a custom EPUB scheme, so retain
+// early boot/ready messages until the platform confirms the bridge exists.
+window.addEventListener(
+  'flutterInAppWebViewPlatformReady',
+  flushFlutterBridgeMessages,
+  { once: true },
+)
+const flutterBridgePoll = window.setInterval(() => {
+  if (!canUseFlutterBridge()) return
+  flushFlutterBridgeMessages()
+  window.clearInterval(flutterBridgePoll)
+}, 50)
 
 const postMessage = message => {
   const payload = { ...message, bridgeVersion }
@@ -40,14 +86,19 @@ const postMessage = message => {
     window.chrome.webview.postMessage(payload)
     return
   }
-  if (window.flutter_inappwebview?.callHandler) {
-    window.flutter_inappwebview.callHandler('TomoRead', JSON.stringify(payload))
+  if (canUseFlutterBridge()) {
+    if (sendToFlutterBridge(payload)) return
+  }
+  if (window.flutter_inappwebview || !window.TomoRead?.postMessage) {
+    pendingFlutterBridgeMessages.push(payload)
     return
   }
   if (window.TomoRead?.postMessage) {
     window.TomoRead.postMessage(JSON.stringify(payload))
   }
 }
+
+flushFlutterBridgeMessages()
 
 const stopAutoScroll = (reason = 'explicit') => {
   if (autoScrollFrame == null && !autoScrollOptions) return
