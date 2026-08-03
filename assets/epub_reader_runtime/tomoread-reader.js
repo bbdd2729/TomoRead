@@ -2,7 +2,7 @@
 'use strict'
 
 const CFI = globalThis.TomoReadEpubCfi
-const runtimeVersion = '34'
+const runtimeVersion = '35'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 

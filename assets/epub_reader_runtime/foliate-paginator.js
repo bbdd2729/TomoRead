@@ -456,6 +456,11 @@ class View {
             let loadTimer
             const onLoad = () => {
                 const loadedDocument = this.document
+                // Android WebView can emit an early iframe load event before
+                // contentDocument becomes available. Treat it like the
+                // about:blank event below and wait for the actual chapter;
+                // otherwise the paginator passes null into afterLoad().
+                if (!loadedDocument) return
                 // A newly-connected iframe can emit its initial about:blank
                 // load after this listener is registered. Keep waiting for the
                 // EPUB resource instead of consuming that event as the chapter.

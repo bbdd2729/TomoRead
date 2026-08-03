@@ -176,6 +176,19 @@ void main() {
     expect(runtime, contains('globalThis.TomoReadEpubCfi'));
   });
 
+  test('waits for an Android iframe document before running Foliate hooks',
+      () async {
+    final paginator = await rootBundle.loadString(
+      'assets/epub_reader_runtime/foliate-paginator.js',
+    );
+
+    expect(paginator, contains('if (!loadedDocument) return'));
+    expect(
+      paginator,
+      contains('otherwise the paginator passes null into afterLoad().'),
+    );
+  });
+
   test('EPUB automatic scrolling uses elapsed animation-frame time', () async {
     final runtime = await rootBundle.loadString(
       'assets/epub_reader_runtime/tomoread-reader.js',
