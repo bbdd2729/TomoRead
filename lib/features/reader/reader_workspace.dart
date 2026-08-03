@@ -1050,7 +1050,9 @@ class ReaderWorkspace extends HookConsumerWidget {
             !isMobile &&
             constraints.maxWidth >= sidePanelWidth.value + 160 &&
             (!showToc || canShowBothPanels);
-        final panelTopInset = controlsVisible.value ? 64.0 : 8.0;
+        final systemTopInset = MediaQuery.viewPaddingOf(context).top;
+        final toolbarHeight = 64.0 + systemTopInset;
+        final panelTopInset = controlsVisible.value ? toolbarHeight : 8.0;
         final panelBottomInset = controlsVisible.value ? 72.0 : 8.0;
         Future<void> openMobileToc() {
           stopAutoScroll();
@@ -1325,36 +1327,40 @@ class ReaderWorkspace extends HookConsumerWidget {
               child: _ReaderChrome(
                 visible: controlsVisible.value,
                 hiddenOffset: const Offset(0, -1),
-                child: _ReaderToolbar(
-                  title: title,
-                  tocVisible: tocVisible.value,
-                  sidePanelVisible: sidePanelVisible.value,
-                  mobileReaderControls: isMobile,
-                  bookmarked: isBookmarked,
-                  canCreateAnnotation: selectedText.value != null,
-                  autoScrollActive: autoScrollActive.value,
-                  canAutoScroll: settings.layoutMode == ReaderLayoutMode.scroll,
-                  onExitReader: () {
-                    unawaited(flushPendingProgress());
-                    unawaited(ttsController.stop());
-                    onExitReader();
-                  },
-                  onToggleToc: isMobile
-                      ? () => unawaited(openMobileToc())
-                      : toggleToc,
-                  onToggleSidePanel: isMobile
-                      ? () => unawaited(openMobileSidePanel())
-                      : toggleSidePanel,
-                  onHideControls: toggleControls,
-                  onToggleBookmark: toggleBookmark,
-                  onCreateAnnotation: createAnnotation,
-                  onOpenBookSettings: openBookSettings,
-                  onOpenSearch: openSearch,
-                  onOpenAssistant: openReadingAssistant,
-                  onOpenVisualization: openVisualization,
-                  onToggleAutoScroll: toggleAutoScroll,
-                  ttsController: ttsController,
-                  bookId: bookId,
+                child: Padding(
+                  padding: EdgeInsets.only(top: systemTopInset),
+                  child: _ReaderToolbar(
+                    title: title,
+                    tocVisible: tocVisible.value,
+                    sidePanelVisible: sidePanelVisible.value,
+                    mobileReaderControls: isMobile,
+                    bookmarked: isBookmarked,
+                    canCreateAnnotation: selectedText.value != null,
+                    autoScrollActive: autoScrollActive.value,
+                    canAutoScroll:
+                        settings.layoutMode == ReaderLayoutMode.scroll,
+                    onExitReader: () {
+                      unawaited(flushPendingProgress());
+                      unawaited(ttsController.stop());
+                      onExitReader();
+                    },
+                    onToggleToc: isMobile
+                        ? () => unawaited(openMobileToc())
+                        : toggleToc,
+                    onToggleSidePanel: isMobile
+                        ? () => unawaited(openMobileSidePanel())
+                        : toggleSidePanel,
+                    onHideControls: toggleControls,
+                    onToggleBookmark: toggleBookmark,
+                    onCreateAnnotation: createAnnotation,
+                    onOpenBookSettings: openBookSettings,
+                    onOpenSearch: openSearch,
+                    onOpenAssistant: openReadingAssistant,
+                    onOpenVisualization: openVisualization,
+                    onToggleAutoScroll: toggleAutoScroll,
+                    ttsController: ttsController,
+                    bookId: bookId,
+                  ),
                 ),
               ),
             ),
@@ -1662,7 +1668,23 @@ class _ReaderTocPanel extends HookWidget {
     final query = useState('');
     final scrollController = useScrollController();
     final activeItemKey = useMemoized(GlobalKey.new);
+    final expandedKeys = useState(_tocExpandedKeysForActive(
+      toc,
+      activeChapterIndex,
+      rootKey: 'desktop',
+    ));
     final hasMatches = _hasMatchingItem(toc, query.value);
+    useEffect(() {
+      final activePath = _tocExpandedKeysForActive(
+        toc,
+        activeChapterIndex,
+        rootKey: 'desktop',
+      );
+      if (activePath.any((key) => !expandedKeys.value.contains(key))) {
+        expandedKeys.value = {...expandedKeys.value, ...activePath};
+      }
+      return null;
+    }, [toc, activeChapterIndex]);
     useEffect(() {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final targetContext = activeItemKey.currentContext;
@@ -1707,7 +1729,19 @@ class _ReaderTocPanel extends HookWidget {
             child: Center(child: Text('没有匹配的章节。')),
           )
         else
-          ..._buildTocItems(toc, activeItemKey, 0, query.value),
+          ..._buildTocItems(
+            toc,
+            activeItemKey: activeItemKey,
+            depth: 0,
+            query: query.value,
+            parentKey: 'desktop',
+            expandedKeys: expandedKeys.value,
+            onToggle: (key) {
+              final next = {...expandedKeys.value};
+              if (!next.add(key)) next.remove(key);
+              expandedKeys.value = next;
+            },
+          ),
       ],
     );
   }
@@ -1723,29 +1757,54 @@ class _ReaderTocPanel extends HookWidget {
   }
 
   List<Widget> _buildTocItems(
-    List<EpubTocItem> items, [
-    GlobalKey? activeItemKey,
-    int depth = 0,
-    String query = '',
-  ]) {
+    List<EpubTocItem> items, {
+    required GlobalKey activeItemKey,
+    required int depth,
+    required String query,
+    required String parentKey,
+    required Set<String> expandedKeys,
+    required ValueChanged<String> onToggle,
+  }) {
     final normalizedQuery = query.trim().toLowerCase();
-    return [
-      for (final item in items) ...[
-        if (normalizedQuery.isEmpty ||
-            item.title.toLowerCase().contains(normalizedQuery))
-          _TocListItem(
-            key: item.spineIndex == activeChapterIndex && item.children.isEmpty
-                ? activeItemKey
-                : null,
-            title: item.title,
-            depth: depth,
-            enabled: item.spineIndex >= 0,
-            selected: item.spineIndex == activeChapterIndex,
-            onTap: item.spineIndex < 0 ? null : () => onSelected(item),
+    final widgets = <Widget>[];
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
+      final nodeKey = '$parentKey/$index';
+      final matchesTitle = normalizedQuery.isEmpty ||
+          item.title.toLowerCase().contains(normalizedQuery);
+      final matchesChildren = _hasMatchingItem(item.children, query);
+      if (!matchesTitle && !matchesChildren) continue;
+      final hasChildren = item.children.isNotEmpty;
+      final expanded = expandedKeys.contains(nodeKey) ||
+          (normalizedQuery.isNotEmpty && matchesChildren);
+      widgets.add(
+        _TocListItem(
+          key: item.spineIndex == activeChapterIndex ? activeItemKey : null,
+          title: item.title,
+          depth: depth,
+          enabled: item.spineIndex >= 0,
+          selected: item.spineIndex == activeChapterIndex,
+          onTap: item.spineIndex < 0 ? null : () => onSelected(item),
+          hasChildren: hasChildren,
+          expanded: expanded,
+          onToggle: hasChildren ? () => onToggle(nodeKey) : null,
+        ),
+      );
+      if (hasChildren && expanded) {
+        widgets.addAll(
+          _buildTocItems(
+            item.children,
+            activeItemKey: activeItemKey,
+            depth: depth + 1,
+            query: query,
+            parentKey: nodeKey,
+            expandedKeys: expandedKeys,
+            onToggle: onToggle,
           ),
-        ..._buildTocItems(item.children, activeItemKey, depth + 1, query),
-      ],
-    ];
+        );
+      }
+    }
+    return widgets;
   }
 }
 
@@ -1757,6 +1816,9 @@ class _TocListItem extends StatelessWidget {
     required this.enabled,
     required this.selected,
     required this.onTap,
+    required this.hasChildren,
+    required this.expanded,
+    required this.onToggle,
   });
 
   final String title;
@@ -1764,6 +1826,9 @@ class _TocListItem extends StatelessWidget {
   final bool enabled;
   final bool selected;
   final VoidCallback? onTap;
+  final bool hasChildren;
+  final bool expanded;
+  final VoidCallback? onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -1783,7 +1848,7 @@ class _TocListItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         child: ListTile(
           contentPadding: EdgeInsets.only(left: depth * 16.0 + 12, right: 12),
-          enabled: enabled,
+          enabled: enabled || hasChildren,
           title: Text(
             title,
             maxLines: 2,
@@ -1796,13 +1861,22 @@ class _TocListItem extends StatelessWidget {
                 : null,
           ),
           onTap: onTap,
+          trailing: hasChildren
+              ? IconButton(
+                  tooltip: expanded ? '折叠章节' : '展开章节',
+                  onPressed: onToggle,
+                  icon: Icon(
+                    expanded ? Icons.expand_less : Icons.expand_more,
+                  ),
+                )
+              : null,
         ),
       ),
     );
   }
 }
 
-class _MobileReaderTocDrawer extends StatelessWidget {
+class _MobileReaderTocDrawer extends HookWidget {
   const _MobileReaderTocDrawer({
     required this.title,
     required this.book,
@@ -1821,6 +1895,30 @@ class _MobileReaderTocDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final query = useState('');
+    final expandedKeys = useState(_tocExpandedKeysForActive(
+      toc,
+      activeChapterIndex,
+      rootKey: 'mobile',
+    ));
+    useEffect(() {
+      final activePath = _tocExpandedKeysForActive(
+        toc,
+        activeChapterIndex,
+        rootKey: 'mobile',
+      );
+      if (activePath.any((key) => !expandedKeys.value.contains(key))) {
+        expandedKeys.value = {...expandedKeys.value, ...activePath};
+      }
+      return null;
+    }, [toc, activeChapterIndex]);
+
+    void toggleNode(String key) {
+      final next = {...expandedKeys.value};
+      if (!next.add(key)) next.remove(key);
+      expandedKeys.value = next;
+    }
+
     final bookTitle = book?.title ?? title;
     final author = book?.author;
     return _ReaderBottomSheet(
@@ -1880,17 +1978,41 @@ class _MobileReaderTocDrawer extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: TextField(
+              key: const Key('reader-mobile-toc-search'),
+              onChanged: (value) => query.value = value,
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                hintText: '搜索目录',
+                border: const OutlineInputBorder(),
+                isDense: true,
+                suffixIcon: query.value.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: '清除搜索',
+                        onPressed: () => query.value = '',
+                        icon: const Icon(Icons.clear),
+                      ),
+              ),
+            ),
+          ),
           Expanded(
             child: toc.isEmpty
                 ? const Center(child: Text('暂无可用目录。'))
                 : ListView(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     children: [
-                      for (final item in toc)
+                      for (var index = 0; index < toc.length; index++)
                         _MobileTocEntry(
-                          item: item,
+                          item: toc[index],
                           activeChapterIndex: activeChapterIndex,
                           onSelected: onSelected,
+                          nodeKey: 'mobile/$index',
+                          query: query.value,
+                          expandedKeys: expandedKeys.value,
+                          onToggle: toggleNode,
                         ),
                     ],
                   ),
@@ -1906,16 +2028,29 @@ class _MobileTocEntry extends StatelessWidget {
     required this.item,
     required this.activeChapterIndex,
     required this.onSelected,
+    required this.nodeKey,
+    required this.query,
+    required this.expandedKeys,
+    required this.onToggle,
     this.depth = 0,
   });
 
   final EpubTocItem item;
   final int activeChapterIndex;
   final ValueChanged<EpubTocItem> onSelected;
+  final String nodeKey;
+  final String query;
+  final Set<String> expandedKeys;
+  final ValueChanged<String> onToggle;
   final int depth;
 
   @override
   Widget build(BuildContext context) {
+    final normalizedQuery = query.trim().toLowerCase();
+    final matchesTitle = normalizedQuery.isEmpty ||
+        item.title.toLowerCase().contains(normalizedQuery);
+    final matchesChildren = _hasMatchingTocItem(item.children, query);
+    if (!matchesTitle && !matchesChildren) return const SizedBox.shrink();
     final padding = EdgeInsetsDirectional.only(start: 12 + depth * 16.0);
     if (item.children.isEmpty) {
       return ListTile(
@@ -1926,26 +2061,46 @@ class _MobileTocEntry extends StatelessWidget {
         onTap: item.spineIndex < 0 ? null : () => onSelected(item),
       );
     }
-    return ExpansionTile(
-      key: PageStorageKey('${item.href}-$activeChapterIndex'),
-      tilePadding: padding,
-      initiallyExpanded: _containsActiveChapter(item),
-      title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+    final expanded = expandedKeys.contains(nodeKey) ||
+        (normalizedQuery.isNotEmpty && matchesChildren);
+    return Column(
       children: [
-        for (final child in item.children)
+        ListTile(
+          contentPadding: padding,
+          selected: item.spineIndex == activeChapterIndex,
+          title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+          onTap: item.spineIndex < 0 ? null : () => onSelected(item),
+          trailing: IconButton(
+            tooltip: expanded ? '折叠章节' : '展开章节',
+            onPressed: () => onToggle(nodeKey),
+            icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+          ),
+        ),
+        if (expanded)
+          for (var index = 0; index < item.children.length; index++)
           _MobileTocEntry(
-            item: child,
+            item: item.children[index],
             activeChapterIndex: activeChapterIndex,
             onSelected: onSelected,
+            nodeKey: '$nodeKey/$index',
+            query: query,
+            expandedKeys: expandedKeys,
+            onToggle: onToggle,
             depth: depth + 1,
           ),
       ],
     );
   }
 
-  bool _containsActiveChapter(EpubTocItem entry) =>
-      entry.spineIndex == activeChapterIndex ||
-      entry.children.any(_containsActiveChapter);
+  bool _hasMatchingTocItem(List<EpubTocItem> items, String searchQuery) {
+    final normalizedQuery = searchQuery.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return true;
+    return items.any(
+      (entry) =>
+          entry.title.toLowerCase().contains(normalizedQuery) ||
+          _hasMatchingTocItem(entry.children, searchQuery),
+    );
+  }
 }
 
 class _MobileReaderSideDrawer extends StatelessWidget {
@@ -2796,6 +2951,33 @@ class _BookSettingsResult {
 
   final BookReadingOverride? bookOverride;
   final bool? textColoringOverride;
+}
+
+Set<String> _tocExpandedKeysForActive(
+  List<EpubTocItem> items,
+  int activeChapterIndex, {
+  required String rootKey,
+}) {
+  final expanded = <String>{};
+
+  bool visit(List<EpubTocItem> entries, String parentKey) {
+    var containsActive = false;
+    for (var index = 0; index < entries.length; index++) {
+      final item = entries[index];
+      final nodeKey = '$parentKey/$index';
+      final childContainsActive = visit(item.children, nodeKey);
+      final itemContainsActive =
+          item.spineIndex == activeChapterIndex || childContainsActive;
+      if (itemContainsActive && item.children.isNotEmpty) {
+        expanded.add(nodeKey);
+      }
+      if (itemContainsActive) containsActive = true;
+    }
+    return containsActive;
+  }
+
+  visit(items, rootKey);
+  return expanded;
 }
 
 class _UnderlineColorDialog extends StatelessWidget {
