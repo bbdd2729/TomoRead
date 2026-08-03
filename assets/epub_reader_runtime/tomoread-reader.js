@@ -2,7 +2,7 @@
 'use strict'
 
 const CFI = globalThis.TomoReadEpubCfi
-const runtimeVersion = '37'
+const runtimeVersion = '38'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
@@ -1112,6 +1112,8 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   let wheelDelta = 0
   let wheelResetTimer
   let wheelNavigationPending = false
+  let lastSelectionContextMenuKey
+  let selectionContextMenuResetTimer
   doc.addEventListener('pointerdown', () => stopAutoScroll('pointer'))
   doc.addEventListener('selectionchange', () => {
     if (!doc.getSelection()?.isCollapsed) stopAutoScroll('selection')
@@ -1220,6 +1222,21 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     const selection = readSelection(doc, index)
     if (!selection) return
     event.preventDefault()
+    // Android WebView can emit duplicate context-menu events for one
+    // long-press. Send a single payload, then clear the native selection so
+    // its platform action bar cannot race the Flutter menu.
+    const selectionKey = [
+      selection.href,
+      selection.startOffset,
+      selection.endOffset,
+      selection.cfi ?? '',
+    ].join('|')
+    if (lastSelectionContextMenuKey === selectionKey) return
+    lastSelectionContextMenuKey = selectionKey
+    window.clearTimeout(selectionContextMenuResetTimer)
+    selectionContextMenuResetTimer = window.setTimeout(() => {
+      lastSelectionContextMenuKey = undefined
+    }, 800)
     const frameRect = doc.defaultView?.frameElement?.getBoundingClientRect?.()
     postMessage({
       type: 'selectionContextMenu',
@@ -1227,6 +1244,7 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
       x: event.clientX + (frameRect?.left ?? 0),
       y: event.clientY + (frameRect?.top ?? 0),
     })
+    window.setTimeout(() => doc.getSelection()?.removeAllRanges(), 0)
   })
 }
 

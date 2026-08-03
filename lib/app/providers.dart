@@ -127,9 +127,10 @@ final textProjectionRepositoryProvider = Provider<TextProjectionRepository>(
   (ref) => TextProjectionRepository(ref.watch(appDatabaseProvider)),
 );
 
-final textDisplayTransformServiceProvider = Provider<TextDisplayTransformService>(
-  (ref) => const TextDisplayTransformService(),
-);
+final textDisplayTransformServiceProvider =
+    Provider<TextDisplayTransformService>(
+      (ref) => const TextDisplayTransformService(),
+    );
 
 final textColoringLayoutServiceProvider = Provider<TextColoringLayoutService>(
   (ref) => const TextColoringLayoutService(),
@@ -148,10 +149,9 @@ final embeddingProviderRepositoryProvider =
       (ref) => EmbeddingProviderRepository(ref.watch(appDatabaseProvider)),
     );
 
-final contentEmbeddingRepositoryProvider =
-    Provider<ContentEmbeddingRepository>(
-      (ref) => ContentEmbeddingRepository(ref.watch(appDatabaseProvider)),
-    );
+final contentEmbeddingRepositoryProvider = Provider<ContentEmbeddingRepository>(
+  (ref) => ContentEmbeddingRepository(ref.watch(appDatabaseProvider)),
+);
 
 final ttsRepositoryProvider = Provider<TtsRepository>(
   (ref) => TtsRepository(ref.watch(appDatabaseProvider)),
@@ -214,9 +214,10 @@ typedef ContentSearchRequest = ({
   int limit,
 });
 
-final installationIdentityServiceProvider = Provider<InstallationIdentityService>(
-  (ref) => InstallationIdentityService(),
-);
+final installationIdentityServiceProvider =
+    Provider<InstallationIdentityService>(
+      (ref) => InstallationIdentityService(),
+    );
 
 final installationIdProvider = FutureProvider<String>(
   (ref) => ref.watch(installationIdentityServiceProvider).getOrCreate(),
@@ -245,13 +246,15 @@ final storageDiagnosticsServiceProvider = Provider<StorageDiagnosticsService>(
 final contentSearchProvider = FutureProvider.autoDispose
     .family<List<ContentSearchResult>, ContentSearchRequest>((ref, request) {
       ref.watch(contentIndexRevisionProvider);
-      return ref.watch(contentChunkRepositoryProvider).search(
-        bookId: request.bookId,
-        query: request.query,
-        maxChapterIndex: request.maxChapterIndex,
-        maxRawOffset: request.maxRawOffset,
-        limit: request.limit,
-      );
+      return ref
+          .watch(contentChunkRepositoryProvider)
+          .search(
+            bookId: request.bookId,
+            query: request.query,
+            maxChapterIndex: request.maxChapterIndex,
+            maxRawOffset: request.maxRawOffset,
+            limit: request.limit,
+          );
     });
 
 typedef SemanticIndexRequest = ({String bookId, String profileId});
@@ -259,10 +262,9 @@ typedef SemanticIndexRequest = ({String bookId, String profileId});
 final semanticIndexStateProvider = FutureProvider.autoDispose
     .family<SemanticIndexState?, SemanticIndexRequest>((ref, request) {
       ref.watch(semanticIndexRevisionProvider);
-      return ref.watch(contentEmbeddingRepositoryProvider).loadState(
-        bookId: request.bookId,
-        profileId: request.profileId,
-      );
+      return ref
+          .watch(contentEmbeddingRepositoryProvider)
+          .loadState(bookId: request.bookId, profileId: request.profileId);
     });
 
 typedef HybridSearchRequest = ({
@@ -277,13 +279,15 @@ final hybridSearchProvider = FutureProvider.autoDispose
     .family<HybridSearchResponse, HybridSearchRequest>((ref, request) {
       ref.watch(contentIndexRevisionProvider);
       ref.watch(semanticIndexRevisionProvider);
-      return ref.watch(hybridSearchServiceProvider).search(
-        bookId: request.bookId,
-        query: request.query,
-        maxChapterIndex: request.maxChapterIndex,
-        maxRawOffset: request.maxRawOffset,
-        limit: request.limit,
-      );
+      return ref
+          .watch(hybridSearchServiceProvider)
+          .search(
+            bookId: request.bookId,
+            query: request.query,
+            maxChapterIndex: request.maxChapterIndex,
+            maxRawOffset: request.maxRawOffset,
+            limit: request.limit,
+          );
     });
 
 final visualArtifactRepositoryProvider = Provider<VisualArtifactRepository>(
@@ -562,9 +566,59 @@ final libraryBooksProvider =
     );
 
 class LibraryBooksNotifier extends AsyncNotifier<List<LibraryBook>> {
+  Future<void> _readingPositionWriteTail = Future<void>.value();
+
   @override
   Future<List<LibraryBook>> build() =>
       ref.watch(bookRepositoryProvider).listBooks();
+
+  /// Persists a reader position and immediately reflects it in the library
+  /// cache. Reader-specific providers deliberately remain untouched here:
+  /// invalidating the active reader book would make a renderer restore its
+  /// position while the user is still reading.
+  Future<void> updateReadingPosition({
+    required String bookId,
+    required int chapterIndex,
+    required double progress,
+    String? locator,
+  }) {
+    final normalizedProgress = progress.clamp(0, 1).toDouble();
+    final normalizedChapterIndex = chapterIndex < 0 ? 0 : chapterIndex;
+    final write = _readingPositionWriteTail.then((_) async {
+      await ref
+          .read(bookRepositoryProvider)
+          .updateReadingPosition(
+            bookId: bookId,
+            chapterIndex: normalizedChapterIndex,
+            progress: normalizedProgress,
+            locator: locator,
+          );
+
+      final books = state.value;
+      if (books == null) {
+        ref.invalidateSelf();
+        return;
+      }
+      final index = books.indexWhere((book) => book.id == bookId);
+      if (index < 0) {
+        ref.invalidateSelf();
+        return;
+      }
+      final updated = books[index].copyWith(
+        chapterIndex: normalizedChapterIndex,
+        progress: normalizedProgress,
+        locator: locator,
+        clearLocator: locator == null,
+        updatedAt: DateTime.now(),
+      );
+      state = AsyncData([
+        for (var itemIndex = 0; itemIndex < books.length; itemIndex++)
+          itemIndex == index ? updated : books[itemIndex],
+      ]);
+    });
+    _readingPositionWriteTail = write.catchError((_) {});
+    return write;
+  }
 
   Future<List<BookImportResult>> importFromPicker() async {
     final results = await ref

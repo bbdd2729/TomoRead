@@ -31,8 +31,7 @@ class PdfAnnotationEditorDialog extends StatefulWidget {
       _PdfAnnotationEditorDialogState();
 }
 
-class _PdfAnnotationEditorDialogState
-    extends State<PdfAnnotationEditorDialog> {
+class _PdfAnnotationEditorDialogState extends State<PdfAnnotationEditorDialog> {
   final _noteController = TextEditingController();
   AnnotationColor _color = AnnotationColor.yellow;
 
@@ -45,6 +44,7 @@ class _PdfAnnotationEditorDialogState
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(widget.title),
+    scrollable: true,
     content: SizedBox(
       width: 440,
       child: Column(
@@ -87,10 +87,7 @@ class _PdfAnnotationEditorDialogState
           final note = _noteController.text.trim();
           Navigator.pop(
             context,
-            PdfAnnotationDraft(
-              color: _color,
-              note: note.isEmpty ? null : note,
-            ),
+            PdfAnnotationDraft(color: _color, note: note.isEmpty ? null : note),
           );
         },
         child: const Text('保存'),
@@ -201,16 +198,14 @@ class _PdfAnnotationsDialogState extends State<PdfAnnotationsDialog> {
       await widget.onDelete(annotation);
       if (mounted) {
         setState(
-          () => _annotations.removeWhere(
-            (item) => item.id == annotation.id,
-          ),
+          () => _annotations.removeWhere((item) => item.id == annotation.id),
         );
       }
     } on Object catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('删除标注失败：$error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('删除标注失败：$error')));
       }
     } finally {
       if (mounted) setState(() => _deleting.remove(annotation.id));

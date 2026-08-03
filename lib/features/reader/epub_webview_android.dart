@@ -13,6 +13,7 @@ import '../../domain/models/epub_interaction.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/reader_text_selection.dart';
+import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_coloring.dart';
 import 'android_epub_resource_handler.dart';
@@ -28,10 +29,13 @@ class AndroidEpubWebView extends HookConsumerWidget {
     required this.href,
     required this.settings,
     required this.textColoring,
+    required this.annotations,
+    required this.searchQuery,
     this.ttsHighlightHref,
     this.ttsHighlightText,
     this.ttsHighlightStart,
     this.ttsHighlightEnd,
+    required this.focusedAnnotationId,
     required this.initialScrollRatio,
     required this.initialAnchor,
     required this.initialCfi,
@@ -54,10 +58,13 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final String href;
   final ReadingSettings settings;
   final ResolvedTextColoring textColoring;
+  final List<ReadingAnnotation> annotations;
+  final String? searchQuery;
   final String? ttsHighlightHref;
   final String? ttsHighlightText;
   final int? ttsHighlightStart;
   final int? ttsHighlightEnd;
+  final String? focusedAnnotationId;
   final double initialScrollRatio;
   final String? initialAnchor;
   final String? initialCfi;
@@ -94,6 +101,11 @@ class AndroidEpubWebView extends HookConsumerWidget {
       context,
       textColoring,
     );
+    final runtimeAnnotationScript = _runtimeAnnotationScript(
+      annotations,
+      focusedAnnotationId,
+    );
+    final runtimeSearchScript = _runtimeSearchScript(searchQuery);
     final runtimeTtsHighlightScript = _runtimeTtsHighlightScript(
       href: ttsHighlightHref,
       text: ttsHighlightText,
@@ -116,6 +128,10 @@ class AndroidEpubWebView extends HookConsumerWidget {
     runtimeScriptRef.value = runtimeScript;
     final textColoringScriptRef = useRef(runtimeTextColoringScript);
     textColoringScriptRef.value = runtimeTextColoringScript;
+    final annotationScriptRef = useRef(runtimeAnnotationScript);
+    annotationScriptRef.value = runtimeAnnotationScript;
+    final searchScriptRef = useRef(runtimeSearchScript);
+    searchScriptRef.value = runtimeSearchScript;
     final runtimeBridgeReady = useRef(false);
     final runtimeBootstrapStarted = useRef(false);
     void reportReady() {
@@ -217,6 +233,26 @@ class AndroidEpubWebView extends HookConsumerWidget {
           loadPhase.value == _AndroidEpubLoadPhase.failed) {
         return;
       }
+      final annotationsApplied = await _runJavaScript(
+        webViewController,
+        annotationScriptRef.value,
+        onError: reportFailure,
+      );
+      if (!annotationsApplied ||
+          !active.value ||
+          loadPhase.value == _AndroidEpubLoadPhase.failed) {
+        return;
+      }
+      final searchApplied = await _runJavaScript(
+        webViewController,
+        searchScriptRef.value,
+        onError: reportFailure,
+      );
+      if (!searchApplied ||
+          !active.value ||
+          loadPhase.value == _AndroidEpubLoadPhase.failed) {
+        return;
+      }
       // The runtime API is available at this point. Do not make visual
       // rendering depend solely on a one-shot JavaScript bridge callback.
       // Bridge messages still drive progress, navigation, and runtime errors.
@@ -252,6 +288,36 @@ class AndroidEpubWebView extends HookConsumerWidget {
       }
       return null;
     }, [controller.value, runtimeTextColoringScript, loadPhase.value]);
+
+    useEffect(() {
+      final webViewController = controller.value;
+      if (loadPhase.value == _AndroidEpubLoadPhase.ready &&
+          webViewController != null) {
+        unawaited(
+          _runJavaScript(
+            webViewController,
+            runtimeAnnotationScript,
+            onError: reportFailure,
+          ),
+        );
+      }
+      return null;
+    }, [controller.value, runtimeAnnotationScript, loadPhase.value]);
+
+    useEffect(() {
+      final webViewController = controller.value;
+      if (loadPhase.value == _AndroidEpubLoadPhase.ready &&
+          webViewController != null) {
+        unawaited(
+          _runJavaScript(
+            webViewController,
+            runtimeSearchScript,
+            onError: reportFailure,
+          ),
+        );
+      }
+      return null;
+    }, [controller.value, runtimeSearchScript, loadPhase.value]);
 
     useEffect(() {
       final webViewController = controller.value;
@@ -736,6 +802,29 @@ class AndroidEpubWebView extends HookConsumerWidget {
   ) => _runtimeCall(
     'runtime.setTextColoring(${jsonEncode(textColoring.toRuntimeJson(dark: Theme.of(context).brightness == Brightness.dark))})',
   );
+
+  String _runtimeAnnotationScript(
+    List<ReadingAnnotation> annotations,
+    String? focusedAnnotationId,
+  ) {
+    final values = annotations
+        .map(
+          (annotation) => {
+            'id': annotation.id,
+            'href': annotation.href,
+            'locator': annotation.locator,
+            'color': annotation.color.name,
+            'style': annotation.renderStyle.name,
+          },
+        )
+        .toList();
+    return _runtimeCall(
+      'runtime.setAnnotations(${jsonEncode(values)}, ${jsonEncode(focusedAnnotationId)})',
+    );
+  }
+
+  String _runtimeSearchScript(String? query) =>
+      _runtimeCall('runtime.setSearchQuery(${jsonEncode(query)})');
 
   String _runtimeTtsHighlightScript({
     required String? href,

@@ -49,9 +49,7 @@ class LibraryHomePage extends HookConsumerWidget {
     Future<void> finishImport(List<BookImportResult> initialResults) async {
       final results = await resolveImportResults(context, ref, initialResults);
       if (!context.mounted || results.isEmpty) return;
-      if (results.any(
-        (result) => result.status == BookImportStatus.imported,
-      )) {
+      if (results.any((result) => result.status == BookImportStatus.imported)) {
         ref.invalidate(libraryBooksProvider);
       }
       showImportSummary(context, results);
@@ -65,9 +63,8 @@ class LibraryHomePage extends HookConsumerWidget {
         final dialog = showDialog<List<BookImportResult>>(
           context: context,
           barrierDismissible: false,
-          builder: (context) => BookImportPreviewDialog(
-            controller: importController,
-          ),
+          builder: (context) =>
+              BookImportPreviewDialog(controller: importController),
         );
         unawaited(importController.prepare(sources));
         final results = await dialog;
@@ -467,7 +464,7 @@ enum _LibraryViewMode { grid, list }
 
 extension on _LibrarySort {
   String get label => switch (this) {
-    _LibrarySort.recent => '最近导入',
+    _LibrarySort.recent => '最近阅读',
     _LibrarySort.title => '书名',
     _LibrarySort.progress => '阅读进度',
   };
@@ -507,9 +504,10 @@ List<LibraryBook> _filterAndSortBooks(
         (normalizedQuery.isEmpty || searchableText.contains(normalizedQuery));
   }).toList();
   filtered.sort(switch (sort) {
-    _LibrarySort.recent => (first, second) => second.importedAt.compareTo(
-      first.importedAt,
-    ),
+    _LibrarySort.recent =>
+      (first, second) => (second.updatedAt ?? second.importedAt).compareTo(
+        first.updatedAt ?? first.importedAt,
+      ),
     _LibrarySort.title =>
       (first, second) =>
           first.title.toLowerCase().compareTo(second.title.toLowerCase()),

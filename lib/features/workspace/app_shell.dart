@@ -176,7 +176,8 @@ class AppShell extends HookConsumerWidget {
     }
 
     void exitReaderToLibrary(WorkspaceTab tab) {
-      if (tab.destination != AppDestination.reader || !tabs.value.contains(tab)) {
+      if (tab.destination != AppDestination.reader ||
+          !tabs.value.contains(tab)) {
         return;
       }
       final libraryTab = tabs.value.firstWhere(
@@ -282,6 +283,10 @@ class AppShell extends HookConsumerWidget {
                     );
 
               return Scaffold(
+                // The reader owns keyboard-aware overlays such as note
+                // dialogs. Keeping its body stable prevents an IME from
+                // resizing and rebuilding EPUB/TXT/PDF content underneath.
+                resizeToAvoidBottomInset: !isReading,
                 appBar: isReading || isDesktop
                     ? null
                     : AppBar(

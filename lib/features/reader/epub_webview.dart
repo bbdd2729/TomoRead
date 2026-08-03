@@ -92,10 +92,13 @@ class EpubWebView extends HookConsumerWidget {
         href: href,
         settings: settings,
         textColoring: textColoring,
+        annotations: annotations,
+        searchQuery: searchQuery,
         ttsHighlightHref: ttsHighlightHref,
         ttsHighlightText: ttsHighlightText,
         ttsHighlightStart: ttsHighlightStart,
         ttsHighlightEnd: ttsHighlightEnd,
+        focusedAnnotationId: focusedAnnotationId,
         initialScrollRatio: initialScrollRatio,
         initialAnchor: initialAnchor,
         initialCfi: initialCfi,
@@ -1010,15 +1013,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
       'runtime.command(${jsonEncode({
         'id': command.id,
         'type': type,
-        'payload': {
-          'href': command.href,
-          'ratio': command.ratio,
-          'anchor': command.anchor,
-          'cfi': command.cfi,
-          'amount': command.amount,
-          'unit': command.unit,
-          'speed': command.speed,
-        },
+        'payload': {'href': command.href, 'ratio': command.ratio, 'anchor': command.anchor, 'cfi': command.cfi, 'amount': command.amount, 'unit': command.unit, 'speed': command.speed},
       })})',
     );
   }
@@ -1060,9 +1055,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
             'start': start,
             'end': end,
           };
-    return _runtimeCall(
-      'runtime.setTtsHighlight(${jsonEncode(payload)})',
-    );
+    return _runtimeCall('runtime.setTtsHighlight(${jsonEncode(payload)})');
   }
 
   String _runtimeCall(String invocation) =>

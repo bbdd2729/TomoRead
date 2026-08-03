@@ -16,6 +16,7 @@ import 'package:tomoread/domain/models/library_book.dart';
 import 'package:tomoread/domain/models/reading_settings.dart';
 import 'package:tomoread/domain/models/reading_annotation.dart';
 import 'package:tomoread/features/library/book_details_page.dart';
+import 'package:tomoread/features/reader/reader_chrome.dart';
 import 'package:tomoread/features/reader/reader_workspace.dart';
 import 'package:tomoread/features/workspace/app_shell.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -214,12 +215,63 @@ void main() {
     await tester.tap(find.byKey(const Key('reader-mobile-toc-close')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const Key('reader-mobile-more')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const Key('reader-side-panel')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byKey(const Key('reader-mobile-side-header')), findsOneWidget);
     expect(find.byKey(const Key('reader-mobile-more')), findsOneWidget);
+  });
+
+  testWidgets('content center tap ignores reader scroll gestures', (
+    tester,
+  ) async {
+    configureMobile(tester);
+    var tapCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReaderContentTapDetector(
+            onTap: () => tapCount += 1,
+            child: const SizedBox.expand(
+              key: Key('reader-content-tap-detector'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final content = find.byKey(const Key('reader-content-tap-detector'));
+    await tester.dragFrom(tester.getCenter(content), const Offset(0, -120));
+    expect(tapCount, 0);
+
+    await tester.tapAt(tester.getCenter(content));
+    expect(tapCount, 1);
+  });
+
+  testWidgets('reader chrome uses overflow actions for large text', (
+    tester,
+  ) async {
+    late ReaderChromeLayout layout;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(1.3)),
+          child: Builder(
+            builder: (context) {
+              layout = ReaderChromeLayout.resolve(context, maxWidth: 720);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(layout.isCompact, isTrue);
+    expect(layout.usesOverflowActions(1280), isTrue);
   });
 
   testWidgets('opens settings from the single navigation entry', (
