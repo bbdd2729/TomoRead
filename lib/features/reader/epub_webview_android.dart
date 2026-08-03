@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -83,7 +84,6 @@ class AndroidEpubWebView extends HookConsumerWidget {
     final error = useState<Object?>(null);
     final loadPhase = useState(_AndroidEpubLoadPhase.loading);
     final retryRevision = useState(0);
-    final readinessTimer = useRef<Timer?>(null);
     final active = useRef(true);
     final runtimeSettingsScript = _runtimeSettingsScript(
       context,
@@ -116,13 +116,11 @@ class AndroidEpubWebView extends HookConsumerWidget {
     runtimeScriptRef.value = runtimeScript;
     final textColoringScriptRef = useRef(runtimeTextColoringScript);
     textColoringScriptRef.value = runtimeTextColoringScript;
-    final runtimeLoaded = useRef(false);
     final runtimeBridgeReady = useRef(false);
+    final runtimeBootstrapStarted = useRef(false);
     void reportReady() {
       if (!active.value) return;
       final wasReady = loadPhase.value == _AndroidEpubLoadPhase.ready;
-      readinessTimer.value?.cancel();
-      readinessTimer.value = null;
       error.value = null;
       loadPhase.value = _AndroidEpubLoadPhase.ready;
       if (!wasReady) {
@@ -132,15 +130,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
 
     void reportFailure(Object exception) {
       if (!active.value) return;
-      readinessTimer.value?.cancel();
-      readinessTimer.value = null;
       error.value = exception;
       loadPhase.value = _AndroidEpubLoadPhase.failed;
-      AppDiagnostics.error(
-        'epub.webview',
-        'renderer failed',
-        error: exception,
-      );
+      AppDiagnostics.error('epub.webview', 'renderer failed', error: exception);
     }
 
     final messageHandlerRef = useRef<void Function(String)?>(null);
@@ -156,23 +148,28 @@ class AndroidEpubWebView extends HookConsumerWidget {
       reportFailure,
       onAutoScrollChanged,
     );
-    final resourceHandler = useMemoized<AndroidEpubResourceHandler?>(
-      () {
-        final directory = readerSession.value?.directoryPath;
-        return directory == null
-            ? null
-            : AndroidEpubResourceHandler(
-                bookId: bookId,
-                bookDirectoryPath: directory,
-              );
-      },
-      [bookId, readerSession.value?.directoryPath],
-    );
+    final resourceHandler = useMemoized<AndroidEpubResourceHandler?>(() {
+      final directory = readerSession.value?.directoryPath;
+      return directory == null
+          ? null
+          : AndroidEpubResourceHandler(
+              bookId: bookId,
+              bookDirectoryPath: directory,
+            );
+    }, [bookId, readerSession.value?.directoryPath]);
     final controller = useState<InAppWebViewController?>(null);
+    final runtimeDocument = useFuture<String>(
+      useMemoized<Future<String>?>(() {
+        final runtimeDirectoryPath = readerSession.value?.runtimeDirectoryPath;
+        return runtimeDirectoryPath == null
+            ? null
+            : _loadAndroidRuntimeDocument(runtimeDirectoryPath);
+      }, [readerSession.value?.runtimeDirectoryPath, retryRevision.value]),
+    );
 
     useEffect(() {
-      runtimeLoaded.value = false;
-      readinessTimer.value?.cancel();
+      runtimeBootstrapStarted.value = false;
+      runtimeBridgeReady.value = false;
       error.value = null;
       loadPhase.value = _AndroidEpubLoadPhase.loading;
       return null;
@@ -181,68 +178,50 @@ class AndroidEpubWebView extends HookConsumerWidget {
     useEffect(
       () => () {
         active.value = false;
-        readinessTimer.value?.cancel();
-        readinessTimer.value = null;
       },
       const [],
     );
 
-    useEffect(
-      () {
-        final webViewController = controller.value;
-        if (runtimeScript == null ||
-            runtimeLoaded.value ||
-            resourceHandler == null ||
-            webViewController == null) {
-          return null;
-        }
-        Future<void> loadChapter() async {
-          final entryPoint = await resourceHandler.load(
-            resourceHandler.runtimeEntryPoint,
-          );
-          if (!entryPoint.isSuccess) {
-            AppDiagnostics.error(
-              'epub.webview',
-              'runtime entry point missing',
-              details: {'statusCode': entryPoint.statusCode},
-            );
-            reportFailure(StateError('EPUB chapter is unavailable: $href'));
-            return;
-          }
-          try {
-            AppDiagnostics.info(
-              'epub.webview',
-              'loading virtual runtime entry point',
-              details: {'url': resourceHandler.runtimeEntryPoint.toString()},
-            );
-            await webViewController.loadUrl(
-              urlRequest: URLRequest(
-                url: WebUri(resourceHandler.runtimeEntryPoint.toString()),
-              ),
-            );
-          } catch (exception, stackTrace) {
-            AppDiagnostics.error(
-              'epub.webview',
-              'runtime entry point load failed',
-              error: exception,
-              stackTrace: stackTrace,
-            );
-            reportFailure(exception);
-          }
-        }
-
-        runtimeLoaded.value = true;
-        unawaited(loadChapter());
-        return null;
-      },
-      [
-        controller.value,
-        resourceHandler,
-        epubManifest.value,
-        bookId,
-        retryRevision.value,
-      ],
-    );
+    Future<void> startRuntime(InAppWebViewController webViewController) async {
+      if (!active.value || runtimeBootstrapStarted.value) return;
+      final script = runtimeScriptRef.value;
+      if (script == null) return;
+      runtimeBootstrapStarted.value = true;
+      AppDiagnostics.info('epub.webview', 'checking inline runtime bootstrap');
+      final runtimeAvailable = await _waitForRuntimeApi(webViewController);
+      if (!active.value) return;
+      if (!runtimeAvailable) {
+        reportFailure(
+          StateError('EPUB runtime scripts did not initialize in the WebView.'),
+        );
+        return;
+      }
+      AppDiagnostics.info('epub.webview', 'runtime API detected');
+      final opened = await _runJavaScript(
+        webViewController,
+        script,
+        onError: reportFailure,
+      );
+      if (!opened ||
+          !active.value ||
+          loadPhase.value == _AndroidEpubLoadPhase.failed) {
+        return;
+      }
+      final coloringApplied = await _runJavaScript(
+        webViewController,
+        textColoringScriptRef.value,
+        onError: reportFailure,
+      );
+      if (!coloringApplied ||
+          !active.value ||
+          loadPhase.value == _AndroidEpubLoadPhase.failed) {
+        return;
+      }
+      // The runtime API is available at this point. Do not make visual
+      // rendering depend solely on a one-shot JavaScript bridge callback.
+      // Bridge messages still drive progress, navigation, and runtime errors.
+      reportReady();
+    }
 
     useEffect(() {
       final webViewController = controller.value;
@@ -323,13 +302,28 @@ class AndroidEpubWebView extends HookConsumerWidget {
     if (resourceHandler == null) {
       return const _AndroidEpubLoading();
     }
+    if (runtimeDocument.hasError) {
+      return _AndroidEpubLoadFailure(
+        message: '无法准备 EPUB 渲染器：${runtimeDocument.error}',
+        onRetry: () => retryRevision.value += 1,
+      );
+    }
+    if (!runtimeDocument.hasData) {
+      return const _AndroidEpubLoading();
+    }
     return Stack(
       fit: StackFit.expand,
       children: [
         InAppWebView(
+          key: ValueKey('android-epub-runtime-$bookId-${retryRevision.value}'),
+          initialData: InAppWebViewInitialData(
+            data: runtimeDocument.data!,
+            baseUrl: WebUri(resourceHandler.runtimeEntryPoint.toString()),
+          ),
           initialSettings: InAppWebViewSettings(
             transparentBackground: true,
             javaScriptEnabled: true,
+            useShouldInterceptRequest: true,
             resourceCustomSchemes: [AndroidEpubResourceHandler.virtualScheme],
             useShouldOverrideUrlLoading: true,
           ),
@@ -344,75 +338,40 @@ class AndroidEpubWebView extends HookConsumerWidget {
               },
             );
             controller.value = webViewController;
-            AppDiagnostics.info('epub.webview', 'virtual-origin webview created');
+            AppDiagnostics.info(
+              'epub.webview',
+              'virtual-origin webview created',
+            );
           },
           onLoadStart: (_, url) {
-            if (Uri.tryParse(url?.toString() ?? '')?.scheme !=
-                AndroidEpubResourceHandler.virtualScheme) {
-              return;
-            }
             if (!active.value) return;
-            readinessTimer.value?.cancel();
+            runtimeBootstrapStarted.value = false;
             runtimeBridgeReady.value = false;
             error.value = null;
             loadPhase.value = _AndroidEpubLoadPhase.loading;
             AppDiagnostics.info(
               'epub.webview',
-              'runtime page started',
-              details: {'url': url?.toString()},
+              'inline runtime document started',
+              details: {
+                'url': url?.toString(),
+                'baseUrl': resourceHandler.runtimeEntryPoint.toString(),
+              },
             );
           },
           onLoadStop: (webViewController, url) {
-            if (Uri.tryParse(url?.toString() ?? '')?.scheme !=
-                AndroidEpubResourceHandler.virtualScheme) {
-              return;
-            }
             if (!active.value) return;
             AppDiagnostics.info(
               'epub.webview',
-              'runtime page finished',
+              'inline runtime document finished',
               details: {
                 'url': url?.toString(),
                 'bridgeReady': runtimeBridgeReady.value,
               },
             );
-            final script = runtimeScriptRef.value;
-            if (script == null) return;
-            unawaited(
-              _runJavaScript(
-                webViewController,
-                script,
-                onError: reportFailure,
-              ),
-            );
-            unawaited(
-              _runJavaScript(
-                webViewController,
-                textColoringScriptRef.value,
-                onError: reportFailure,
-              ),
-            );
-            if (runtimeBridgeReady.value) return;
-            readinessTimer.value?.cancel();
-            readinessTimer.value = Timer(const Duration(seconds: 12), () {
-              AppDiagnostics.error(
-                'epub.webview',
-                'runtime readiness timed out',
-                details: {
-                  'timeoutSeconds': 12,
-                  'url': url?.toString(),
-                },
-              );
-              reportFailure(
-                StateError('EPUB renderer did not become ready in time.'),
-              );
-            });
-            AppDiagnostics.info(
-              'epub.webview',
-              'waiting for runtime bridge',
-              details: {'timeoutSeconds': 12},
-            );
+            unawaited(startRuntime(webViewController));
           },
+          shouldInterceptRequest: (_, request) =>
+              _interceptAndroidEpubRequest(resourceHandler, request),
           onLoadResourceWithCustomScheme: (_, request) async {
             final response = await resourceHandler.loadRequestUrl(
               request.url.toString(),
@@ -426,8 +385,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
           shouldOverrideUrlLoading: (_, navigationAction) async {
             final uri = Uri.tryParse(navigationAction.request.url.toString());
             final allowed =
-                uri?.scheme == AndroidEpubResourceHandler.virtualScheme &&
-                uri?.host == AndroidEpubResourceHandler.virtualHost;
+                uri?.scheme == 'data' ||
+                (uri?.scheme == AndroidEpubResourceHandler.virtualScheme &&
+                    uri?.host == AndroidEpubResourceHandler.virtualHost);
             return allowed
                 ? NavigationActionPolicy.ALLOW
                 : NavigationActionPolicy.CANCEL;
@@ -748,15 +708,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
       if (runtime) void runtime.command(${jsonEncode({
       'id': command.id,
       'type': type,
-      'payload': {
-        'href': command.href,
-        'ratio': command.ratio,
-        'anchor': command.anchor,
-        'cfi': command.cfi,
-        'amount': command.amount,
-        'unit': command.unit,
-        'speed': command.speed,
-      },
+      'payload': {'href': command.href, 'ratio': command.ratio, 'anchor': command.anchor, 'cfi': command.cfi, 'amount': command.amount, 'unit': command.unit, 'speed': command.speed},
     })});
     })();''';
   }
@@ -799,12 +751,11 @@ class AndroidEpubWebView extends HookConsumerWidget {
             'start': start,
             'end': end,
           };
-    return _runtimeCall(
-      'runtime.setTtsHighlight(${jsonEncode(payload)})',
-    );
+    return _runtimeCall('runtime.setTtsHighlight(${jsonEncode(payload)})');
   }
 
-  String _runtimeCall(String invocation) => '''(() => {
+  String _runtimeCall(String invocation) =>
+      '''(() => {
     let attempts = 0;
     const run = () => {
       const runtime = window.TomoReadEpubRuntime;
@@ -817,13 +768,14 @@ class AndroidEpubWebView extends HookConsumerWidget {
   String _cssColor(Color color) =>
       '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
 
-  static Future<void> _runJavaScript(
+  static Future<bool> _runJavaScript(
     InAppWebViewController controller,
     String script, {
     required ValueChanged<Object> onError,
   }) async {
     try {
       await controller.evaluateJavascript(source: script);
+      return true;
     } catch (error, stackTrace) {
       AppDiagnostics.error(
         'epub.webview',
@@ -832,9 +784,157 @@ class AndroidEpubWebView extends HookConsumerWidget {
         stackTrace: stackTrace,
       );
       onError(error);
+      return false;
     }
   }
 
+  static Future<bool> _waitForRuntimeApi(
+    InAppWebViewController controller,
+  ) async {
+    Object? lastResult;
+    Object? lastError;
+    for (var attempt = 1; attempt <= 80; attempt++) {
+      try {
+        lastResult = await controller.evaluateJavascript(
+          source: '''Boolean(
+            window.TomoReadEpubRuntime &&
+            typeof window.TomoReadEpubRuntime.command === 'function'
+          )''',
+        );
+        if (lastResult == true || lastResult.toString() == 'true') {
+          AppDiagnostics.info(
+            'epub.webview',
+            'runtime API probe succeeded',
+            details: {'attempt': attempt},
+          );
+          return true;
+        }
+      } catch (error) {
+        lastError = error;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    AppDiagnostics.error(
+      'epub.webview',
+      'runtime API probe failed',
+      details: {
+        'attempts': 80,
+        'lastResult': lastResult?.toString(),
+        'lastError': lastError?.toString(),
+      },
+    );
+    return false;
+  }
+}
+
+Future<String> _loadAndroidRuntimeDocument(String runtimeDirectoryPath) async {
+  final runtimeDirectory = Directory(runtimeDirectoryPath);
+  try {
+    AppDiagnostics.info(
+      'epub.webview',
+      'loading runtime scripts for inline document',
+    );
+    final scripts = await Future.wait([
+      File(
+        '${runtimeDirectory.path}${Platform.pathSeparator}foliate-paginator.js',
+      ).readAsString(),
+      File(
+        '${runtimeDirectory.path}${Platform.pathSeparator}epubcfi.js',
+      ).readAsString(),
+      File(
+        '${runtimeDirectory.path}${Platform.pathSeparator}tomoread-reader.js',
+      ).readAsString(),
+    ]);
+    final document = _inlineAndroidRuntimeDocument(
+      foliatePaginator: scripts[0],
+      epubCfi: scripts[1],
+      readerRuntime: scripts[2],
+    );
+    AppDiagnostics.info(
+      'epub.webview',
+      'inline runtime document prepared',
+      details: {'bytes': utf8.encode(document).length},
+    );
+    return document;
+  } catch (error, stackTrace) {
+    AppDiagnostics.error(
+      'epub.webview',
+      'inline runtime document preparation failed',
+      error: error,
+      stackTrace: stackTrace,
+    );
+    rethrow;
+  }
+}
+
+String _inlineAndroidRuntimeDocument({
+  required String foliatePaginator,
+  required String epubCfi,
+  required String readerRuntime,
+}) {
+  String inlineScript(String source) =>
+      source.replaceAll(RegExp('</script', caseSensitive: false), r'<\/script');
+
+  return '''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TomoRead EPUB runtime</title>
+    <style>
+      html, body, #reader-stage {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+    <script>
+      window.__tomoReadAndroidRuntimeDocument = 'inline-v1';
+      const reportRuntimeError = event => {
+        const message = event.reason?.message || event.error?.message || event.message;
+        if (!message) return;
+        if (/^ResizeObserver loop (limit exceeded|completed with undelivered notifications)\\.?\$/.test(message)) return;
+        console.error('TomoRead EPUB runtime error', message);
+        try {
+          window.flutter_inappwebview?.callHandler(
+            'TomoRead',
+            JSON.stringify({ bridgeVersion: 1, type: 'runtimeError', message }),
+          );
+        } catch (_) {}
+      };
+      window.addEventListener('error', reportRuntimeError);
+      window.addEventListener('unhandledrejection', reportRuntimeError);
+    </script>
+  </head>
+  <body>
+    <main id="reader-stage" aria-label="EPUB reader"></main>
+    <script>${inlineScript(foliatePaginator)}</script>
+    <script>${inlineScript(epubCfi)}</script>
+    <script>${inlineScript(readerRuntime)}</script>
+  </body>
+</html>''';
+}
+
+Future<WebResourceResponse?> _interceptAndroidEpubRequest(
+  AndroidEpubResourceHandler resourceHandler,
+  WebResourceRequest request,
+) async {
+  final requestUri = Uri.tryParse(request.url.toString());
+  if (requestUri?.scheme != AndroidEpubResourceHandler.virtualScheme ||
+      requestUri?.host != AndroidEpubResourceHandler.virtualHost) {
+    return null;
+  }
+  final response = await resourceHandler.loadRequestUrl(
+    request.url.toString(),
+    method: request.method,
+  );
+  return WebResourceResponse(
+    contentType: response.contentType,
+    statusCode: response.statusCode,
+    reasonPhrase: response.isSuccess ? 'OK' : 'EPUB resource unavailable',
+    data: response.data,
+  );
 }
 
 class _AndroidEpubLoading extends StatelessWidget {
@@ -857,10 +957,7 @@ class _AndroidEpubLoading extends StatelessWidget {
 }
 
 class _AndroidEpubLoadFailure extends StatelessWidget {
-  const _AndroidEpubLoadFailure({
-    required this.message,
-    required this.onRetry,
-  });
+  const _AndroidEpubLoadFailure({required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;
