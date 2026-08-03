@@ -21,7 +21,24 @@ class PdfNavigationDialog extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final showThumbnails = useState(false);
-    final outlineEntries = _flattenOutline(outline);
+    final expandedKeys = useState<Set<String>>(const <String>{});
+
+    useEffect(() {
+      final automaticallyExpanded = _expandedOutlineKeysForCurrentPage(
+        outline,
+        currentPage,
+      );
+      if (!automaticallyExpanded.every(expandedKeys.value.contains)) {
+        expandedKeys.value = {...expandedKeys.value, ...automaticallyExpanded};
+      }
+      return null;
+    }, [outline, currentPage]);
+
+    void toggleNode(String nodeKey) {
+      final next = {...expandedKeys.value};
+      if (!next.add(nodeKey)) next.remove(nodeKey);
+      expandedKeys.value = next;
+    }
 
     return AlertDialog(
       title: const Text('PDF 导航'),
@@ -56,39 +73,19 @@ class PdfNavigationDialog extends HookWidget {
                   ? const Center(child: CircularProgressIndicator())
                   : outlineError != null
                   ? Center(child: Text('无法读取 PDF 目录：$outlineError'))
-                  : outlineEntries.isEmpty
+                  : outline.isEmpty
                   ? const Center(child: Text('这个 PDF 没有内置目录。'))
-                  : ListView.builder(
-                      itemCount: outlineEntries.length,
-                      itemBuilder: (context, index) {
-                        final entry = outlineEntries[index];
-                        final destination = entry.node.dest;
-                        return ListTile(
-                          contentPadding: EdgeInsets.only(
-                            left: 12.0 + entry.depth * 20,
-                            right: 12,
+                  : ListView(
+                      children: [
+                        for (var index = 0; index < outline.length; index++)
+                          _PdfOutlineEntry(
+                            node: outline[index],
+                            nodeKey: 'outline/$index',
+                            currentPage: currentPage,
+                            expandedKeys: expandedKeys.value,
+                            onToggle: toggleNode,
                           ),
-                          leading: Icon(
-                            entry.node.children.isEmpty
-                                ? Icons.article_outlined
-                                : Icons.folder_outlined,
-                          ),
-                          title: Text(
-                            entry.node.title.isEmpty
-                                ? '未命名章节'
-                                : entry.node.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: destination == null
-                              ? null
-                              : Text('第 ${destination.pageNumber} 页'),
-                          enabled: destination != null,
-                          onTap: destination == null
-                              ? null
-                              : () => Navigator.pop(context, destination),
-                        );
-                      },
+                      ],
                     ),
             ),
           ],
@@ -102,17 +99,101 @@ class PdfNavigationDialog extends HookWidget {
       ],
     );
   }
+}
 
-  List<({PdfOutlineNode node, int depth})> _flattenOutline(
-    List<PdfOutlineNode> nodes, {
-    int depth = 0,
-  }) {
-    return [
-      for (final node in nodes) ...[
-        (node: node, depth: depth),
-        ..._flattenOutline(node.children, depth: depth + 1),
+Set<String> _expandedOutlineKeysForCurrentPage(
+  List<PdfOutlineNode> nodes,
+  int currentPage, {
+  String parentKey = 'outline',
+}) {
+  final expanded = <String>{};
+
+  bool visit(List<PdfOutlineNode> entries, String ancestorKey) {
+    var containsCurrentPage = false;
+    for (var index = 0; index < entries.length; index++) {
+      final node = entries[index];
+      final nodeKey = '$ancestorKey/$index';
+      final childContainsCurrentPage = visit(node.children, nodeKey);
+      final nodeContainsCurrentPage =
+          node.dest?.pageNumber == currentPage || childContainsCurrentPage;
+      if (nodeContainsCurrentPage && node.children.isNotEmpty) {
+        expanded.add(nodeKey);
+      }
+      if (nodeContainsCurrentPage) containsCurrentPage = true;
+    }
+    return containsCurrentPage;
+  }
+
+  visit(nodes, parentKey);
+  return expanded;
+}
+
+class _PdfOutlineEntry extends StatelessWidget {
+  const _PdfOutlineEntry({
+    required this.node,
+    required this.nodeKey,
+    required this.currentPage,
+    required this.expandedKeys,
+    required this.onToggle,
+    this.depth = 0,
+  });
+
+  final PdfOutlineNode node;
+  final String nodeKey;
+  final int currentPage;
+  final Set<String> expandedKeys;
+  final ValueChanged<String> onToggle;
+  final int depth;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasChildren = node.children.isNotEmpty;
+    final expanded = expandedKeys.contains(nodeKey);
+    final destination = node.dest;
+
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: EdgeInsetsDirectional.only(
+            start: 8 + depth * 20.0,
+            end: 12,
+          ),
+          leading: hasChildren
+              ? IconButton(
+                  key: Key('pdf-outline-toggle-$nodeKey'),
+                  tooltip: expanded ? '折叠章节' : '展开章节',
+                  onPressed: () => onToggle(nodeKey),
+                  icon: Icon(
+                    expanded ? Icons.expand_more : Icons.chevron_right,
+                  ),
+                )
+              : const SizedBox(width: 48, child: Icon(Icons.article_outlined)),
+          selected: destination?.pageNumber == currentPage,
+          title: Text(
+            node.title.isEmpty ? '未命名章节' : node.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: destination == null
+              ? null
+              : Text('第 ${destination.pageNumber} 页'),
+          enabled: destination != null,
+          onTap: destination == null
+              ? null
+              : () => Navigator.pop(context, destination),
+        ),
+        if (hasChildren && expanded)
+          for (var index = 0; index < node.children.length; index++)
+            _PdfOutlineEntry(
+              node: node.children[index],
+              nodeKey: '$nodeKey/$index',
+              currentPage: currentPage,
+              expandedKeys: expandedKeys,
+              onToggle: onToggle,
+              depth: depth + 1,
+            ),
       ],
-    ];
+    );
   }
 }
 

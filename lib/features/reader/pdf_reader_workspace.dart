@@ -146,14 +146,10 @@ class PdfReaderWorkspace extends HookConsumerWidget {
       data: (book) {
         if (book == null) return const Center(child: Text('找不到 PDF 书籍。'));
         final pageCount = book.chapterCount;
-        final savedPage = PdfDocumentLocator.tryParse(
-          book.locator,
-        )?.pageNumber;
+        final savedPage = PdfDocumentLocator.tryParse(book.locator)?.pageNumber;
         final initialPage = pageCount == 0
             ? 1
-            : (savedPage ?? book.chapterIndex + 1)
-                  .clamp(1, pageCount)
-                  .toInt();
+            : (savedPage ?? book.chapterIndex + 1).clamp(1, pageCount).toInt();
         final displayedPage = currentPage.value ?? initialPage;
         final displayedProgress = pageCount <= 1
             ? 0.0
@@ -204,9 +200,7 @@ class PdfReaderWorkspace extends HookConsumerWidget {
           final existing = bookmarkItems
               .where(
                 (bookmark) =>
-                    PdfDocumentLocator.tryParse(
-                      bookmark.locator,
-                    )?.pageNumber ==
+                    PdfDocumentLocator.tryParse(bookmark.locator)?.pageNumber ==
                     displayedPage,
               )
               .firstOrNull;
@@ -314,8 +308,7 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                 normalized.width * pageRect.width,
                 normalized.height * pageRect.height,
               );
-              if (annotation.renderStyle ==
-                  AnnotationRenderStyle.underline) {
+              if (annotation.renderStyle == AnnotationRenderStyle.underline) {
                 canvas.drawLine(
                   rect.bottomLeft,
                   rect.bottomRight,
@@ -443,9 +436,8 @@ class PdfReaderWorkspace extends HookConsumerWidget {
               case _PdfSelectionAction.highlight:
                 final highlightColor = await showDialog<AnnotationColor>(
                   context: context,
-                  builder: (context) => const PdfAnnotationColorDialog(
-                    title: '选择高亮颜色',
-                  ),
+                  builder: (context) =>
+                      const PdfAnnotationColorDialog(title: '选择高亮颜色'),
                 );
                 if (highlightColor != null && context.mounted) {
                   await saveSelection(delegate, selection, highlightColor);
@@ -453,9 +445,8 @@ class PdfReaderWorkspace extends HookConsumerWidget {
               case _PdfSelectionAction.underline:
                 final underlineColor = await showDialog<AnnotationColor>(
                   context: context,
-                  builder: (context) => const PdfAnnotationColorDialog(
-                    title: '选择划线颜色',
-                  ),
+                  builder: (context) =>
+                      const PdfAnnotationColorDialog(title: '选择划线颜色'),
                 );
                 if (underlineColor != null && context.mounted) {
                   await saveSelection(
@@ -468,9 +459,8 @@ class PdfReaderWorkspace extends HookConsumerWidget {
               case _PdfSelectionAction.note:
                 final draft = await showDialog<PdfAnnotationDraft>(
                   context: context,
-                  builder: (context) => PdfAnnotationEditorDialog(
-                    selectedText: selection.text,
-                  ),
+                  builder: (context) =>
+                      PdfAnnotationEditorDialog(selectedText: selection.text),
                 );
                 if (draft != null && context.mounted) {
                   await saveSelection(
@@ -557,9 +547,8 @@ class PdfReaderWorkspace extends HookConsumerWidget {
             context: context,
             builder: (context) => PdfAnnotationsDialog(
               annotations: annotations.value ?? const [],
-              onDelete: (annotation) => ref
-                  .read(annotationControllerProvider)
-                  .remove(annotation.id),
+              onDelete: (annotation) =>
+                  ref.read(annotationControllerProvider).remove(annotation.id),
             ),
           );
           final document = pdfDocument.value;
@@ -592,7 +581,8 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                         loadOutline(controller.document);
                       }
                       final locator = PdfDocumentLocator.tryParse(book.locator);
-                      if (locator?.precision == DocumentLocatorPrecision.exact) {
+                      if (locator?.precision ==
+                          DocumentLocatorPrecision.exact) {
                         pendingNavigationLocator.value = locator;
                         unawaited(
                           navigateToLocator(
@@ -625,147 +615,148 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                 hiddenOffset: const Offset(0, -1),
                 child: Material(
                   color: Theme.of(context).colorScheme.surface,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          tooltip: '返回书库',
-                          onPressed: onExitReader,
-                          icon: const Icon(Icons.arrow_back),
-                        ),
-                        const Icon(Icons.picture_as_pdf_outlined),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(title, overflow: TextOverflow.ellipsis),
-                        ),
-                        IconButton(
-                          key: const Key('pdf-reader-tts-unavailable'),
-                          tooltip: 'PDF 尚无可信全文朗读队列',
-                          onPressed: showPdfTtsUnavailable,
-                          icon: const Icon(Icons.headphones_outlined),
-                        ),
-                        IconButton(
-                          tooltip: isBookmarked ? '移除书签' : '添加书签',
-                          onPressed: toggleBookmark,
-                          icon: Icon(
-                            isBookmarked
-                                ? Icons.bookmark
-                                : Icons.bookmark_border,
-                          ),
-                        ),
-                        if (MediaQuery.sizeOf(context).width >= 760) ...[
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
                           IconButton(
-                            tooltip: '查看书签',
-                            onPressed: bookmarks.isLoading
-                                ? null
-                                : openBookmarks,
-                            icon: const Icon(Icons.format_list_bulleted),
+                            tooltip: '返回书库',
+                            onPressed: onExitReader,
+                            icon: const Icon(Icons.arrow_back),
                           ),
-                          const VerticalDivider(width: 20),
-                          IconButton(
-                            tooltip: '目录和页面导航',
-                            onPressed: pdfDocument.value == null
-                                ? null
-                                : openNavigation,
-                            icon: const Icon(Icons.menu_book_outlined),
+                          const Icon(Icons.picture_as_pdf_outlined),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(title, overflow: TextOverflow.ellipsis),
                           ),
                           IconButton(
-                            tooltip: '搜索 PDF',
-                            onPressed: textSearcher.value == null
-                                ? null
-                                : openSearch,
-                            icon: const Icon(Icons.search),
+                            key: const Key('pdf-reader-tts-unavailable'),
+                            tooltip: 'PDF 尚无可信全文朗读队列',
+                            onPressed: showPdfTtsUnavailable,
+                            icon: const Icon(Icons.headphones_outlined),
                           ),
                           IconButton(
-                            key: const Key('pdf-reader-selection-help'),
-                            tooltip: 'PDF 文本标注',
-                            onPressed: pdfDocument.value == null
-                                ? null
-                                : explainTextSelection,
-                            icon: const Icon(Icons.highlight_alt_outlined),
-                          ),
-                          IconButton(
-                            key: const Key('pdf-reader-annotations'),
-                            tooltip: '查看 PDF 标注',
-                            onPressed: annotations.isLoading
-                                ? null
-                                : openAnnotations,
-                            icon: const Icon(Icons.format_quote_outlined),
-                          ),
-                          const VerticalDivider(width: 20),
-                          IconButton(
-                            key: const Key('pdf-reader-focus-mode'),
-                            tooltip: '隐藏阅读控制',
-                            onPressed: toggleControls,
-                            icon: const Icon(
-                              Icons.center_focus_strong_outlined,
+                            tooltip: isBookmarked ? '移除书签' : '添加书签',
+                            onPressed: toggleBookmark,
+                            icon: Icon(
+                              isBookmarked
+                                  ? Icons.bookmark
+                                  : Icons.bookmark_border,
                             ),
                           ),
+                          if (MediaQuery.sizeOf(context).width >= 760) ...[
+                            IconButton(
+                              tooltip: '查看书签',
+                              onPressed: bookmarks.isLoading
+                                  ? null
+                                  : openBookmarks,
+                              icon: const Icon(Icons.format_list_bulleted),
+                            ),
+                            const VerticalDivider(width: 20),
+                            IconButton(
+                              tooltip: '目录和页面导航',
+                              onPressed: pdfDocument.value == null
+                                  ? null
+                                  : openNavigation,
+                              icon: const Icon(Icons.menu_book_outlined),
+                            ),
+                            IconButton(
+                              tooltip: '搜索 PDF',
+                              onPressed: textSearcher.value == null
+                                  ? null
+                                  : openSearch,
+                              icon: const Icon(Icons.search),
+                            ),
+                            IconButton(
+                              key: const Key('pdf-reader-selection-help'),
+                              tooltip: 'PDF 文本标注',
+                              onPressed: pdfDocument.value == null
+                                  ? null
+                                  : explainTextSelection,
+                              icon: const Icon(Icons.highlight_alt_outlined),
+                            ),
+                            IconButton(
+                              key: const Key('pdf-reader-annotations'),
+                              tooltip: '查看 PDF 标注',
+                              onPressed: annotations.isLoading
+                                  ? null
+                                  : openAnnotations,
+                              icon: const Icon(Icons.format_quote_outlined),
+                            ),
+                            const VerticalDivider(width: 20),
+                            IconButton(
+                              key: const Key('pdf-reader-focus-mode'),
+                              tooltip: '隐藏阅读控制',
+                              onPressed: toggleControls,
+                              icon: const Icon(
+                                Icons.center_focus_strong_outlined,
+                              ),
+                            ),
+                          ],
+                          if (MediaQuery.sizeOf(context).width < 760)
+                            PopupMenuButton<_PdfToolbarAction>(
+                              key: const Key('pdf-reader-more-actions'),
+                              tooltip: '更多阅读操作',
+                              onSelected: (action) {
+                                switch (action) {
+                                  case _PdfToolbarAction.bookmarks:
+                                    unawaited(openBookmarks());
+                                  case _PdfToolbarAction.navigation:
+                                    unawaited(openNavigation());
+                                  case _PdfToolbarAction.search:
+                                    unawaited(openSearch());
+                                  case _PdfToolbarAction.selectionHelp:
+                                    unawaited(explainTextSelection());
+                                  case _PdfToolbarAction.annotations:
+                                    unawaited(openAnnotations());
+                                  case _PdfToolbarAction.focus:
+                                    toggleControls();
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: _PdfToolbarAction.bookmarks,
+                                  enabled: !bookmarks.isLoading,
+                                  child: const Text('查看书签'),
+                                ),
+                                PopupMenuItem(
+                                  value: _PdfToolbarAction.navigation,
+                                  enabled: pdfDocument.value != null,
+                                  child: const Text('目录和页面导航'),
+                                ),
+                                PopupMenuItem(
+                                  value: _PdfToolbarAction.search,
+                                  enabled: textSearcher.value != null,
+                                  child: const Text('搜索 PDF'),
+                                ),
+                                PopupMenuItem(
+                                  key: const Key(
+                                    'pdf-reader-selection-help-menu',
+                                  ),
+                                  value: _PdfToolbarAction.selectionHelp,
+                                  enabled: pdfDocument.value != null,
+                                  child: const Text('PDF 文本标注'),
+                                ),
+                                PopupMenuItem(
+                                  key: const Key('pdf-reader-annotations-menu'),
+                                  value: _PdfToolbarAction.annotations,
+                                  enabled: !annotations.isLoading,
+                                  child: const Text('查看 PDF 标注'),
+                                ),
+                                const PopupMenuDivider(),
+                                const PopupMenuItem(
+                                  value: _PdfToolbarAction.focus,
+                                  child: Text('隐藏阅读控制'),
+                                ),
+                              ],
+                            ),
                         ],
-                        if (MediaQuery.sizeOf(context).width < 760)
-                          PopupMenuButton<_PdfToolbarAction>(
-                            key: const Key('pdf-reader-more-actions'),
-                            tooltip: '更多阅读操作',
-                            onSelected: (action) {
-                              switch (action) {
-                                case _PdfToolbarAction.bookmarks:
-                                  unawaited(openBookmarks());
-                                case _PdfToolbarAction.navigation:
-                                  unawaited(openNavigation());
-                                case _PdfToolbarAction.search:
-                                  unawaited(openSearch());
-                                case _PdfToolbarAction.selectionHelp:
-                                  unawaited(explainTextSelection());
-                                case _PdfToolbarAction.annotations:
-                                  unawaited(openAnnotations());
-                                case _PdfToolbarAction.focus:
-                                  toggleControls();
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              PopupMenuItem(
-                                value: _PdfToolbarAction.bookmarks,
-                                enabled: !bookmarks.isLoading,
-                                child: const Text('查看书签'),
-                              ),
-                              PopupMenuItem(
-                                value: _PdfToolbarAction.navigation,
-                                enabled: pdfDocument.value != null,
-                                child: const Text('目录和页面导航'),
-                              ),
-                              PopupMenuItem(
-                                value: _PdfToolbarAction.search,
-                                enabled: textSearcher.value != null,
-                                child: const Text('搜索 PDF'),
-                              ),
-                              PopupMenuItem(
-                                key: const Key(
-                                  'pdf-reader-selection-help-menu',
-                                ),
-                                value: _PdfToolbarAction.selectionHelp,
-                                enabled: pdfDocument.value != null,
-                                child: const Text('PDF 文本标注'),
-                              ),
-                              PopupMenuItem(
-                                key: const Key(
-                                  'pdf-reader-annotations-menu',
-                                ),
-                                value: _PdfToolbarAction.annotations,
-                                enabled: !annotations.isLoading,
-                                child: const Text('查看 PDF 标注'),
-                              ),
-                              const PopupMenuDivider(),
-                              const PopupMenuItem(
-                                value: _PdfToolbarAction.focus,
-                                child: Text('隐藏阅读控制'),
-                              ),
-                            ],
-                          ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
