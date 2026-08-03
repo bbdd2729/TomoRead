@@ -205,7 +205,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
                         'epub.webview',
                         'runtime readiness timed out',
                         details: {'timeoutSeconds': 12},
-                      ),
+                      );
                       reportFailure(
                         StateError(
                           'EPUB renderer did not become ready in time.',
