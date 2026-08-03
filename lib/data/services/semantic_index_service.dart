@@ -93,26 +93,30 @@ class SemanticIndexService {
     );
     await embeddings.saveState(state);
     onProgress?.call(state);
+    var activeBatch = const <ContentChunk>[];
     try {
       for (var offset = 0; offset < pending.length; offset += profile.batchSize) {
         cancellationToken?.throwIfCancelled();
         final end = (offset + profile.batchSize)
             .clamp(0, pending.length)
             .toInt();
-        final batch = pending.sublist(offset, end);
-        _validateInputLengths(batch, profile.maxInputCharacters);
+        activeBatch = pending.sublist(offset, end);
+        _validateInputLengths(activeBatch, profile.maxInputCharacters);
         final vectors = await provider.embed(
           profile: profile,
           apiKey: apiKey,
-          inputs: batch.map((chunk) => chunk.text).toList(growable: false),
+          inputs: activeBatch
+              .map((chunk) => chunk.text)
+              .toList(growable: false),
           cancellationToken: cancellationToken,
         );
         await embeddings.saveBatch(
           profile: profile,
-          chunks: batch,
+          chunks: activeBatch,
           vectors: vectors,
         );
-        indexed += batch.length;
+        indexed += activeBatch.length;
+        activeBatch = const [];
         state = _state(
           bookId: bookId,
           profile: profile,
@@ -140,6 +144,13 @@ class SemanticIndexService {
       final status = error.code == 'cancelled'
           ? SemanticIndexStatus.cancelled
           : SemanticIndexStatus.failed;
+      if (status == SemanticIndexStatus.failed) {
+        await embeddings.markBatchFailed(
+          profile: profile,
+          chunks: activeBatch,
+          errorCode: error.code,
+        );
+      }
       state = _state(
         bookId: bookId,
         profile: profile,

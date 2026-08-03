@@ -91,7 +91,10 @@ class ReadingContextAssembler {
         final hits = await chunks.search(
           bookId: bookId,
           query: query,
-          maxChapterIndex: allowFutureChapters ? null : currentChapterIndex,
+          maxChapterIndex: allowFutureChapters
+              ? null
+              : currentChapterIndex - 1,
+          maxRawOffset: null,
           limit: 12,
         );
         candidates.addAll(
@@ -112,7 +115,9 @@ class ReadingContextAssembler {
         final response = await hybrid.search(
           bookId: bookId,
           query: query,
-          maxChapterIndex: allowFutureChapters ? null : currentChapterIndex,
+          maxChapterIndex: allowFutureChapters
+              ? null
+              : currentChapterIndex - 1,
           limit: 12,
         );
         candidates.addAll(

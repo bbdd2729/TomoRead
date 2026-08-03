@@ -62,6 +62,13 @@ void main() {
     );
     expect(visible, hasLength(1));
     expect(visible.single.chunk.chapterIndex, 0);
+    final beforeCurrentOffset = await repository.search(
+      bookId: 'book-a',
+      query: 'keyword',
+      maxChapterIndex: 0,
+      maxRawOffset: 5,
+    );
+    expect(beforeCurrentOffset, isEmpty);
     expect(await repository.characterCountForBook('book-a'), 29);
   });
 }

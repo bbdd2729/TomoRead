@@ -12,10 +12,11 @@ import '../reader/text_coloring_controller.dart';
 import '../reader/text_coloring_widgets.dart';
 import '../reader/reader_shortcut_settings.dart';
 import 'backup_restore_page.dart';
+import 'embedding_settings_page.dart';
 import 'font_catalog_controller.dart';
 import 'storage_diagnostics_page.dart';
 
-enum _SettingsSection { appearance, reading, dataPrivacy }
+enum _SettingsSection { appearance, reading, aiVector, dataPrivacy }
 
 class SettingsPage extends HookConsumerWidget {
   const SettingsPage({
@@ -136,6 +137,7 @@ class SettingsPage extends HookConsumerWidget {
             .read(textColoringSettingsProvider.notifier)
             .saveSettings(value),
       ),
+      _SettingsSection.aiVector => const EmbeddingSettingsPage(),
       _SettingsSection.dataPrivacy => const _DataPrivacySettings(),
     };
 
@@ -148,27 +150,35 @@ class SettingsPage extends HookConsumerWidget {
             children: [
               const PageHeader(title: '设置', subtitle: '调整应用外观和默认阅读偏好。'),
               const SizedBox(height: 24),
-              SegmentedButton<_SettingsSection>(
-                segments: const [
-                  ButtonSegment(
-                    value: _SettingsSection.appearance,
-                    icon: Icon(Icons.palette_outlined),
-                    label: Text('外观'),
-                  ),
-                  ButtonSegment(
-                    value: _SettingsSection.reading,
-                    icon: Icon(Icons.menu_book_outlined),
-                    label: Text('阅读'),
-                  ),
-                  ButtonSegment(
-                    value: _SettingsSection.dataPrivacy,
-                    icon: Icon(Icons.shield_outlined),
-                    label: Text('数据'),
-                  ),
-                ],
-                selected: {section.value},
-                onSelectionChanged: (selection) =>
-                    section.value = selection.first,
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<_SettingsSection>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _SettingsSection.appearance,
+                      icon: Icon(Icons.palette_outlined),
+                      label: Text('外观'),
+                    ),
+                    ButtonSegment(
+                      value: _SettingsSection.reading,
+                      icon: Icon(Icons.menu_book_outlined),
+                      label: Text('阅读'),
+                    ),
+                    ButtonSegment(
+                      value: _SettingsSection.aiVector,
+                      icon: Icon(Icons.hub_outlined),
+                      label: Text('AI 与向量'),
+                    ),
+                    ButtonSegment(
+                      value: _SettingsSection.dataPrivacy,
+                      icon: Icon(Icons.shield_outlined),
+                      label: Text('数据'),
+                    ),
+                  ],
+                  selected: {section.value},
+                  onSelectionChanged: (selection) =>
+                      section.value = selection.first,
+                ),
               ),
               const SizedBox(height: 28),
               sectionContent,
@@ -237,6 +247,12 @@ class _SettingsNavigation extends StatelessWidget {
         label: '默认阅读',
         selected: selected == _SettingsSection.reading,
         onTap: () => onSelected(_SettingsSection.reading),
+      ),
+      _NavigationItem(
+        icon: Icons.hub_outlined,
+        label: 'AI 与向量模型',
+        selected: selected == _SettingsSection.aiVector,
+        onTap: () => onSelected(_SettingsSection.aiVector),
       ),
       _NavigationItem(
         icon: Icons.shield_outlined,
@@ -581,6 +597,7 @@ class _DataPrivacySettings extends StatelessWidget {
 String _sectionTitle(_SettingsSection section) => switch (section) {
   _SettingsSection.appearance => '应用外观',
   _SettingsSection.reading => '默认阅读',
+  _SettingsSection.aiVector => 'AI 与向量模型',
   _SettingsSection.dataPrivacy => '数据与隐私',
 };
 
@@ -605,5 +622,6 @@ List<ReadingFontRef> _availableReadingFonts(
 String _sectionSubtitle(_SettingsSection section) => switch (section) {
   _SettingsSection.appearance => '调整主题、颜色、字体和界面缩放。',
   _SettingsSection.reading => '为新打开的 EPUB 书籍设置默认排版。',
+  _SettingsSection.aiVector => '独立配置 Embedding 服务、远端正文授权与语义索引。',
   _SettingsSection.dataPrivacy => '创建可验证备份，安全恢复并清理可重建缓存。',
 };

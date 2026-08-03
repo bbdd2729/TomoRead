@@ -29,6 +29,7 @@ class HybridSearchService {
     required String bookId,
     required String query,
     required int? maxChapterIndex,
+    int? maxRawOffset,
     int limit = 30,
   }) async {
     final normalized = query.trim();
@@ -45,6 +46,7 @@ class HybridSearchService {
       bookId: bookId,
       query: normalized,
       maxChapterIndex: maxChapterIndex,
+      maxRawOffset: maxRawOffset,
       limit: safeLimit,
     );
     final keywordScores = <String, double>{};
@@ -73,6 +75,7 @@ class HybridSearchService {
         indexState.status != SemanticIndexStatus.ready ||
         indexState.modelId != profile.modelId ||
         indexState.modelVersion != profile.modelVersion ||
+        indexState.dimensions != profile.dimensions ||
         indexState.indexVersion != SemanticIndexService.indexVersion) {
       return _keywordOnly(
         keywordHits,
@@ -103,6 +106,7 @@ class HybridSearchService {
         profile: profile,
         contentHash: indexState.contentHash,
         maxChapterIndex: maxChapterIndex,
+        maxRawOffset: maxRawOffset,
       );
       final semanticScores = await Isolate.run(
         () => _scoreCandidates(

@@ -43,7 +43,7 @@ class EmbeddingProviderProbeService {
     } on EmbeddingProviderException catch (error) {
       return EmbeddingProbeResult(
         profileId: profile.id,
-        statusCode: null,
+        statusCode: error.statusCode,
         latencyMillis: stopwatch.elapsedMilliseconds,
         models: models,
         capabilityStatus: error.code == 'invalid_response'

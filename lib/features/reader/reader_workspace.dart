@@ -8,7 +8,7 @@ import '../../app/appearance.dart';
 import '../../app/providers.dart';
 import '../../data/services/content_chunk_service.dart';
 import '../../domain/models/bookmark.dart';
-import '../../domain/models/content_chunk.dart';
+import '../../domain/models/embedding_models.dart';
 import '../../domain/models/chat_models.dart';
 import '../../domain/models/document_locator.dart';
 import '../../domain/models/epub_manifest.dart';
@@ -34,7 +34,7 @@ import 'reader_command_controller.dart';
 import 'reader_command_shortcuts.dart';
 import 'reader_navigation_command.dart';
 import 'reader_runtime_controller.dart';
-import 'reader_search_dialog.dart';
+import 'content_search_dialog.dart';
 import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
 import 'text_coloring_controller.dart';
@@ -791,19 +791,24 @@ class ReaderWorkspace extends HookConsumerWidget {
 
     Future<void> openSearch() async {
       stopAutoScroll();
-      final book = readerBook.value;
-      final currentManifest = manifest.value;
-      if (book == null || currentManifest == null) return;
-      final selection = await showDialog<ReaderSearchSelection>(
+      final result = await showDialog<HybridSearchResult>(
         context: context,
-        builder: (context) =>
-            ReaderSearchDialog(book: book, manifest: currentManifest),
+        builder: (context) => ContentSearchDialog(
+          bookId: bookId,
+          maxChapterIndex: activeChapterIndex,
+          maxRawOffset: chapter.value == null
+              ? null
+              : (chapter.value!.plainText.length * scrollRatio.value).round(),
+        ),
       );
-      if (selection == null || !context.mounted) return;
-      searchQuery.value = selection.query;
+      if (result == null || !context.mounted) return;
+      searchQuery.value = null;
+      final ratio = result.locator.startsWith('ratio:')
+          ? double.tryParse(result.locator.substring('ratio:'.length)) ?? 0
+          : 0.0;
       await selectChapter(
-        selection.result.chapterIndex,
-        scrollPosition: selection.result.chapterRatio,
+        result.chapterIndex,
+        scrollPosition: ratio.clamp(0, 1).toDouble(),
       );
     }
 

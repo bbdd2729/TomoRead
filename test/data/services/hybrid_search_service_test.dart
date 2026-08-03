@@ -37,6 +37,32 @@ void main() {
 
   tearDown(() => database.close());
 
+  test('keeps keyword search available without an embedding profile', () async {
+    await chunks.replaceForBook(
+      bookId: 'book-a',
+      contentHash: 'book-hash',
+      parserVersion: 1,
+      indexVersion: 1,
+      chunks: [_chunk(0, 'visible keyword')],
+    );
+    final service = HybridSearchService(
+      chunks: chunks,
+      embeddings: embeddings,
+      profiles: profiles,
+      provider: _QueryEmbeddingService(),
+      secrets: AiSecretStore(),
+    );
+
+    final response = await service.search(
+      bookId: 'book-a',
+      query: 'keyword',
+      maxChapterIndex: 0,
+    );
+
+    expect(response.mode, SemanticSearchMode.keywordOnly);
+    expect(response.results.single.locator, 'text:v1|0|0|0');
+  });
+
   test('combines keyword and semantic matches within spoiler boundary', () async {
     final current = _chunk(0, 'visible keyword');
     final future = _chunk(1, 'future semantic idea');

@@ -152,6 +152,40 @@ class ContentEmbeddingRepository {
     });
   }
 
+  Future<void> markBatchFailed({
+    required EmbeddingProviderProfile profile,
+    required List<ContentChunk> chunks,
+    required String errorCode,
+  }) async {
+    final dimensions = profile.dimensions;
+    if (dimensions == null || chunks.isEmpty) return;
+    final database = await _database.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await database.transaction((transaction) async {
+      for (final chunk in chunks) {
+        await transaction.insert(
+          'content_embeddings',
+          {
+            'chunk_id': chunk.id,
+            'profile_id': profile.id,
+            'model_id': profile.modelId,
+            'model_version': profile.modelVersion,
+            'dimensions': dimensions,
+            'distance_metric': profile.distanceMetric.name,
+            'content_hash': chunk.contentHash,
+            'text_hash': chunk.textHash,
+            'vector_blob': null,
+            'status': ContentEmbeddingStatus.failed.name,
+            'error_code': errorCode,
+            'generated_at': now,
+            'updated_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
   Future<void> invalidateMismatched({
     required String bookId,
     required EmbeddingProviderProfile profile,
@@ -193,6 +227,7 @@ class ContentEmbeddingRepository {
     required EmbeddingProviderProfile profile,
     required String contentHash,
     int? maxChapterIndex,
+    int? maxRawOffset,
     int limit = 10000,
   }) async {
     if (profile.dimensions == null) return const [];
@@ -209,7 +244,7 @@ class ContentEmbeddingRepository {
         AND e.content_hash = ?
         AND e.text_hash = c.text_hash
         AND e.status = 'ready'
-        ${maxChapterIndex == null ? '' : 'AND c.chapter_index <= ?'}
+        ${maxChapterIndex == null ? '' : maxRawOffset == null ? 'AND c.chapter_index <= ?' : 'AND (c.chapter_index < ? OR (c.chapter_index = ? AND c.raw_end <= ?))'}
       ORDER BY c.ordinal ASC
       LIMIT ?
     ''', [
@@ -220,6 +255,8 @@ class ContentEmbeddingRepository {
       profile.dimensions,
       contentHash,
       if (maxChapterIndex != null) maxChapterIndex,
+      if (maxChapterIndex != null && maxRawOffset != null) maxChapterIndex,
+      if (maxChapterIndex != null && maxRawOffset != null) maxRawOffset,
       limit.clamp(1, 10000),
     ]);
     return rows.map((row) {

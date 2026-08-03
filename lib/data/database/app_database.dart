@@ -702,7 +702,7 @@ class AppDatabase {
         distance_metric TEXT NOT NULL CHECK(distance_metric IN ('cosine', 'dotProduct', 'euclidean')),
         content_hash TEXT NOT NULL,
         text_hash TEXT NOT NULL,
-        vector_blob BLOB NOT NULL,
+        vector_blob BLOB,
         status TEXT NOT NULL CHECK(status IN ('ready', 'failed', 'stale')),
         error_code TEXT,
         generated_at INTEGER NOT NULL,
@@ -710,7 +710,8 @@ class AppDatabase {
         PRIMARY KEY(chunk_id, profile_id),
         FOREIGN KEY(chunk_id) REFERENCES content_chunks(id) ON DELETE CASCADE,
         FOREIGN KEY(profile_id) REFERENCES embedding_provider_profiles(id) ON DELETE CASCADE,
-        CHECK(dimensions > 0)
+        CHECK(dimensions > 0),
+        CHECK(status != 'ready' OR vector_blob IS NOT NULL)
       )
     ''');
     await database.execute('''

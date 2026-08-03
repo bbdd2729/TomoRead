@@ -11,7 +11,7 @@ import '../../data/services/content_chunk_service.dart';
 import '../../domain/models/bookmark.dart';
 import '../../domain/models/display_projection.dart';
 import '../../domain/models/document_locator.dart';
-import '../../domain/models/content_chunk.dart';
+import '../../domain/models/embedding_models.dart';
 import '../../domain/models/chat_models.dart';
 import '../../domain/models/reading_context.dart';
 import '../../domain/models/reading_activity.dart';
@@ -611,16 +611,22 @@ class TextReaderWorkspace extends HookConsumerWidget {
 
     Future<void> searchIndexedContent() async {
       autoScrollController.stop(AutoScrollStopReason.dialog);
-      final chunk = await showDialog<ContentChunk>(
+      final result = await showDialog<HybridSearchResult>(
         context: context,
         builder: (context) => ContentSearchDialog(
           bookId: bookId,
-          maxChapterIndex: null,
+          maxChapterIndex: chapterIndex.value,
+          maxRawOffset: activeChapter == null
+              ? null
+              : (activeChapter.rawStart +
+                        (activeChapter.rawEnd - activeChapter.rawStart) *
+                            currentScrollRatio.value)
+                    .round(),
         ),
       );
       final current = document;
-      if (chunk == null || current == null || !context.mounted) return;
-      chapterIndex.value = chunk.chapterIndex
+      if (result == null || current == null || !context.mounted) return;
+      chapterIndex.value = result.chapterIndex
           .clamp(0, current.chapters.length - 1)
           .toInt();
       selectedContext.value = null;
@@ -629,14 +635,14 @@ class TextReaderWorkspace extends HookConsumerWidget {
         chapterIndex: chapterIndex.value,
         progress: current.rawText.isEmpty
             ? 0
-            : chunk.rawStart / current.rawText.length,
-        locator: chunk.locatorStart,
+            : result.rawStart / current.rawText.length,
+        locator: result.locator,
       );
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final chapter = current.chapters[chapterIndex.value];
         final ratio = chapter.rawEnd <= chapter.rawStart
             ? 0.0
-            : ((chunk.rawStart - chapter.rawStart) /
+            : ((result.rawStart - chapter.rawStart) /
                       (chapter.rawEnd - chapter.rawStart))
                   .clamp(0, 1)
                   .toDouble();

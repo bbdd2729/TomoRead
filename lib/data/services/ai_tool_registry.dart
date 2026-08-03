@@ -2,10 +2,13 @@ import 'dart:convert';
 
 import '../../domain/models/ai_agent_models.dart';
 import '../../domain/models/chat_models.dart';
+import '../../domain/models/document_locator.dart';
+import '../../domain/models/library_book.dart';
 import '../repositories/annotation_repository.dart';
 import '../repositories/book_repository.dart';
 import '../repositories/content_chunk_repository.dart';
 import '../repositories/skill_repository.dart';
+import 'hybrid_search_service.dart';
 
 class AiToolContext {
   const AiToolContext({this.bookId, this.attachment});
@@ -80,12 +83,14 @@ class AiToolRegistry {
     this._annotations,
     this._skills,
     this._chunks,
+    this._hybridSearch,
   );
 
   final BookRepository _books;
   final AnnotationRepository _annotations;
   final SkillRepository _skills;
   final ContentChunkRepository _chunks;
+  final HybridSearchService _hybridSearch;
 
   Future<AiToolSet> createToolSet(AiToolContext context) async {
     final tools = <String, AiRegisteredTool>{};
@@ -240,7 +245,7 @@ class AiToolRegistry {
       declaration: const AiToolDeclaration(
         name: 'search_book_text',
         displayName: '搜索书中原文',
-        description: '在当前书籍的本地纯文本索引中搜索关键词，返回少量带章节位置的原文片段。',
+        description: '在当前书籍的可信正文索引中进行关键词与语义混合检索，返回少量带章节位置的原文片段。',
         kind: AiToolKind.read,
         inputSchema: {
           'type': 'object',
@@ -273,33 +278,41 @@ class AiToolRegistry {
             '当前书籍的本地正文索引尚未就绪，请稍后重建索引。',
           );
         }
-        final results = await _chunks.search(
+        final maxRawOffset = await _currentRawOffset(book);
+        final response = await _hybridSearch.search(
           bookId: bookId,
           query: query,
-          maxChapterIndex: book.chapterIndex,
+          maxChapterIndex: maxRawOffset == null
+              ? book.chapterIndex - 1
+              : book.chapterIndex,
+          maxRawOffset: maxRawOffset,
           limit: limit,
         );
-        final citations = results
+        final citations = response.results
             .map(
               (result) => AiCitationSource(
                 bookId: bookId,
-                href: result.chunk.href,
-                locator: result.chunk.locatorStart,
+                href: result.href,
+                locator: result.locator,
                 quote: result.excerpt,
-                chapterIndex: result.chunk.chapterIndex,
-                chapterTitle: result.chunk.chapterTitle,
+                chapterIndex: result.chapterIndex,
+                chapterTitle: result.chapterTitle,
               ),
             )
             .toList();
         return AiToolExecutionResult(
           output: jsonEncode({
             'query': query,
-            'matches': results
+            'mode': response.mode.name,
+            'spoilerLimited': response.spoilerLimited,
+            'matches': response.results
                 .map(
                   (result) => {
-                    'chapterIndex': result.chunk.chapterIndex,
-                    'chapterTitle': result.chunk.chapterTitle,
+                    'chapterIndex': result.chapterIndex,
+                    'chapterTitle': result.chapterTitle,
                     'excerpt': result.excerpt,
+                    'score': result.score,
+                    'sources': result.sources.map((source) => source.name).toList(),
                   },
                 )
                 .toList(),
@@ -308,6 +321,29 @@ class AiToolRegistry {
         );
       },
     );
+  }
+
+  Future<int?> _currentRawOffset(LibraryBook book) async {
+    final text = TextDocumentLocator.tryParse(book.locator);
+    if (text != null && text.chapterIndex == book.chapterIndex) {
+      return text.rawStart;
+    }
+    final epub = EpubDocumentLocator.tryParse(
+      book.locator,
+      fallbackChapterIndex: book.chapterIndex,
+    );
+    if (epub == null || epub.location.chapterIndex != book.chapterIndex) {
+      return null;
+    }
+    final chapterChunks = await _chunks.listChapter(
+      book.id,
+      book.chapterIndex,
+    );
+    if (chapterChunks.isEmpty) return null;
+    final chapterLength = chapterChunks
+        .map((chunk) => chunk.rawEnd)
+        .reduce((left, right) => left > right ? left : right);
+    return (chapterLength * epub.location.scrollRatio).round();
   }
 
   String _skillToolName(String id) {

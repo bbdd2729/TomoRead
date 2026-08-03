@@ -164,6 +164,7 @@ class ContentChunkRepository {
     required String bookId,
     required String query,
     int? maxChapterIndex,
+    int? maxRawOffset,
     int limit = 20,
   }) async {
     final normalized = query.trim();
@@ -174,7 +175,13 @@ class ContentChunkRepository {
       "LOWER(text_content) LIKE LOWER(?) ESCAPE '\\'",
     ];
     final arguments = <Object?>[bookId, '%${_escapeLike(normalized)}%'];
-    if (maxChapterIndex != null) {
+    if (maxChapterIndex != null && maxRawOffset != null) {
+      conditions.add(
+        '(chapter_index < ? OR '
+        '(chapter_index = ? AND raw_end <= ?))',
+      );
+      arguments.addAll([maxChapterIndex, maxChapterIndex, maxRawOffset]);
+    } else if (maxChapterIndex != null) {
       conditions.add('chapter_index <= ?');
       arguments.add(maxChapterIndex);
     }

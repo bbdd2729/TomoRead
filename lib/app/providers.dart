@@ -186,6 +186,12 @@ final semanticIndexRevisionProvider = NotifierProvider<RevisionNotifier, int>(
   RevisionNotifier.new,
 );
 
+final activeEmbeddingProfileProvider =
+    FutureProvider.autoDispose<EmbeddingProviderProfile?>((ref) {
+      ref.watch(semanticIndexRevisionProvider);
+      return ref.watch(embeddingProviderRepositoryProvider).loadActive();
+    });
+
 final contentIndexStateProvider = FutureProvider.autoDispose
     .family<ContentIndexState?, String>((ref, bookId) {
       ref.watch(contentIndexRevisionProvider);
@@ -204,6 +210,7 @@ typedef ContentSearchRequest = ({
   String bookId,
   String query,
   int? maxChapterIndex,
+  int? maxRawOffset,
   int limit,
 });
 
@@ -242,6 +249,7 @@ final contentSearchProvider = FutureProvider.autoDispose
         bookId: request.bookId,
         query: request.query,
         maxChapterIndex: request.maxChapterIndex,
+        maxRawOffset: request.maxRawOffset,
         limit: request.limit,
       );
     });
@@ -261,6 +269,7 @@ typedef HybridSearchRequest = ({
   String bookId,
   String query,
   int? maxChapterIndex,
+  int? maxRawOffset,
   int limit,
 });
 
@@ -272,6 +281,7 @@ final hybridSearchProvider = FutureProvider.autoDispose
         bookId: request.bookId,
         query: request.query,
         maxChapterIndex: request.maxChapterIndex,
+        maxRawOffset: request.maxRawOffset,
         limit: request.limit,
       );
     });
@@ -395,6 +405,7 @@ final aiToolRegistryProvider = Provider<AiToolRegistry>(
     ref.watch(annotationRepositoryProvider),
     ref.watch(skillRepositoryProvider),
     ref.watch(contentChunkRepositoryProvider),
+    ref.watch(hybridSearchServiceProvider),
   ),
 );
 

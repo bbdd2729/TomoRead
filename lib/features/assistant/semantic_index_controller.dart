@@ -59,6 +59,24 @@ class SemanticIndexController {
 
   void cancel(String bookId) => _running[bookId]?.cancel();
 
+  Future<void> rebuildBook(String bookId) async {
+    final profile = await profiles.loadActive();
+    if (profile == null) {
+      throw const EmbeddingProviderException(
+        'profile_missing',
+        'Configure and activate an embedding profile first.',
+        recoverable: false,
+      );
+    }
+    if (_running.containsKey(bookId)) return;
+    await embeddings.deleteForBook(
+      bookId: bookId,
+      profileId: profile.id,
+    );
+    onChanged();
+    await indexBook(bookId);
+  }
+
   Future<void> deleteIndex(String bookId) async {
     final profile = await profiles.loadActive();
     if (profile == null) return;

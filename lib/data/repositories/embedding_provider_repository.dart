@@ -74,12 +74,15 @@ class EmbeddingProviderRepository {
     _validateEndpoint(normalizedUrl, mode);
     final now = DateTime.now();
     final existing = id == null ? null : await findById(id);
-    final modelChanged = existing != null &&
+    final modelIdentityChanged = existing != null &&
         (existing.baseUrl != normalizedUrl ||
             existing.modelId != normalizedModel ||
-            existing.modelVersion != normalizedVersion ||
+            existing.modelVersion != normalizedVersion);
+    final indexIdentityChanged = existing != null &&
+        (modelIdentityChanged ||
             existing.distanceMetric != distanceMetric ||
             existing.dimensions != dimensions);
+    final effectiveDimensions = modelIdentityChanged ? null : dimensions;
     final profile = EmbeddingProviderProfile(
       id: id ?? 'embedding-${now.microsecondsSinceEpoch}',
       name: normalizedName,
@@ -91,17 +94,19 @@ class EmbeddingProviderRepository {
       modelVersion: normalizedVersion,
       secretKeyId: secretKeyId,
       distanceMetric: distanceMetric,
-      dimensions: dimensions,
+      dimensions: effectiveDimensions,
       maxInputCharacters: maxInputCharacters.clamp(256, 100000),
       batchSize: batchSize.clamp(1, 128),
       isActive: true,
       isEnabled: isEnabled,
       remoteContentConsent:
           mode == EmbeddingProviderMode.remote && remoteContentConsent,
-      capabilityStatus: modelChanged || existing == null
+      capabilityStatus: modelIdentityChanged || existing == null
           ? EmbeddingCapabilityStatus.untested
           : existing.capabilityStatus,
-      capabilityErrorCode: modelChanged ? null : existing?.capabilityErrorCode,
+      capabilityErrorCode: modelIdentityChanged
+          ? null
+          : existing?.capabilityErrorCode,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     );
@@ -125,7 +130,7 @@ class EmbeddingProviderRepository {
           whereArgs: [profile.id],
         );
       }
-      if (modelChanged) {
+      if (indexIdentityChanged) {
         await transaction.update(
           'content_embeddings',
           {
@@ -199,17 +204,46 @@ class EmbeddingProviderRepository {
     }
     final dimensions = result.succeeded ? result.dimensions : existing.dimensions;
     final database = await _database.database;
-    await database.update(
-      'embedding_provider_profiles',
-      {
-        'dimensions': dimensions,
-        'capability_status': result.capabilityStatus.name,
-        'capability_error_code': result.errorCode,
-        'updated_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await database.transaction((transaction) async {
+      await transaction.update(
+        'embedding_provider_profiles',
+        {
+          'dimensions': dimensions,
+          'capability_status': result.capabilityStatus.name,
+          'capability_error_code': result.errorCode,
+          'updated_at': now,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (result.succeeded &&
+          existing.dimensions != null &&
+          existing.dimensions != dimensions) {
+        await transaction.update(
+          'content_embeddings',
+          {
+            'status': ContentEmbeddingStatus.stale.name,
+            'error_code': 'dimension_changed',
+            'updated_at': now,
+          },
+          where: 'profile_id = ?',
+          whereArgs: [id],
+        );
+        await transaction.update(
+          'semantic_index_states',
+          {
+            'status': SemanticIndexStatus.stale.name,
+            'indexed_chunks': 0,
+            'failed_chunks': 0,
+            'error_code': 'dimension_changed',
+            'updated_at': now,
+          },
+          where: 'profile_id = ?',
+          whereArgs: [id],
+        );
+      }
+    });
     return (await findById(id))!;
   }
 
@@ -295,6 +329,11 @@ class EmbeddingProviderRepository {
     final uri = Uri.tryParse(source);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
       throw const FormatException('Embedding provider URL is invalid.');
+    }
+    if (uri.userInfo.isNotEmpty || uri.hasQuery || uri.hasFragment) {
+      throw const FormatException(
+        'Embedding provider URL cannot contain credentials, query, or fragment.',
+      );
     }
     final loopback = uri.host == 'localhost' ||
         uri.host == '127.0.0.1' ||

@@ -9,11 +9,13 @@ class EmbeddingProviderException implements Exception {
     this.code,
     this.message, {
     this.recoverable = true,
+    this.statusCode,
   });
 
   final String code;
   final String message;
   final bool recoverable;
+  final int? statusCode;
 
   @override
   String toString() => message;
@@ -102,6 +104,7 @@ class OpenAiCompatibleEmbeddingService {
           _statusError(response.statusCode),
           'Embedding provider rejected the request (HTTP ${response.statusCode}).',
           recoverable: response.statusCode == 429 || response.statusCode >= 500,
+          statusCode: response.statusCode,
         );
       }
       return _parseVectors(
