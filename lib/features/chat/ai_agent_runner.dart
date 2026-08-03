@@ -45,6 +45,7 @@ class AiAgentRunner {
         final conversation = _buildConversation(systemPrompt, history);
         var citationOrdinal = attachment == null ? 1 : 2;
         String? finalStopReason;
+        var continuationAttempts = 0;
 
         if (preferredSkillId != null && !cancelled) {
           final declaration = toolSet.declarations
@@ -107,31 +108,64 @@ class AiAgentRunner {
           var responseText = '';
           var responseReasoning = '';
           String? responseStopReason;
-          await for (final event in providerHandle!.events) {
-            if (cancelled) break;
-            switch (event) {
-              case AiTextDeltaEvent():
-                responseText += event.delta;
-                controller.add(event);
-              case AiReasoningDeltaEvent():
-                responseReasoning += event.delta;
-                controller.add(event);
-              case AiToolCallStartedEvent() ||
-                  AiToolArgumentsDeltaEvent() ||
-                  AiArtifactEvent() ||
-                  AiUsageEvent():
-                controller.add(event);
-              case AiToolCallReadyEvent():
-                requestedTools.add(event.call);
-              case AiProviderCompletedEvent():
-                responseStopReason = event.stopReason;
-              default:
-                break;
+          AiGatewayException? interruptedStream;
+          try {
+            await for (final event in providerHandle!.events) {
+              if (cancelled) break;
+              switch (event) {
+                case AiTextDeltaEvent():
+                  responseText += event.delta;
+                  controller.add(event);
+                case AiReasoningDeltaEvent():
+                  responseReasoning += event.delta;
+                  controller.add(event);
+                case AiToolCallStartedEvent() ||
+                    AiToolArgumentsDeltaEvent() ||
+                    AiArtifactEvent() ||
+                    AiUsageEvent():
+                  controller.add(event);
+                case AiToolCallReadyEvent():
+                  requestedTools.add(event.call);
+                case AiProviderCompletedEvent():
+                  responseStopReason = event.stopReason;
+                default:
+                  break;
+              }
             }
+          } on AiGatewayException catch (error) {
+            if (error.code != 'stream_interrupted' || responseText.isEmpty) {
+              rethrow;
+            }
+            interruptedStream = error;
           }
           if (cancelled) break;
+          if (interruptedStream != null) {
+            if (continuationAttempts >= 1) throw interruptedStream;
+            _appendContinuation(
+              conversation,
+              responseText: responseText,
+              responseReasoning: responseReasoning,
+            );
+            continuationAttempts += 1;
+            continue;
+          }
           finalStopReason = responseStopReason;
           if (requestedTools.isEmpty) {
+            if (responseStopReason == 'length') {
+              if (continuationAttempts >= 2) {
+                throw const AiGatewayException(
+                  'output_limit',
+                  'The model reached its output limit before completing the answer.',
+                );
+              }
+              _appendContinuation(
+                conversation,
+                responseText: responseText,
+                responseReasoning: responseReasoning,
+              );
+              continuationAttempts += 1;
+              continue;
+            }
             controller.add(AiRunCompletedEvent(stopReason: finalStopReason));
             await controller.close();
             return;
@@ -336,4 +370,25 @@ class AiAgentRunner {
 
   String _limitToolOutput(String value) =>
       value.length <= 32768 ? value : '${value.substring(0, 32768)}\n[结果已截断]';
+
+  void _appendContinuation(
+    List<AiProviderMessage> conversation, {
+    required String responseText,
+    required String responseReasoning,
+  }) {
+    conversation.add(
+      AiProviderMessage(
+        role: 'assistant',
+        content: responseText,
+        reasoningContent: responseReasoning.isEmpty ? null : responseReasoning,
+      ),
+    );
+    conversation.add(
+      const AiProviderMessage(
+        role: 'user',
+        content:
+            'Continue the previous answer exactly where it stopped. Do not repeat any earlier text; finish the answer.',
+      ),
+    );
+  }
 }

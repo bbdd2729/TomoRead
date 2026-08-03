@@ -660,6 +660,12 @@ $toolRule
   }
 
   String _friendlyError(Object error) {
+    if (error is AiGatewayException && error.code == 'stream_interrupted') {
+      return '模型连接意外中断，已自动尝试续写；请重试。';
+    }
+    if (error is AiGatewayException && error.code == 'output_limit') {
+      return '模型多次达到输出长度上限，已保留已生成内容；请重试或增大输出上限。';
+    }
     if (error is! AiGatewayException) return '生成失败，请稍后重试。';
     return switch (error.code) {
       'auth_failed' => 'API Key 无效或没有模型访问权限。',

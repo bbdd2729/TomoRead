@@ -76,4 +76,45 @@ void main() {
       'tool_calls',
     );
   });
+
+  test('does not treat a stream closed without a terminal event as complete',
+      () async {
+    final client = MockClient.streaming((request, bodyStream) async {
+      return http.StreamedResponse(
+        Stream.value(
+          utf8.encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'),
+        ),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final gateway = OpenAiCompatibleGateway(clientFactory: () => client);
+    final now = DateTime(2026);
+    final profile = AiProviderProfile(
+      id: 'provider-a',
+      name: 'Test',
+      baseUrl: 'https://example.com/v1',
+      modelId: 'model-a',
+      secretKeyId: 'secret-a',
+      temperature: .2,
+      maxOutputTokens: 1000,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    final handle = await gateway.streamReply(
+      profile: profile,
+      apiKey: 'key',
+      messages: const [AiProviderMessage(role: 'user', content: 'question')],
+    );
+
+    await expectLater(
+      handle.events.toList(),
+      throwsA(
+        isA<AiGatewayException>()
+            .having((error) => error.code, 'code', 'stream_interrupted'),
+      ),
+    );
+  });
 }

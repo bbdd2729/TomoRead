@@ -131,6 +131,7 @@ class OpenAiCompatibleGateway implements AiGateway {
       StreamSubscription<SseEvent>? subscription;
       var cancelled = false;
       var completed = false;
+      var receivedTerminalSignal = false;
       String? stopReason;
 
       void emitToolState() {
@@ -185,6 +186,7 @@ class OpenAiCompatibleGateway implements AiGateway {
               final data = event.data.trim();
               if (data.isEmpty) return;
               if (data == '[DONE]') {
+                receivedTerminalSignal = true;
                 completeStream();
                 return;
               }
@@ -237,6 +239,7 @@ class OpenAiCompatibleGateway implements AiGateway {
                   final reason = choice['finish_reason'];
                   if (reason is String && reason.isNotEmpty) {
                     stopReason = reason;
+                    receivedTerminalSignal = true;
                   }
                 }
                 final usage = _parseUsage(json['usage']);
@@ -268,6 +271,7 @@ class OpenAiCompatibleGateway implements AiGateway {
               }
             },
             onError: (Object error, StackTrace stackTrace) {
+              completed = true;
               if (!controller.isClosed && !cancelled) {
                 final mapped = error is TimeoutException
                     ? const AiGatewayException(
@@ -281,7 +285,20 @@ class OpenAiCompatibleGateway implements AiGateway {
               client.close();
             },
             onDone: () {
-              if (!cancelled) completeStream();
+              if (!cancelled && !completed) {
+                if (receivedTerminalSignal) {
+                  completeStream();
+                } else if (!controller.isClosed) {
+                  completed = true;
+                  controller.addError(
+                    const AiGatewayException(
+                      'stream_interrupted',
+                      'The model connection closed before the response completed.',
+                    ),
+                  );
+                  unawaited(controller.close());
+                }
+              }
               client.close();
             },
             cancelOnError: true,
