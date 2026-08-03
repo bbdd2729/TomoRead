@@ -51,6 +51,9 @@ abstract final class AppDiagnostics {
     debugPrintSynchronously(
       'TomoRead/$area: $message${error == null ? '' : ' error=$error'}',
     );
+    if (stackTrace != null) {
+      debugPrintSynchronously(stackTrace.toString());
+    }
   }
 
   static String _compact(Object? value) {
