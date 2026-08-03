@@ -71,8 +71,8 @@ void main() {
     });
 
     test('rejects a decoded path traversal segment', () async {
-      final response = await handler.load(
-        Uri.parse('epub://localhost/book/book-a/OEBPS/%2E%2E/secret.txt'),
+      final response = await handler.loadRequestUrl(
+        'epub://localhost/book/book-a/OEBPS/%2E%2E/secret.txt',
       );
 
       expect(response.statusCode, 403);

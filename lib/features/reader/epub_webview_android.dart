@@ -414,8 +414,8 @@ class AndroidEpubWebView extends HookConsumerWidget {
             );
           },
           onLoadResourceWithCustomScheme: (_, request) async {
-            final response = await resourceHandler.load(
-              Uri.parse(request.url.toString()),
+            final response = await resourceHandler.loadRequestUrl(
+              request.url.toString(),
               method: request.method,
             );
             return CustomSchemeResponse(

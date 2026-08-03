@@ -33,6 +33,27 @@ class AndroidEpubResourceHandler {
   static String resourceBaseForBook(String bookId) =>
       '../book/${Uri.encodeComponent(bookId)}/';
 
+  Future<AndroidEpubResourceResponse> loadRequestUrl(
+    String rawRequestUrl, {
+    String? method,
+  }) async {
+    final requestUri = Uri.tryParse(rawRequestUrl);
+    if (requestUri == null) {
+      return AndroidEpubResourceResponse.error(
+        statusCode: 403,
+        message: 'EPUB resource URL is not allowed.',
+      );
+    }
+    if (_containsPathTraversal(rawRequestUrl)) {
+      _logRejected(requestUri, 'unsafePath');
+      return AndroidEpubResourceResponse.error(
+        statusCode: 403,
+        message: 'EPUB resource path is not allowed.',
+      );
+    }
+    return load(requestUri, method: method);
+  }
+
   Future<AndroidEpubResourceResponse> load(
     Uri requestUri, {
     String? method,
@@ -173,6 +194,15 @@ class AndroidEpubResourceHandler {
       segment.contains('/') ||
       segment.contains('\\') ||
       segment.contains('\u0000');
+
+  bool _containsPathTraversal(String rawRequestUrl) {
+    try {
+      final decoded = Uri.decodeFull(rawRequestUrl).replaceAll('\\', '/');
+      return RegExp(r'(^|/)(?:\.|\.\.)(?:/|$)').hasMatch(decoded);
+    } on FormatException {
+      return true;
+    }
+  }
 
   void _logRejected(Uri uri, String reason) {
     AppDiagnostics.error(
