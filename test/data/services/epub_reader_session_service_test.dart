@@ -138,6 +138,16 @@ void main() {
     expect(runtime, contains("postMessage({ type: 'runtimeBoot', runtimeVersion })"));
   });
 
+  test('supports EPUB spine documents without a head element', () async {
+    final runtime = await rootBundle.loadString(
+      'assets/epub_reader_runtime/tomoread-reader.js',
+    );
+
+    expect(runtime, contains('const ensureRuntimeStyle = (doc, id) =>'));
+    expect(runtime, contains("host = doc.createElement('head')"));
+    expect(runtime, isNot(contains('doc.head.append(style)')));
+  });
+
   test('loads the Android file runtime without ES module imports', () async {
     final entryPoint = await rootBundle.loadString(
       'assets/epub_reader_runtime/index.html',

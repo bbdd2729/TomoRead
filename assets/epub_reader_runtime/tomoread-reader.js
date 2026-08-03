@@ -2,7 +2,7 @@
 'use strict'
 
 const CFI = globalThis.TomoReadEpubCfi
-const runtimeVersion = '32'
+const runtimeVersion = '33'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
@@ -250,17 +250,42 @@ const rangeForOffsets = (doc, startOffset, endOffset) => {
   return range
 }
 
+// EPUB spine documents are allowed to omit a <head> element. Chromium keeps
+// such documents usable, but `document.head` is null. Runtime decoration
+// (annotations, search, TTS, and text colouring) must therefore provide a
+// safe style host instead of preventing the chapter from opening.
+const ensureRuntimeStyle = (doc, id) => {
+  let style = doc.getElementById(id)
+  if (style) return style
+
+  let host = doc.head
+  if (!host) {
+    const root = doc.documentElement
+    if (!root) return null
+    if (root.localName?.toLowerCase() === 'html') {
+      host = doc.createElement('head')
+      if (doc.body) root.insertBefore(host, doc.body)
+      else root.prepend(host)
+    } else {
+      // Some EPUBs use SVG spine documents. A style element is valid there
+      // and avoids treating an optional visual enhancement as a load error.
+      host = root
+    }
+  }
+
+  style = doc.createElement('style')
+  style.id = id
+  host.append(style)
+  return style
+}
+
 const applyAnnotations = (doc, index) => {
   const highlights = doc.defaultView.CSS?.highlights
   const Highlight = doc.defaultView.Highlight
   if (!highlights || !Highlight) return
   const styleId = 'tomoread-runtime-annotations'
-  let style = doc.getElementById(styleId)
-  if (!style) {
-    style = doc.createElement('style')
-    style.id = styleId
-    doc.head.append(style)
-  }
+  const style = ensureRuntimeStyle(doc, styleId)
+  if (!style) return
   style.textContent = `
     ::highlight(tomoread-yellow) { background: #f7d15499; }
     ::highlight(tomoread-green) { background: #80c78399; }
@@ -327,12 +352,8 @@ const applySearchHighlights = doc => {
     }
   }
   highlights.set('tomoread-search', ranges)
-  let style = doc.getElementById('tomoread-runtime-search')
-  if (!style) {
-    style = doc.createElement('style')
-    style.id = 'tomoread-runtime-search'
-    doc.head.append(style)
-  }
+  const style = ensureRuntimeStyle(doc, 'tomoread-runtime-search')
+  if (!style) return
   style.textContent = '::highlight(tomoread-search) { background: #ffb74d99; }'
 }
 
@@ -358,12 +379,8 @@ const applyTtsHighlight = (doc, index) => {
     }
   }
   highlights.set('tomoread-tts', ranges)
-  let style = doc.getElementById('tomoread-runtime-tts')
-  if (!style) {
-    style = doc.createElement('style')
-    style.id = 'tomoread-runtime-tts'
-    doc.head.append(style)
-  }
+  const style = ensureRuntimeStyle(doc, 'tomoread-runtime-tts')
+  if (!style) return
   style.textContent = '::highlight(tomoread-tts) { background: #64b5f680; }'
 }
 
@@ -442,12 +459,8 @@ const applyTextColoring = doc => {
   const groups = new Map(
     configuredColors.map(([key]) => [key, new Highlight()]),
   )
-  let style = doc.getElementById('tomoread-runtime-text-coloring')
-  if (!style) {
-    style = doc.createElement('style')
-    style.id = 'tomoread-runtime-text-coloring'
-    doc.head.append(style)
-  }
+  const style = ensureRuntimeStyle(doc, 'tomoread-runtime-text-coloring')
+  if (!style) return
   style.textContent = configuredColors
     .map(([key, value]) => `::highlight(${textColorHighlightPrefix}${key}) { color: ${value}; }`)
     .join('\n')

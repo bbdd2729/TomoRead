@@ -427,6 +427,15 @@ class AndroidEpubWebView extends HookConsumerWidget {
       return;
     }
     if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'runtimeWarning') {
+      AppDiagnostics.info(
+        'epub.bridge',
+        'runtime reported a warning',
+        details: {'message': runtimeMessage['message']},
+      );
+      return;
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'epubInteraction') {
       if (manifest == null || !context.mounted) return;
       try {
