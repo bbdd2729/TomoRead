@@ -16,9 +16,11 @@ enum AutoScrollStopReason {
 }
 
 class ReaderAutoScrollController extends ChangeNotifier {
-  ReaderAutoScrollController({
+  factory ReaderAutoScrollController({
     AutoScrollPreference preference = const AutoScrollPreference(),
-  }) : _preference = preference;
+  }) => ReaderAutoScrollController._(preference);
+
+  ReaderAutoScrollController._(this._preference);
 
   AutoScrollPreference _preference;
   bool _active = false;

@@ -232,6 +232,21 @@ class ContentEmbeddingRepository {
   }) async {
     if (profile.dimensions == null) return const [];
     final database = await _database.database;
+    final arguments = <Object?>[
+      bookId,
+      profile.id,
+      profile.modelId,
+      profile.modelVersion,
+      profile.dimensions,
+      contentHash,
+    ];
+    if (maxChapterIndex != null) {
+      arguments.add(maxChapterIndex);
+      if (maxRawOffset != null) {
+        arguments.addAll([maxChapterIndex, maxRawOffset]);
+      }
+    }
+    arguments.add(limit.clamp(1, 10000));
     final rows = await database.rawQuery('''
       SELECT c.*, e.vector_blob, e.dimensions AS embedding_dimensions
       FROM content_embeddings e
@@ -247,18 +262,7 @@ class ContentEmbeddingRepository {
         ${maxChapterIndex == null ? '' : maxRawOffset == null ? 'AND c.chapter_index <= ?' : 'AND (c.chapter_index < ? OR (c.chapter_index = ? AND c.raw_end <= ?))'}
       ORDER BY c.ordinal ASC
       LIMIT ?
-    ''', [
-      bookId,
-      profile.id,
-      profile.modelId,
-      profile.modelVersion,
-      profile.dimensions,
-      contentHash,
-      if (maxChapterIndex != null) maxChapterIndex,
-      if (maxChapterIndex != null && maxRawOffset != null) maxChapterIndex,
-      if (maxChapterIndex != null && maxRawOffset != null) maxRawOffset,
-      limit.clamp(1, 10000),
-    ]);
+    ''', arguments);
     return rows.map((row) {
       final dimensions = row['embedding_dimensions']! as int;
       return SemanticEmbeddingCandidate(

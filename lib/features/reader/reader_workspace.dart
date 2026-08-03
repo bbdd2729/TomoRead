@@ -8,6 +8,7 @@ import '../../app/appearance.dart';
 import '../../app/providers.dart';
 import '../../data/services/content_chunk_service.dart';
 import '../../domain/models/bookmark.dart';
+import '../../domain/models/content_chunk.dart';
 import '../../domain/models/embedding_models.dart';
 import '../../domain/models/chat_models.dart';
 import '../../domain/models/document_locator.dart';

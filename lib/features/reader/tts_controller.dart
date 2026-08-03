@@ -6,15 +6,19 @@ import '../../data/services/tts_queue_service.dart';
 import '../../domain/models/tts.dart';
 
 class TtsPlaybackController extends ChangeNotifier {
-  TtsPlaybackController({
+  factory TtsPlaybackController({
     required TtsEngine engine,
     required TtsQueueLoader queue,
     required TtsStateStore store,
     required TtsWakeLock wakeLock,
-  }) : _engine = engine,
-       _queue = queue,
-       _store = store,
-       _wakeLock = wakeLock;
+  }) => TtsPlaybackController._(engine, queue, store, wakeLock);
+
+  TtsPlaybackController._(
+    this._engine,
+    this._queue,
+    this._store,
+    this._wakeLock,
+  );
 
   final TtsEngine _engine;
   final TtsQueueLoader _queue;

@@ -171,8 +171,9 @@ class PlatformTtsEngine implements TtsEngine {
         }
         final outcome = await completer.future;
         if (session != _session) return;
-        if (_utteranceError != null) {
-          throw StateError(_utteranceError);
+        final utteranceError = _utteranceError;
+        if (utteranceError != null) {
+          throw StateError(utteranceError);
         }
         if (outcome == _UtteranceOutcome.cancelled) {
           controller.add(
