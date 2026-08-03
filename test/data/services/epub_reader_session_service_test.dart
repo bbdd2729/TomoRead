@@ -130,6 +130,14 @@ void main() {
     );
   });
 
+  test('reports a bridge boot event before EPUB commands run', () async {
+    final runtime = await rootBundle.loadString(
+      'assets/epub_reader_runtime/tomoread-reader.js',
+    );
+
+    expect(runtime, contains("postMessage({ type: 'runtimeBoot', runtimeVersion })"));
+  });
+
   test('loads the Android file runtime without ES module imports', () async {
     final entryPoint = await rootBundle.loadString(
       'assets/epub_reader_runtime/index.html',

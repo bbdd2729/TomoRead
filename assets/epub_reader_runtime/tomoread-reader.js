@@ -2,7 +2,7 @@
 'use strict'
 
 const CFI = globalThis.TomoReadEpubCfi
-const runtimeVersion = '31'
+const runtimeVersion = '32'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
@@ -1324,6 +1324,8 @@ window.TomoReadEpubRuntime = Object.freeze({
   setSettings: applySettings,
   postMessage,
 })
+
+postMessage({ type: 'runtimeBoot', runtimeVersion })
 
 window.addEventListener('DOMContentLoaded', () => {
   postMessage({ type: 'runtimeReady', runtimeVersion })

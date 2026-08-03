@@ -7,7 +7,9 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:path/path.dart' as path;
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
+import '../../app/app_diagnostics.dart';
 import '../../app/providers.dart';
 import '../../domain/models/epub_interaction.dart';
 import '../../domain/models/epub_manifest.dart';
@@ -120,10 +122,14 @@ class AndroidEpubWebView extends HookConsumerWidget {
     final runtimeBridgeReady = useRef(false);
     void reportReady() {
       if (!active.value) return;
+      final wasReady = loadPhase.value == _AndroidEpubLoadPhase.ready;
       readinessTimer.value?.cancel();
       readinessTimer.value = null;
       error.value = null;
       loadPhase.value = _AndroidEpubLoadPhase.ready;
+      if (!wasReady) {
+        AppDiagnostics.info('epub.webview', 'renderer ready');
+      }
     }
 
     void reportFailure(Object exception) {
@@ -132,6 +138,11 @@ class AndroidEpubWebView extends HookConsumerWidget {
       readinessTimer.value = null;
       error.value = exception;
       loadPhase.value = _AndroidEpubLoadPhase.failed;
+      AppDiagnostics.error(
+        'epub.webview',
+        'renderer failed',
+        error: exception,
+      );
     }
 
     final messageHandlerRef = useRef<void Function(String)?>(null);
@@ -160,9 +171,15 @@ class AndroidEpubWebView extends HookConsumerWidget {
               runtimeBridgeReady.value = false;
               error.value = null;
               loadPhase.value = _AndroidEpubLoadPhase.loading;
+              AppDiagnostics.info('epub.webview', 'runtime page started');
             },
             onPageFinished: (_) {
               if (!active.value) return;
+              AppDiagnostics.info(
+                'epub.webview',
+                'runtime page finished',
+                details: {'bridgeReady': runtimeBridgeReady.value},
+              );
               final script = runtimeScriptRef.value;
               if (script != null) {
                 unawaited(
@@ -183,16 +200,37 @@ class AndroidEpubWebView extends HookConsumerWidget {
                   readinessTimer.value?.cancel();
                   readinessTimer.value = Timer(
                     const Duration(seconds: 12),
-                    () => reportFailure(
-                      StateError(
-                        'EPUB renderer did not become ready in time.',
+                    () {
+                      AppDiagnostics.error(
+                        'epub.webview',
+                        'runtime readiness timed out',
+                        details: {'timeoutSeconds': 12},
                       ),
-                    ),
+                      reportFailure(
+                        StateError(
+                          'EPUB renderer did not become ready in time.',
+                        ),
+                      );
+                    },
+                  );
+                  AppDiagnostics.info(
+                    'epub.webview',
+                    'waiting for runtime bridge',
+                    details: {'timeoutSeconds': 12},
                   );
                 }
               }
             },
             onWebResourceError: (webError) {
+              AppDiagnostics.error(
+                'epub.webview',
+                'web resource failed',
+                details: {
+                  'mainFrame': webError.isForMainFrame == true,
+                  'code': webError.errorCode,
+                },
+                error: StateError(webError.description),
+              );
               if (webError.isForMainFrame == true) {
                 reportFailure(
                   StateError(
@@ -209,6 +247,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
             messageHandlerRef.value?.call(message.message);
           },
         );
+      unawaited(_configureAndroidDiagnostics(webViewController));
       return webViewController;
     });
 
@@ -239,12 +278,20 @@ class AndroidEpubWebView extends HookConsumerWidget {
         );
         Future<void> loadChapter() async {
           if (!await file.exists()) {
+            AppDiagnostics.error('epub.webview', 'runtime entry point missing');
             reportFailure(StateError('EPUB chapter is unavailable: $href'));
             return;
           }
           try {
+            AppDiagnostics.info('epub.webview', 'loading runtime entry point');
             await controller.loadFile(file.path);
-          } catch (exception) {
+          } catch (exception, stackTrace) {
+            AppDiagnostics.error(
+              'epub.webview',
+              'runtime entry point load failed',
+              error: exception,
+              stackTrace: stackTrace,
+            );
             reportFailure(exception);
           }
         }
@@ -361,7 +408,21 @@ class AndroidEpubWebView extends HookConsumerWidget {
       // Legacy scroll and tap messages use a compact pipe format.
     }
     if (runtimeMessage is Map<String, dynamic> &&
+        runtimeMessage['type'] == 'runtimeBoot') {
+      AppDiagnostics.info(
+        'epub.bridge',
+        'runtime script booted',
+        details: {'runtimeVersion': runtimeMessage['runtimeVersion']},
+      );
+      return;
+    }
+    if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'runtimeReady') {
+      AppDiagnostics.info(
+        'epub.bridge',
+        'runtime bridge ready',
+        details: {'runtimeVersion': runtimeMessage['runtimeVersion']},
+      );
       onRuntimeReady();
       return;
     }
@@ -408,6 +469,11 @@ class AndroidEpubWebView extends HookConsumerWidget {
     }
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'runtimeError') {
+      AppDiagnostics.error(
+        'epub.bridge',
+        'runtime reported an error',
+        error: StateError(runtimeMessage['message'] ?? 'Unknown runtime error'),
+      );
       onFailure(
         StateError(runtimeMessage['message'] ?? 'Unknown runtime error'),
       );
@@ -428,6 +494,12 @@ class AndroidEpubWebView extends HookConsumerWidget {
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'commandFailed') {
       final commandId = runtimeMessage['id'];
+      AppDiagnostics.error(
+        'epub.bridge',
+        'runtime command failed',
+        details: {'commandId': commandId},
+        error: StateError(runtimeMessage['message'] ?? 'Unknown command error'),
+      );
       if (commandId is num) onNavigationCommandFinished(commandId.toInt());
       return;
     }
@@ -639,8 +711,41 @@ class AndroidEpubWebView extends HookConsumerWidget {
   }) async {
     try {
       await controller.runJavaScript(script);
-    } catch (error) {
+    } catch (error, stackTrace) {
+      AppDiagnostics.error(
+        'epub.webview',
+        'host JavaScript execution failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
       onError(error);
+    }
+  }
+
+  static Future<void> _configureAndroidDiagnostics(
+    WebViewController controller,
+  ) async {
+    final platformController = controller.platform;
+    if (platformController is! AndroidWebViewController) return;
+    try {
+      await platformController.setOnConsoleMessage((message) {
+        AppDiagnostics.info(
+          'epub.console',
+          'JavaScript console message',
+          details: {
+            'level': message.level.name,
+            'message': message.message,
+          },
+        );
+      });
+      AppDiagnostics.info('epub.webview', 'console diagnostics enabled');
+    } catch (error, stackTrace) {
+      AppDiagnostics.error(
+        'epub.webview',
+        'console diagnostics setup failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 }
