@@ -458,7 +458,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
             'epub.console',
             'JavaScript console message',
             details: {
-              'level': message.messageLevel.name,
+              'level': message.messageLevel.toString(),
               'message': message.message,
             },
           ),

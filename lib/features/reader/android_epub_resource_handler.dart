@@ -142,7 +142,7 @@ class AndroidEpubResourceHandler {
 
     try {
       final rootCanonical = await root.resolveSymbolicLinks();
-      final candidate = File(path.join(root.path, ...relativeSegments));
+      final candidate = File(path.joinAll([root.path, ...relativeSegments]));
       final candidateCanonical = await candidate.resolveSymbolicLinks();
       if (!path.isWithin(rootCanonical, candidateCanonical)) {
         return const _RejectedResource(
@@ -158,7 +158,7 @@ class AndroidEpubResourceHandler {
     } on FileSystemException {
       // Do not expose whether the inaccessible path exists. The normal load
       // path reports it as a missing EPUB resource.
-      final candidate = File(path.join(root.path, ...relativeSegments));
+      final candidate = File(path.joinAll([root.path, ...relativeSegments]));
       return _ResolvedResource(
         file: candidate,
         relativePath: path.joinAll(relativeSegments),
