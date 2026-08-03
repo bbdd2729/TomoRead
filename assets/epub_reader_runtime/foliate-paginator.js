@@ -1,3 +1,6 @@
+(() => {
+'use strict'
+
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 const debounce = (f, wait, immediate) => {
@@ -283,13 +286,13 @@ const setSelectionTo = (target, collapse) => {
 // right column in a dual-page spread that belongs to a different section
 // than the left column) stay exposed to assistive tech.
 // See readest/readest#4243 and readest/readest#4259.
-export const isViewVisibleInContainer = (viewRect, containerRect) =>
+const isViewVisibleInContainer = (viewRect, containerRect) =>
     viewRect.right > containerRect.left
     && viewRect.left < containerRect.right
     && viewRect.bottom > containerRect.top
     && viewRect.top < containerRect.bottom
 
-export const getDirection = doc => {
+const getDirection = doc => {
     const { defaultView } = doc
     let { writingMode, direction } = defaultView.getComputedStyle(doc.body)
     // Some EPUBs set writing-mode on the first child of body instead of body itself
@@ -336,7 +339,7 @@ const getBackground = doc => {
 // single-column mode the gutters are zero, so the clamp still fills the viewport
 // edge to edge. `views` is the sorted list of { size, bg } with bg already
 // resolved ('' = transparent → no segment).
-export const computeBackgroundSegments = (views, scrollPos, bgSize, inset, containerSize) => {
+const computeBackgroundSegments = (views, scrollPos, bgSize, inset, containerSize) => {
     const containerStart = inset
     const containerEnd = inset + containerSize
     const segments = []
@@ -361,7 +364,7 @@ export const computeBackgroundSegments = (views, scrollPos, bgSize, inset, conta
 // fill, so the texture shows through) for a transparent page under a texture,
 // and the resolved colour otherwise. Shared by scrolled-mode view elements and
 // paginated-mode segments so both modes treat textures identically (readest#4399).
-export const textureAwareBackground = (resolved, hasTexture) => {
+const textureAwareBackground = (resolved, hasTexture) => {
     const isTransparent = !resolved
         || /^\s*(transparent|rgba\(0,\s*0,\s*0,\s*0\))/.test(resolved)
     return hasTexture && isTransparent ? '' : resolved
@@ -1001,7 +1004,7 @@ class View {
 }
 
 // NOTE: everything here assumes the so-called "negative scroll type" for RTL
-export class Paginator extends HTMLElement {
+class Paginator extends HTMLElement {
     static observedAttributes = [
         'flow', 'gap', 'margin', 'margin-top', 'margin-bottom', 'margin-left', 'margin-right',
         'max-inline-size', 'max-block-size', 'max-column-count',
@@ -3130,3 +3133,4 @@ export class Paginator extends HTMLElement {
 }
 
 if (!customElements.get('foliate-paginator')) customElements.define('foliate-paginator', Paginator)
+})()

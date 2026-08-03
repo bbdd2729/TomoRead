@@ -1,3 +1,6 @@
+(() => {
+"use strict";
+
 const findIndices = (arr, f) =>
   arr.map((x, i, a) => (f(x, i, a) ? i : null)).filter((x) => x != null);
 const splitAt = (arr, is) =>
@@ -12,7 +15,7 @@ const concatArrays = (a, b) =>
     .concat(b.slice(1));
 
 const isNumber = /\d/;
-export const isCFI = /^epubcfi\((.*)\)$/;
+const isCFI = /^epubcfi\((.*)\)$/;
 const escapeCFI = (str) => str.replace(/[\^[\](),;=]/g, "^$&");
 
 const wrap = (x) => (isCFI.test(x) ? x : `epubcfi(${x})`);
@@ -21,7 +24,7 @@ const lift =
   (f) =>
   (...xs) =>
     `epubcfi(${f(...xs.map((x) => x.match(isCFI)?.[1] ?? x))})`;
-export const joinIndir = lift((...xs) => xs.join("!"));
+const joinIndir = lift((...xs) => xs.join("!"));
 
 const tokenizer = (str) => {
   const tokens = [];
@@ -121,7 +124,7 @@ const parser = (tokens) => {
 // split at step indirections, then parse each part
 const parserIndir = (tokens) => splitAt(tokens, findTokens(tokens, "!")).map(parser);
 
-export const parse = (cfi) => {
+const parse = (cfi) => {
   const tokens = tokenizer(unwrap(cfi));
   const commas = findTokens(tokens, ",");
   if (!commas.length) return parserIndir(tokens);
@@ -149,7 +152,7 @@ const toInnerString = (parsed) =>
 
 const toString = (parsed) => wrap(toInnerString(parsed));
 
-export const collapse = (x, toEnd) =>
+const collapse = (x, toEnd) =>
   typeof x === "string"
     ? toString(collapse(parse(x), toEnd))
     : x.parent
@@ -185,7 +188,7 @@ const buildRange = (from, to) => {
   return toString({ parent, start: [localStart], end: [localEnd] });
 };
 
-export const compare = (a, b) => {
+const compare = (a, b) => {
   if (typeof a === "string") a = parse(a);
   if (typeof b === "string") b = parse(b);
   if (a.start || b.start)
@@ -317,7 +320,7 @@ const nodeToParts = (node, offset, filter) => {
   );
 };
 
-export const fromRange = (range, filter) => {
+const fromRange = (range, filter) => {
   const { startContainer, startOffset, endContainer, endOffset } = range;
   const start = nodeToParts(startContainer, startOffset, filter);
   if (range.collapsed) return toString([start]);
@@ -325,7 +328,7 @@ export const fromRange = (range, filter) => {
   return buildRange([start], [end]);
 };
 
-export const toRange = (doc, parts, filter) => {
+const toRange = (doc, parts, filter) => {
   const startParts = collapse(parts);
   const endParts = collapse(parts, true);
 
@@ -356,7 +359,7 @@ export const toRange = (doc, parts, filter) => {
 };
 
 // faster way of getting CFIs for sorted elements in a single parent
-export const fromElements = (elements) => {
+const fromElements = (elements) => {
   const results = [];
   const { parentNode } = elements[0];
   const parts = nodeToParts(parentNode);
@@ -367,23 +370,39 @@ export const fromElements = (elements) => {
   return results;
 };
 
-export const toElement = (doc, parts) => partsToNode(doc.documentElement, collapse(parts)).node;
+const toElement = (doc, parts) => partsToNode(doc.documentElement, collapse(parts)).node;
 
 // turn indices into standard CFIs when you don't have an actual package document
-export const fake = {
+const fake = {
   fromIndex: (index) => wrap(`/6/${(index + 1) * 2}`),
   toIndex: (parts) => parts?.at(-1).index / 2 - 1,
 };
 
 // get CFI from Calibre bookmarks
 // see https://github.com/johnfactotum/foliate/issues/849
-export const fromCalibrePos = (pos) => {
+const fromCalibrePos = (pos) => {
   const [parts] = parse(pos);
   const item = parts.shift();
   parts.shift();
   return toString([[{ index: 6 }, item], parts]);
 };
-export const fromCalibreHighlight = ({ spine_index, start_cfi, end_cfi }) => {
+const fromCalibreHighlight = ({ spine_index, start_cfi, end_cfi }) => {
   const pre = fake.fromIndex(spine_index) + "!";
   return buildRange(pre + start_cfi.slice(2), pre + end_cfi.slice(2));
 };
+
+globalThis.TomoReadEpubCfi = Object.freeze({
+  isCFI,
+  joinIndir,
+  parse,
+  collapse,
+  compare,
+  fromRange,
+  toRange,
+  fromElements,
+  toElement,
+  fake,
+  fromCalibrePos,
+  fromCalibreHighlight,
+});
+})();

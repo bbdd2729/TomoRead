@@ -1,7 +1,8 @@
-import './foliate-paginator.js'
-import * as CFI from './epubcfi.js'
+(() => {
+'use strict'
 
-const runtimeVersion = '30'
+const CFI = globalThis.TomoReadEpubCfi
+const runtimeVersion = '31'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
@@ -1327,3 +1328,4 @@ window.TomoReadEpubRuntime = Object.freeze({
 window.addEventListener('DOMContentLoaded', () => {
   postMessage({ type: 'runtimeReady', runtimeVersion })
 }, { once: true })
+})()

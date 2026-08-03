@@ -130,6 +130,22 @@ void main() {
     );
   });
 
+  test('loads the Android file runtime without ES module imports', () async {
+    final entryPoint = await rootBundle.loadString(
+      'assets/epub_reader_runtime/index.html',
+    );
+    final runtime = await rootBundle.loadString(
+      'assets/epub_reader_runtime/tomoread-reader.js',
+    );
+
+    expect(entryPoint, contains('<script src="./foliate-paginator.js">'));
+    expect(entryPoint, contains('<script src="./epubcfi.js">'));
+    expect(entryPoint, contains('<script src="./tomoread-reader.js">'));
+    expect(entryPoint, isNot(contains('type="module"')));
+    expect(runtime, isNot(contains("import './foliate-paginator.js'")));
+    expect(runtime, contains('globalThis.TomoReadEpubCfi'));
+  });
+
   test('EPUB automatic scrolling uses elapsed animation-frame time', () async {
     final runtime = await rootBundle.loadString(
       'assets/epub_reader_runtime/tomoread-reader.js',
