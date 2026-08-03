@@ -175,6 +175,17 @@ class AppShell extends HookConsumerWidget {
       }
     }
 
+    void exitReaderToLibrary(WorkspaceTab tab) {
+      if (tab.destination != AppDestination.reader || !tabs.value.contains(tab)) {
+        return;
+      }
+      final libraryTab = tabs.value.firstWhere(
+        (item) => item.destination == AppDestination.library,
+      );
+      tabs.value = tabs.value.where((item) => item != tab).toList();
+      activeTabId.value = libraryTab.id;
+    }
+
     void toggleNavigation() {
       final collapsed = !navigationCollapsed.value;
       navigationCollapsed.value = collapsed;
@@ -238,7 +249,9 @@ class AppShell extends HookConsumerWidget {
                 readerBookId: activeTab.bookId,
                 readerFormat: activeTab.bookFormat,
                 readerTitle: activeTab.title,
-                onExitReader: () => closeTab(activeTab),
+                onExitReader: () => isDesktop
+                    ? closeTab(activeTab)
+                    : exitReaderToLibrary(activeTab),
                 onAppearanceChanged: onAppearanceChanged,
                 onReadingSettingsChanged: onReadingSettingsChanged,
                 onOpenBookDetails: openBookDetails,
@@ -284,14 +297,16 @@ class AppShell extends HookConsumerWidget {
                           const SizedBox(width: 8),
                         ],
                       ),
-                drawer: isReading || isDesktop
-                    ? null
-                    : _AppNavigationDrawer(
-                        selected: activeDestination,
-                        onSelected: openDestination,
-                      ),
                 body: isReading
-                    ? content
+                    ? PopScope<void>(
+                        canPop: isDesktop,
+                        onPopInvokedWithResult: (didPop, _) {
+                          if (!didPop && !isDesktop) {
+                            exitReaderToLibrary(activeTab);
+                          }
+                        },
+                        child: content,
+                      )
                     : isDesktop
                     ? Row(
                         children: [
@@ -719,62 +734,6 @@ class _AppNavigationRail extends StatelessWidget {
   }
 }
 
-class _AppNavigationDrawer extends StatelessWidget {
-  const _AppNavigationDrawer({
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final AppDestination selected;
-  final ValueChanged<AppDestination> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final selectedIndex = _navigationDestinations.indexOf(selected);
-    return NavigationDrawer(
-      selectedIndex: selectedIndex < 0 ? null : selectedIndex,
-      onDestinationSelected: (index) => onSelected(_drawerDestinations[index]),
-      children: const [
-        Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 16, 16),
-          child: _TomoReadBrand(compact: false),
-        ),
-        NavigationDrawerDestination(
-          icon: Icon(Icons.local_library_outlined),
-          selectedIcon: Icon(Icons.local_library),
-          label: Text('书库'),
-        ),
-        NavigationDrawerDestination(
-          icon: Icon(Icons.forum_outlined),
-          selectedIcon: Icon(Icons.forum),
-          label: Text('对话'),
-        ),
-        NavigationDrawerDestination(
-          icon: Icon(Icons.sticky_note_2_outlined),
-          selectedIcon: Icon(Icons.sticky_note_2),
-          label: Text('笔记'),
-        ),
-        NavigationDrawerDestination(
-          icon: Icon(Icons.extension_outlined),
-          selectedIcon: Icon(Icons.extension),
-          label: Text('技能'),
-        ),
-        NavigationDrawerDestination(
-          icon: Icon(Icons.bar_chart_outlined),
-          selectedIcon: Icon(Icons.bar_chart),
-          label: Text('阅读统计'),
-        ),
-        Divider(),
-        NavigationDrawerDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
-          label: Text('设置'),
-        ),
-      ],
-    );
-  }
-}
-
 class _TomoReadBrand extends StatelessWidget {
   const _TomoReadBrand({required this.compact});
 
@@ -843,11 +802,6 @@ const _navigationDestinations = [
   AppDestination.notes,
   AppDestination.skills,
   AppDestination.statistics,
-];
-
-const _drawerDestinations = [
-  ..._navigationDestinations,
-  AppDestination.settings,
 ];
 
 const _mobileNavigationDestinations = [
