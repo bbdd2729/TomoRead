@@ -428,11 +428,22 @@ class AndroidEpubWebView extends HookConsumerWidget {
     }
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'runtimeWarning') {
+      final runtimeStack = runtimeMessage['stack'];
       AppDiagnostics.info(
         'epub.bridge',
         'runtime reported a warning',
-        details: {'message': runtimeMessage['message']},
+        details: {
+          'context': runtimeMessage['context'],
+          'message': runtimeMessage['message'],
+        },
       );
+      if (runtimeStack is String && runtimeStack.isNotEmpty) {
+        AppDiagnostics.error(
+          'epub.bridge',
+          'runtime warning stack',
+          stackTrace: StackTrace.fromString(runtimeStack),
+        );
+      }
       return;
     }
     if (runtimeMessage is Map<String, dynamic> &&
@@ -478,10 +489,14 @@ class AndroidEpubWebView extends HookConsumerWidget {
     }
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'runtimeError') {
+      final runtimeStack = runtimeMessage['stack'];
       AppDiagnostics.error(
         'epub.bridge',
         'runtime reported an error',
         error: StateError(runtimeMessage['message'] ?? 'Unknown runtime error'),
+        stackTrace: runtimeStack is String && runtimeStack.isNotEmpty
+            ? StackTrace.fromString(runtimeStack)
+            : null,
       );
       onFailure(
         StateError(runtimeMessage['message'] ?? 'Unknown runtime error'),
@@ -503,11 +518,15 @@ class AndroidEpubWebView extends HookConsumerWidget {
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'commandFailed') {
       final commandId = runtimeMessage['id'];
+      final runtimeStack = runtimeMessage['stack'];
       AppDiagnostics.error(
         'epub.bridge',
         'runtime command failed',
         details: {'commandId': commandId},
         error: StateError(runtimeMessage['message'] ?? 'Unknown command error'),
+        stackTrace: runtimeStack is String && runtimeStack.isNotEmpty
+            ? StackTrace.fromString(runtimeStack)
+            : null,
       );
       if (commandId is num) onNavigationCommandFinished(commandId.toInt());
       return;

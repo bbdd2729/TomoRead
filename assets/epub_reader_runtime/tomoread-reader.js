@@ -2,7 +2,7 @@
 'use strict'
 
 const CFI = globalThis.TomoReadEpubCfi
-const runtimeVersion = '33'
+const runtimeVersion = '34'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
@@ -277,6 +277,22 @@ const ensureRuntimeStyle = (doc, id) => {
   style.id = id
   host.append(style)
   return style
+}
+
+const reportRuntimeWarning = (context, error) => {
+  const message = String(error?.message ?? error)
+  const stack = typeof error?.stack === 'string' ? error.stack : ''
+  postMessage({ type: 'runtimeWarning', context, message, stack })
+}
+
+const runDocumentEnhancement = (context, action) => {
+  try {
+    action()
+  } catch (error) {
+    // Rendering a chapter must not fail because an optional enhancement cannot
+    // run against a malformed or unusual spine document.
+    reportRuntimeWarning(context, error)
+  }
 }
 
 const applyAnnotations = (doc, index) => {
@@ -1021,11 +1037,15 @@ const navigateInternalLink = ({ link, doc, index, targetIndex, target }) => {
 }
 
 const attachDocumentInteractions = ({ detail: { doc, index } }) => {
-  applyAnnotations(doc, index)
-  applySearchHighlights(doc)
-  applyTtsHighlight(doc, index)
-  applyTextColoring(doc)
-  applySelectionListener(doc, index)
+  if (!doc) {
+    reportRuntimeWarning('chapter-load', new Error('Paginator emitted a load event without a document.'))
+    return
+  }
+  runDocumentEnhancement('annotations', () => applyAnnotations(doc, index))
+  runDocumentEnhancement('search-highlights', () => applySearchHighlights(doc))
+  runDocumentEnhancement('tts-highlight', () => applyTtsHighlight(doc, index))
+  runDocumentEnhancement('text-colouring', () => applyTextColoring(doc))
+  runDocumentEnhancement('selection-listener', () => applySelectionListener(doc, index))
   // A section can emit more than one `load` event while Foliate rebuilds its
   // views. Registering click handlers each time sends duplicate page commands.
   if (doc.__tomoReadInteractionBridge) return
@@ -1163,7 +1183,11 @@ const createPaginator = () => {
   paginator.addEventListener('pagechange', ({ detail }) => emitPagePosition(detail))
   paginator.addEventListener('load', attachDocumentInteractions)
   paginator.addEventListener('error', error => {
-    postMessage({ type: 'runtimeError', message: String(error.message ?? error) })
+    postMessage({
+      type: 'runtimeError',
+      message: String(error.message ?? error),
+      stack: typeof error?.stack === 'string' ? error.stack : '',
+    })
   })
   updateNavigationBackButton()
 }
@@ -1263,8 +1287,9 @@ const executeCommand = command => {
       postMessage({ type: 'commandCompleted', id, command: type })
     } catch (error) {
       const message = String(error?.message ?? error)
-      postMessage({ type: 'commandFailed', id, command: type, message })
-      if (type === 'open') postMessage({ type: 'runtimeError', message })
+      const stack = typeof error?.stack === 'string' ? error.stack : ''
+      postMessage({ type: 'commandFailed', id, command: type, message, stack })
+      if (type === 'open') postMessage({ type: 'runtimeError', message, stack })
     }
   })
   return commandTail
@@ -1294,19 +1319,21 @@ const setAnnotations = (nextAnnotations, nextFocusedAnnotationId) => {
   annotations = nextAnnotations ?? []
   focusedAnnotationId = nextFocusedAnnotationId
   for (const { doc, index } of paginator?.getContents?.() ?? []) {
-    applyAnnotations(doc, index)
+    runDocumentEnhancement('annotations', () => applyAnnotations(doc, index))
   }
 }
 
 const setSearchQuery = nextQuery => {
   searchQuery = String(nextQuery ?? '').trim()
-  for (const { doc } of paginator?.getContents?.() ?? []) applySearchHighlights(doc)
+  for (const { doc } of paginator?.getContents?.() ?? []) {
+    runDocumentEnhancement('search-highlights', () => applySearchHighlights(doc))
+  }
 }
 
 const setTtsHighlight = nextHighlight => {
   ttsHighlight = nextHighlight ?? null
   for (const { doc, index } of paginator?.getContents?.() ?? []) {
-    applyTtsHighlight(doc, index)
+    runDocumentEnhancement('tts-highlight', () => applyTtsHighlight(doc, index))
   }
 }
 
@@ -1318,7 +1345,7 @@ const setTextColoring = nextTextColoring => {
     terms: [],
   }
   for (const { doc } of paginator?.getContents?.() ?? []) {
-    applyTextColoring(doc)
+    runDocumentEnhancement('text-colouring', () => applyTextColoring(doc))
   }
 }
 

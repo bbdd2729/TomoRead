@@ -148,6 +148,18 @@ void main() {
     expect(runtime, isNot(contains('doc.head.append(style)')));
   });
 
+  test('keeps optional EPUB document enhancements from blocking chapter load',
+      () async {
+    final runtime = await rootBundle.loadString(
+      'assets/epub_reader_runtime/tomoread-reader.js',
+    );
+
+    expect(runtime, contains('const runDocumentEnhancement = (context, action) =>'));
+    expect(runtime, contains("runDocumentEnhancement('annotations'"));
+    expect(runtime, contains("type: 'runtimeWarning'"));
+    expect(runtime, contains("type: 'commandFailed', id, command: type, message, stack"));
+  });
+
   test('loads the Android file runtime without ES module imports', () async {
     final entryPoint = await rootBundle.loadString(
       'assets/epub_reader_runtime/index.html',
