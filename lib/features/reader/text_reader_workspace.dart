@@ -1068,7 +1068,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
                   icon: Icons.menu_book_outlined,
                   onPressed: document == null
                       ? null
-                      : () => unawaited(openChapters(document!.chapters)),
+                      : () => unawaited(openChapters(document.chapters)),
                   disabledDescription: '正在读取章节目录',
                 ),
                 ReaderChromeAction(

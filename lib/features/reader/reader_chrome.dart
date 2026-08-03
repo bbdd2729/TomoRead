@@ -456,7 +456,7 @@ class _ReaderActionSheet extends StatelessWidget {
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
                 itemCount: groups.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (context, groupIndex) {
                   final group = groups[groupIndex];
                   return Column(
