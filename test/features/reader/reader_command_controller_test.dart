@@ -65,6 +65,7 @@ void main() {
 
   test('saveSettings rejects duplicate chord conflicts', () async {
     final notifier = container.read(readerCommandSettingsProvider.notifier);
+    await container.read(readerCommandSettingsProvider.future);
     final conflicting = ReaderCommandSettings(
       bindings: [
         for (final platform in ReaderShortcutPlatform.values) ...[

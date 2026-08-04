@@ -62,7 +62,7 @@ void main() {
 
     await notifier.delete(font.id);
 
-    final state = container.read(fontCatalogControllerProvider).requireValue;
+    final state = await container.read(fontCatalogControllerProvider.future);
     expect(state.importedFonts, isEmpty);
     expect(await repository.listImported(), isEmpty);
   });

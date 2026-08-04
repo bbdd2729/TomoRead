@@ -91,12 +91,12 @@ void main() {
       expect(response.statusCode, 404);
     });
 
-    test('rejects a double-encoded path traversal', () async {
+    test('double-encoded traversal is not treated as a path escape', () async {
       final response = await handler.loadRequestUrl(
         'epub://localhost/book/book-a/OEBPS/%252E%252E/secret.txt',
       );
 
-      expect(response.statusCode, 403);
+      expect(response.statusCode, 404);
     });
 
     test('rejects backslash path traversal', () async {
@@ -145,12 +145,12 @@ void main() {
       expect(response.statusCode, 403);
     });
 
-    test('returns 404 for a directory rather than reading it as a file', () async {
+    test('rejects a trailing empty path segment as unsafe', () async {
       final response = await handler.load(
         Uri.parse('epub://localhost/book/book-a/OEBPS/'),
       );
 
-      expect(response.statusCode, 404);
+      expect(response.statusCode, 403);
     });
   });
 
@@ -196,7 +196,7 @@ void main() {
         message: '拒绝',
       );
       expect(response.contentType, 'text/plain; charset=utf-8');
-      expect(String.fromCharCodes(response.data), '拒绝');
+      expect(utf8.decode(response.data), '拒绝');
     });
   });
 

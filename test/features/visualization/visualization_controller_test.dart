@@ -28,6 +28,18 @@ void main() {
     providers = AiProviderRepository(database);
     wordFrequency = _FakeWordFrequency(database);
     mindMaps = _FakeMindMaps(database);
+    final raw = await database.database;
+    await raw.insert('books', {
+      'id': 'book-a',
+      'title': 'Book',
+      'author': '',
+      'progress': 0,
+      'chapter_index': 0,
+      'chapter_count': 0,
+      'read_direction': 'ltr',
+      'created_at': 1,
+      'updated_at': 1,
+    });
     addTearDown(database.close);
   });
 

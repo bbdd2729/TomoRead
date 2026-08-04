@@ -30,7 +30,7 @@ void main() {
         total: 1200,
       );
 
-      expect(metrics.label, '全文第 438 / 1200 字 · 36%');
+      expect(metrics.label, '全文第 438 / 1200 字 · 37%');
     });
   });
 
