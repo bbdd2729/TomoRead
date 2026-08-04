@@ -9,6 +9,7 @@ import 'reader_toc_panel.dart';
 
 class MobileReaderTocDrawer extends HookWidget {
   const MobileReaderTocDrawer({
+    super.key,
     required this.title,
     required this.book,
     required this.chapterCount,

@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'workspace_tab.dart';
 
 class MobileNavigationBar extends StatelessWidget {
-  const MobileNavigationBar({required this.selected, required this.onSelected});
+  const MobileNavigationBar({
+    super.key,
+    required this.selected,
+    required this.onSelected,
+  });
 
   final AppDestination selected;
   final ValueChanged<AppDestination> onSelected;

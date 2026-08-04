@@ -5,7 +5,11 @@ import '../../domain/models/library_book.dart';
 import '../../shared/widgets/book_cover.dart';
 
 class ContinueReadingCard extends StatelessWidget {
-  const ContinueReadingCard({required this.book, required this.onOpenReader});
+  const ContinueReadingCard({
+    super.key,
+    required this.book,
+    required this.onOpenReader,
+  });
 
   final LibraryBook book;
   final VoidCallback onOpenReader;
@@ -82,6 +86,7 @@ class ContinueReadingCard extends StatelessWidget {
 
 class BookCard extends HookWidget {
   const BookCard({
+    super.key,
     required this.book,
     required this.onTap,
     required this.onLongPress,
@@ -227,6 +232,7 @@ class BookCard extends HookWidget {
 
 class BookListItem extends StatelessWidget {
   const BookListItem({
+    super.key,
     required this.book,
     required this.onTap,
     required this.onLongPress,

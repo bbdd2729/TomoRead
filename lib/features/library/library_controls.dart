@@ -106,6 +106,7 @@ List<String> tagsFor(List<LibraryBook> books) {
 
 class LibraryControls extends StatelessWidget {
   const LibraryControls({
+    super.key,
     required this.formatFilter,
     required this.sort,
     required this.viewMode,

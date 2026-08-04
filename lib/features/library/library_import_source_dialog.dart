@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 enum ImportSourceChoice { files, directory }
 
 class ImportSourceDialog extends StatelessWidget {
-  const ImportSourceDialog();
+  const ImportSourceDialog({super.key});
 
   @override
   Widget build(BuildContext context) => SimpleDialog(

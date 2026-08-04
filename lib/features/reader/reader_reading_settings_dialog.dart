@@ -21,7 +21,7 @@ class BookSettingsResult {
 }
 
 class ReaderUnderlineColorDialog extends StatelessWidget {
-  const ReaderUnderlineColorDialog();
+  const ReaderUnderlineColorDialog({super.key});
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -59,6 +59,7 @@ enum _BookTextColoringMode { followGlobal, enabled, disabled }
 
 class BookReadingSettingsDialog extends HookConsumerWidget {
   const BookReadingSettingsDialog({
+    super.key,
     required this.bookId,
     required this.defaults,
     required this.readingOverride,

@@ -32,6 +32,7 @@ Set<String> tocExpandedKeysForActive(
 
 class ReaderTocPanel extends HookWidget {
   const ReaderTocPanel({
+    super.key,
     required this.toc,
     required this.activeChapterIndex,
     required this.onSelected,

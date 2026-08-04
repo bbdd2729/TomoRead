@@ -606,7 +606,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
             chapter.rawStart,
             chapter.rawEnd,
           );
-          final splitOffset = chapter.rawStart + _safeSplitOffset(chapterText);
+          final splitOffset = chapter.rawStart + safeTextChapterSplitOffset(chapterText);
           final nextTitleController = TextEditingController(
             text: '${chapter.title}（下）',
           );

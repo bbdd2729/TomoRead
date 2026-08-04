@@ -5,6 +5,7 @@ import '../../domain/models/reading_annotation.dart';
 
 class MobileReaderSideDrawer extends StatelessWidget {
   const MobileReaderSideDrawer({
+    super.key,
     required this.showBookmarks,
     required this.bookmarks,
     required this.annotations,
@@ -72,7 +73,7 @@ class MobileReaderSideDrawer extends StatelessWidget {
 }
 
 class ReaderBottomSheet extends StatelessWidget {
-  const ReaderBottomSheet({required this.child});
+  const ReaderBottomSheet({super.key, required this.child});
 
   final Widget child;
 
@@ -107,6 +108,7 @@ class ReaderBottomSheet extends StatelessWidget {
 
 class ReaderSidePanel extends StatelessWidget {
   const ReaderSidePanel({
+    super.key,
     required this.showBookmarks,
     required this.bookmarks,
     required this.annotations,

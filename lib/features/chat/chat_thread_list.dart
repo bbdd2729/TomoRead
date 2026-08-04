@@ -6,6 +6,7 @@ import 'chat_controller.dart';
 
 class ChatThreadList extends StatelessWidget {
   const ChatThreadList({
+    super.key,
     required this.chat,
     required this.books,
     required this.onSelected,

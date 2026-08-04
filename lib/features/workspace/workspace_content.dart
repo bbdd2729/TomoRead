@@ -16,6 +16,7 @@ import 'workspace_tab.dart';
 
 class WorkspaceContent extends StatelessWidget {
   const WorkspaceContent({
+    super.key,
     required this.destination,
     required this.appearance,
     required this.readingSettings,

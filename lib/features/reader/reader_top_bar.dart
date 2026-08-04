@@ -18,6 +18,7 @@ enum _MobileReaderToolbarAction {
 
 class ReaderTopBar extends StatelessWidget {
   const ReaderTopBar({
+    super.key,
     required this.title,
     required this.contextLabel,
     required this.tocVisible,

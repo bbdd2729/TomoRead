@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 
 class LibrarySelectionToolbar extends StatelessWidget {
   const LibrarySelectionToolbar({
+    super.key,
     required this.selectedCount,
     required this.isWorking,
     required this.allSelectedAreFavorite,
@@ -69,7 +70,7 @@ class CategoryUpdate {
 }
 
 class CategoryDialog extends HookWidget {
-  const CategoryDialog({required this.categories});
+  const CategoryDialog({super.key, required this.categories});
 
   final List<String> categories;
 

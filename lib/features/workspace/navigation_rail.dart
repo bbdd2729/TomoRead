@@ -4,6 +4,7 @@ import 'workspace_tab.dart';
 
 class AppNavigationRail extends StatelessWidget {
   const AppNavigationRail({
+    super.key,
     required this.extended,
     required this.selected,
     required this.onSelected,

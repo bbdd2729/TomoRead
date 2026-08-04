@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class NoMatchingBooks extends StatelessWidget {
-  const NoMatchingBooks();
+  const NoMatchingBooks({super.key});
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -20,7 +20,7 @@ class NoMatchingBooks extends StatelessWidget {
 }
 
 class EmptyLibrary extends StatelessWidget {
-  const EmptyLibrary({required this.onImport});
+  const EmptyLibrary({super.key, required this.onImport});
 
   final VoidCallback? onImport;
 
@@ -49,7 +49,7 @@ class EmptyLibrary extends StatelessWidget {
 }
 
 class LibraryFailure extends StatelessWidget {
-  const LibraryFailure({required this.message, required this.onRetry});
+  const LibraryFailure({super.key, required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;

@@ -6,6 +6,7 @@ import 'chat_message_entry.dart';
 
 class ChatConversationPane extends StatelessWidget {
   const ChatConversationPane({
+    super.key,
     required this.chat,
     required this.promptController,
     required this.scrollController,

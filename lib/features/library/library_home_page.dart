@@ -248,7 +248,7 @@ class LibraryHomePage extends HookConsumerWidget {
           tag: tagFilter.value,
           favoritesOnly: favoritesOnly.value,
         );
-        final continueReadingBook = continueReadingBook(visibleBooks);
+        final nextReadingBook = continueReadingBook(visibleBooks);
         return LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 600;
@@ -338,8 +338,8 @@ class LibraryHomePage extends HookConsumerWidget {
                   const NoMatchingBooks()
                 else ...[
                   ContinueReadingCard(
-                    book: continueReadingBook!,
-                    onOpenReader: () => onOpenReader(continueReadingBook),
+                    book: nextReadingBook!,
+                    onOpenReader: () => onOpenReader(nextReadingBook),
                   ),
                   const SizedBox(height: 24),
                   Row(

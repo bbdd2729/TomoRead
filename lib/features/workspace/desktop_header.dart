@@ -4,6 +4,7 @@ import 'workspace_tab.dart';
 
 class DesktopWorkspaceHeader extends StatelessWidget {
   const DesktopWorkspaceHeader({
+    super.key,
     required this.tabs,
     required this.activeTabId,
     required this.navigationCollapsed,
@@ -67,6 +68,7 @@ class DesktopWorkspaceHeader extends StatelessWidget {
 
 class WorkspaceTabBar extends StatelessWidget {
   const WorkspaceTabBar({
+    super.key,
     required this.tabs,
     required this.activeTabId,
     required this.onSelected,
