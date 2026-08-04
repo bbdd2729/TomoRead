@@ -1039,6 +1039,7 @@ class Paginator extends HTMLElement {
     #scrollBounds
     #touchState
     #touchScrolled
+    #touchTurnLocked = false
     #lastVisibleRange
     #scrollLocked = false
     #isAnimating = false
@@ -2182,7 +2183,7 @@ class Paginator extends HTMLElement {
         this.#scrollToPage(page, 'snap')
     }
     #onTouchStart(e) {
-        if (this.#navigationLocked) return
+        if (this.#navigationLocked || this.#touchTurnLocked) return
         const contents = this.getContents?.() ?? []
         for (const { doc } of contents) {
             const selection = doc?.getSelection?.()
@@ -2314,16 +2315,35 @@ class Paginator extends HTMLElement {
 
         if (!this.#touchScrolled) return
         this.#touchScrolled = false
-        if (this.scrolled || this.#navigationLocked) return
+        if (this.scrolled || this.#navigationLocked || this.#touchTurnLocked) return
         if (this.hasAttribute('no-swipe')) return
 
         // XXX: Firefox seems to report scale as 1... sometimes...?
         // at this point I'm basically throwing `requestAnimationFrame` at
         // anything that doesn't work
-        requestAnimationFrame(() => {
-            if (globalThis.visualViewport.scale === 1) {
-                const { vx, vy, dx, dy, dt } = this.#touchState
-                this.snap(vx, vy, dx, dy, dt)
+        const state = this.#touchState
+        requestAnimationFrame(async () => {
+            if (!state || globalThis.visualViewport.scale !== 1) return
+            const contents = this.getContents?.() ?? []
+            if (contents.some(({ doc }) => {
+                const selection = doc?.getSelection?.()
+                return selection && !selection.isCollapsed && selection.toString().trim()
+            })) return
+            if (this.hasAttribute('no-swipe')) return
+            this.#touchTurnLocked = true
+            try {
+                const primaryDistance = Math.abs(this.#vertical ? state.dy : state.dx)
+                const primaryVelocity = Math.abs(this.#vertical ? state.vy : state.vx)
+                // A short, slow drift should settle back on the current page.
+                // This avoids turning pages while users are trying to select
+                // text or dismiss Android's touch affordances.
+                if (primaryDistance < 42 && primaryVelocity < .35) {
+                    await this.snap(0, 0, 0, 0, 1)
+                } else {
+                    await this.snap(state.vx, state.vy, state.dx, state.dy, state.dt)
+                }
+            } finally {
+                this.#touchTurnLocked = false
             }
         })
     }

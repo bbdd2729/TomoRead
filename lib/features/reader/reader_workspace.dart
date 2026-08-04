@@ -15,9 +15,7 @@ import '../../domain/models/document_locator.dart';
 import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/epub_section_progress.dart';
-import '../../domain/models/reading_font.dart';
 import '../../domain/models/library_book.dart';
-import '../../domain/models/reader_chapter.dart';
 import '../../domain/models/reader_text_selection.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_annotation.dart';
@@ -29,61 +27,32 @@ import '../../domain/models/text_coloring.dart';
 import '../../domain/models/tts.dart';
 import '../../domain/models/visual_artifact.dart';
 import '../../shared/widgets/resizable_pane.dart';
-import '../../shared/widgets/book_cover.dart';
-import 'epub_webview.dart';
 import 'reader_command_controller.dart';
 import 'reader_command_shortcuts.dart';
 import 'reader_chrome.dart';
+import 'reader_chrome_widgets.dart';
+import 'reader_article.dart';
+import 'reader_annotation_dialogs.dart';
+import 'reader_drafts.dart';
+import 'reader_reading_settings_dialog.dart';
+import 'reader_selection_menu.dart';
+import 'reader_side_panel.dart';
+import 'reader_top_bar.dart';
+import 'reader_toc_drawer.dart';
+import 'reader_toc_panel.dart';
 import 'reader_navigation_command.dart';
 import 'reader_runtime_controller.dart';
 import 'content_search_dialog.dart';
 import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
 import 'text_coloring_controller.dart';
-import 'text_coloring_widgets.dart';
 import 'tts_controller.dart';
-import 'tts_controls.dart';
 import '../chat/chat_controller.dart';
 import '../assistant/content_index_controller.dart';
 import '../notes/notes_providers.dart';
-import '../settings/font_catalog_controller.dart';
 import '../visualization/reader_visualization_dialog.dart';
 
-enum _MobileReaderToolbarAction {
-  search,
-  assistant,
-  visualization,
-  settings,
-  pomodoro,
-  focus,
-}
-
-enum _SelectionContextAction {
-  yellow,
-  green,
-  blue,
-  pink,
-  underline,
-  note,
-  textColor,
-  askAi,
-  explainAi,
-  summarizeAi,
-}
-
 void _noopReaderAction() {}
-
-class _PendingReaderProgress {
-  const _PendingReaderProgress({
-    required this.chapterIndex,
-    required this.progress,
-    required this.locator,
-  });
-
-  final int chapterIndex;
-  final double progress;
-  final String locator;
-}
 
 class ReaderWorkspace extends HookConsumerWidget {
   const ReaderWorkspace({
@@ -125,9 +94,6 @@ class ReaderWorkspace extends HookConsumerWidget {
     final readerBook = ref.watch(readerBookProvider(bookId));
     final manifest = ref.watch(readerManifestProvider(bookId));
     final contentIndexState = ref.watch(contentIndexStateProvider(bookId));
-    final contentCharacterCount = ref.watch(
-      contentCharacterCountProvider(bookId),
-    );
     final ttsController = useMemoized(
       () => TtsPlaybackController(
         engine: ref.read(ttsEngineProvider),
@@ -152,6 +118,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final showBookmarks = useState(false);
     final chapterIndex = useState(0);
     final scrollRatio = useState(0.0);
+    final chapterCharacterOffset = useState<int?>(null);
     final activeAnchor = useState<String?>(null);
     final activeCfi = useState<String?>(null);
     final restoreRevision = useState(0);
@@ -163,7 +130,7 @@ class ReaderWorkspace extends HookConsumerWidget {
     final focusedAnnotationId = useState<String?>(null);
     final annotationFocusRevision = useState(0);
     final progressWriteTimer = useRef<Timer?>(null);
-    final pendingProgressWrite = useRef<_PendingReaderProgress?>(null);
+    final pendingProgressWrite = useRef<PendingReaderProgress?>(null);
     final selectedText = useState<ReaderTextSelection?>(null);
     final selectionMenuVisible = useRef(false);
     final searchQuery = useState<String?>(null);
@@ -194,11 +161,23 @@ class ReaderWorkspace extends HookConsumerWidget {
     final overallProgress = sectionProgress.overallProgress(
       activeChapterIndex,
       scrollRatio.value,
+      chapterCharacterOffset: chapterCharacterOffset.value,
     );
-    final positionMetrics = ReadingPositionMetrics.characters(
-      progress: overallProgress,
-      total: contentCharacterCount.value ?? 0,
+    final characterPosition = sectionProgress.characterPosition(
+      activeChapterIndex,
+      scrollRatio.value,
+      chapterCharacterOffset: chapterCharacterOffset.value,
     );
+    final positionMetrics = characterPosition == null
+        ? ReadingPositionMetrics.progressOnly(overallProgress)
+        : ReadingPositionMetrics.characterPosition(
+            current: characterPosition,
+            total: sectionProgress.totalCharacters,
+            // A relocation ratio is based on the rendered viewport. The
+            // runtime reports a text offset when the visible range is known;
+            // otherwise the current chapter ratio is an honest estimate.
+            isApproximate: chapterCharacterOffset.value == null,
+          );
     final chapterTitle =
         chapter.value?.title ?? '第 ${activeChapterIndex + 1} 章';
     final isLoading =
@@ -371,7 +350,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       return null;
     }, [bookId, isPaginated]);
 
-    Future<void> persistProgress(_PendingReaderProgress pending) async {
+    Future<void> persistProgress(PendingReaderProgress pending) async {
       await ref
           .read(libraryBooksProvider.notifier)
           .updateReadingPosition(
@@ -403,10 +382,15 @@ class ReaderWorkspace extends HookConsumerWidget {
       required double chapterRatio,
       String? anchor,
       String? cfi,
+      int? characterOffset,
     }) {
-      pendingProgressWrite.value = _PendingReaderProgress(
+      final pending = PendingReaderProgress(
         chapterIndex: index,
-        progress: sectionProgress.overallProgress(index, chapterRatio),
+        progress: sectionProgress.overallProgress(
+          index,
+          chapterRatio,
+          chapterCharacterOffset: characterOffset,
+        ),
         locator: EpubLocation(
           chapterIndex: index,
           scrollRatio: chapterRatio,
@@ -414,6 +398,15 @@ class ReaderWorkspace extends HookConsumerWidget {
           cfi: cfi,
         ).toLocator(),
       );
+      pendingProgressWrite.value = pending;
+      ref
+          .read(libraryBooksProvider.notifier)
+          .reportReadingPosition(
+            bookId: bookId,
+            chapterIndex: pending.chapterIndex,
+            progress: pending.progress,
+            locator: pending.locator,
+          );
       progressWriteTimer.value?.cancel();
       progressWriteTimer.value = Timer(const Duration(milliseconds: 600), () {
         progressWriteTimer.value = null;
@@ -480,9 +473,9 @@ class ReaderWorkspace extends HookConsumerWidget {
 
     Future<void> openBookSettings() async {
       stopAutoScroll();
-      final result = await showDialog<_BookSettingsResult>(
+      final result = await showDialog<BookSettingsResult>(
         context: context,
-        builder: (context) => _BookReadingSettingsDialog(
+        builder: (context) => BookReadingSettingsDialog(
           bookId: bookId,
           defaults: readingSettings,
           readingOverride: override,
@@ -688,9 +681,9 @@ class ReaderWorkspace extends HookConsumerWidget {
       stopAutoScroll();
       final selection = source ?? selectedText.value;
       if (selection == null) return;
-      final draft = await showDialog<_AnnotationDraft>(
+      final draft = await showDialog<AnnotationDraft>(
         context: context,
-        builder: (context) => _AnnotationDialog(selection: selection),
+        builder: (context) => AnnotationDialog(selection: selection),
       );
       if (draft == null || !context.mounted) return;
       await saveAnnotation(selection, draft.color, note: draft.note);
@@ -715,7 +708,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       final x = localPosition.dx.clamp(8, size.width - 8).toDouble();
       final y = localPosition.dy.clamp(8, size.height - 8).toDouble();
       try {
-        final action = await showMenu<_SelectionContextAction>(
+        final action = await showMenu<ReaderSelectionContextAction>(
           context: context,
           position: RelativeRect.fromLTRB(
             x,
@@ -725,24 +718,32 @@ class ReaderWorkspace extends HookConsumerWidget {
           ),
           items: const [
             PopupMenuItem(
-              value: _SelectionContextAction.yellow,
-              child: _SelectionContextMenuItem(color: AnnotationColor.yellow),
+              value: ReaderSelectionContextAction.yellow,
+              child: ReaderSelectionContextMenuItem(
+                color: AnnotationColor.yellow,
+              ),
             ),
             PopupMenuItem(
-              value: _SelectionContextAction.green,
-              child: _SelectionContextMenuItem(color: AnnotationColor.green),
+              value: ReaderSelectionContextAction.green,
+              child: ReaderSelectionContextMenuItem(
+                color: AnnotationColor.green,
+              ),
             ),
             PopupMenuItem(
-              value: _SelectionContextAction.blue,
-              child: _SelectionContextMenuItem(color: AnnotationColor.blue),
+              value: ReaderSelectionContextAction.blue,
+              child: ReaderSelectionContextMenuItem(
+                color: AnnotationColor.blue,
+              ),
             ),
             PopupMenuItem(
-              value: _SelectionContextAction.pink,
-              child: _SelectionContextMenuItem(color: AnnotationColor.pink),
+              value: ReaderSelectionContextAction.pink,
+              child: ReaderSelectionContextMenuItem(
+                color: AnnotationColor.pink,
+              ),
             ),
             PopupMenuDivider(),
             PopupMenuItem(
-              value: _SelectionContextAction.underline,
+              value: ReaderSelectionContextAction.underline,
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.format_underlined),
@@ -750,7 +751,7 @@ class ReaderWorkspace extends HookConsumerWidget {
               ),
             ),
             PopupMenuItem(
-              value: _SelectionContextAction.note,
+              value: ReaderSelectionContextAction.note,
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.sticky_note_2_outlined),
@@ -758,7 +759,7 @@ class ReaderWorkspace extends HookConsumerWidget {
               ),
             ),
             PopupMenuItem(
-              value: _SelectionContextAction.textColor,
+              value: ReaderSelectionContextAction.textColor,
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.format_color_text_outlined),
@@ -767,7 +768,7 @@ class ReaderWorkspace extends HookConsumerWidget {
             ),
             PopupMenuDivider(),
             PopupMenuItem(
-              value: _SelectionContextAction.askAi,
+              value: ReaderSelectionContextAction.askAi,
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.auto_awesome_outlined),
@@ -775,7 +776,7 @@ class ReaderWorkspace extends HookConsumerWidget {
               ),
             ),
             PopupMenuItem(
-              value: _SelectionContextAction.explainAi,
+              value: ReaderSelectionContextAction.explainAi,
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.lightbulb_outline),
@@ -783,7 +784,7 @@ class ReaderWorkspace extends HookConsumerWidget {
               ),
             ),
             PopupMenuItem(
-              value: _SelectionContextAction.summarizeAi,
+              value: ReaderSelectionContextAction.summarizeAi,
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.summarize_outlined),
@@ -794,18 +795,18 @@ class ReaderWorkspace extends HookConsumerWidget {
         );
         if (action == null || !context.mounted) return;
         switch (action) {
-          case _SelectionContextAction.yellow:
+          case ReaderSelectionContextAction.yellow:
             await saveAnnotation(menu.selection, AnnotationColor.yellow);
-          case _SelectionContextAction.green:
+          case ReaderSelectionContextAction.green:
             await saveAnnotation(menu.selection, AnnotationColor.green);
-          case _SelectionContextAction.blue:
+          case ReaderSelectionContextAction.blue:
             await saveAnnotation(menu.selection, AnnotationColor.blue);
-          case _SelectionContextAction.pink:
+          case ReaderSelectionContextAction.pink:
             await saveAnnotation(menu.selection, AnnotationColor.pink);
-          case _SelectionContextAction.underline:
+          case ReaderSelectionContextAction.underline:
             final color = await showDialog<AnnotationColor>(
               context: context,
-              builder: (context) => const _UnderlineColorDialog(),
+              builder: (context) => const ReaderUnderlineColorDialog(),
             );
             if (color != null && context.mounted) {
               await saveAnnotation(
@@ -814,15 +815,15 @@ class ReaderWorkspace extends HookConsumerWidget {
                 renderStyle: AnnotationRenderStyle.underline,
               );
             }
-          case _SelectionContextAction.note:
+          case ReaderSelectionContextAction.note:
             await createAnnotation(menu.selection);
-          case _SelectionContextAction.textColor:
+          case ReaderSelectionContextAction.textColor:
             await addTextColorTerm(menu.selection);
-          case _SelectionContextAction.askAi:
+          case ReaderSelectionContextAction.askAi:
             openAiWithSelection(menu.selection, '关于这段文字，我想问：');
-          case _SelectionContextAction.explainAi:
+          case ReaderSelectionContextAction.explainAi:
             openAiWithSelection(menu.selection, '请解释这段文字的含义和关键概念。');
-          case _SelectionContextAction.summarizeAi:
+          case ReaderSelectionContextAction.summarizeAi:
             openAiWithSelection(menu.selection, '请简洁总结这段文字的核心观点。');
         }
       } finally {
@@ -875,7 +876,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       stopAutoScroll();
       final label = await showDialog<String?>(
         context: context,
-        builder: (context) => _BookmarkLabelDialog(bookmark: bookmark),
+        builder: (context) => BookmarkLabelDialog(bookmark: bookmark),
       );
       if (!context.mounted || label == null) return;
       await ref
@@ -903,9 +904,9 @@ class ReaderWorkspace extends HookConsumerWidget {
 
     Future<void> editAnnotation(ReadingAnnotation annotation) async {
       stopAutoScroll();
-      final draft = await showDialog<_AnnotationNoteDraft>(
+      final draft = await showDialog<AnnotationNoteDraft>(
         context: context,
-        builder: (context) => _AnnotationNoteDialog(annotation: annotation),
+        builder: (context) => AnnotationNoteDialog(annotation: annotation),
       );
       if (draft == null || !context.mounted) return;
       await ref
@@ -959,6 +960,7 @@ class ReaderWorkspace extends HookConsumerWidget {
       // its measured location after layout and scrolling complete.
       chapterIndex.value = targetChapter;
       scrollRatio.value = targetRatio;
+      chapterCharacterOffset.value = null;
       activeAnchor.value = null;
       activeCfi.value = null;
       navigationCommand.value = ReaderNavigationCommand.goToLocation(
@@ -1113,7 +1115,7 @@ class ReaderWorkspace extends HookConsumerWidget {
             context: context,
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
-            builder: (sheetContext) => _MobileReaderTocDrawer(
+            builder: (sheetContext) => MobileReaderTocDrawer(
               title: title,
               book: readerBook.value,
               chapterCount: totalChapters,
@@ -1141,7 +1143,7 @@ class ReaderWorkspace extends HookConsumerWidget {
             context: context,
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
-            builder: (sheetContext) => _MobileReaderSideDrawer(
+            builder: (sheetContext) => MobileReaderSideDrawer(
               showBookmarks: showBookmarks.value,
               bookmarks: bookmarkItems,
               annotations: annotations,
@@ -1206,9 +1208,10 @@ class ReaderWorkspace extends HookConsumerWidget {
                                 child: CircularProgressIndicator(),
                               ),
                             )
-                          : _ReaderArticle(
+                          : ReaderArticle(
                               settings: settings,
                               textColoring: textColoring,
+                              controlsVisible: controlsVisible.value,
                               chapter: chapter.value,
                               error: chapter.error,
                               bookId: readerBook.value == null ? null : bookId,
@@ -1234,7 +1237,14 @@ class ReaderWorkspace extends HookConsumerWidget {
                               restoreRevision: restoreRevision.value,
                               onNavigateToHref: navigateToHref,
                               onScrollPositionChanged:
-                                  (href, ratio, anchor, cfi) {
+                                  (
+                                    href,
+                                    ratio,
+                                    anchor,
+                                    cfi,
+                                    reportedCharacterOffset,
+                                    reportedCharacterCount,
+                                  ) {
                                     runtimeController.reportRelocation();
                                     final currentManifest = manifest.value;
                                     final relocatedIndex =
@@ -1252,6 +1262,28 @@ class ReaderWorkspace extends HookConsumerWidget {
                                         .toDouble();
                                     chapterIndex.value = relocatedIndex;
                                     scrollRatio.value = clampedRatio;
+                                    final expectedCharacterCount =
+                                        sectionProgress
+                                            .characterCountForChapter(
+                                              relocatedIndex,
+                                            );
+                                    final normalizedCharacterOffset =
+                                        expectedCharacterCount == null ||
+                                            reportedCharacterOffset == null
+                                        ? null
+                                        : reportedCharacterCount == null ||
+                                              reportedCharacterCount <= 0
+                                        ? reportedCharacterOffset
+                                              .clamp(0, expectedCharacterCount)
+                                              .toInt()
+                                        : (reportedCharacterOffset /
+                                                  reportedCharacterCount *
+                                                  expectedCharacterCount)
+                                              .round()
+                                              .clamp(0, expectedCharacterCount)
+                                              .toInt();
+                                    chapterCharacterOffset.value =
+                                        normalizedCharacterOffset;
                                     activeAnchor.value = anchor;
                                     activeCfi.value = cfi;
                                     scheduleProgressWrite(
@@ -1259,6 +1291,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                                       chapterRatio: clampedRatio,
                                       anchor: anchor,
                                       cfi: cfi,
+                                      characterOffset:
+                                          normalizedCharacterOffset,
                                     );
                                     activityTracker.recordInteraction(
                                       ReaderPosition(
@@ -1266,6 +1300,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                                             .overallProgress(
                                               relocatedIndex,
                                               clampedRatio,
+                                              chapterCharacterOffset:
+                                                  normalizedCharacterOffset,
                                             ),
                                         locator: EpubLocation(
                                           chapterIndex: relocatedIndex,
@@ -1330,8 +1366,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                               .updateAppearance(
                                 appearance.copyWith(readerTocWidth: value),
                               ),
-                          child: _ReaderOverlaySurface(
-                            child: _ReaderTocPanel(
+                          child: ReaderOverlaySurface(
+                            child: ReaderTocPanel(
                               toc: manifest.value?.toc ?? const [],
                               activeChapterIndex: activeChapterIndex,
                               onSelected: (item) {
@@ -1370,8 +1406,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                                   readerSidePanelWidth: value,
                                 ),
                               ),
-                          child: _ReaderOverlaySurface(
-                            child: _ReaderSidePanel(
+                          child: ReaderOverlaySurface(
+                            child: ReaderSidePanel(
                               showBookmarks: showBookmarks.value,
                               bookmarks: bookmarkItems,
                               annotations: annotations,
@@ -1403,14 +1439,14 @@ class ReaderWorkspace extends HookConsumerWidget {
               top: 0,
               left: 0,
               right: 0,
-              child: _ReaderChrome(
+              child: ReaderChromeContainer(
                 visible: controlsVisible.value,
                 hiddenOffset: const Offset(0, -1),
                 child: Padding(
                   padding: EdgeInsets.only(
                     top: chromeLayout.isCompact ? 0 : systemTopInset,
                   ),
-                  child: _ReaderToolbar(
+                  child: ReaderTopBar(
                     title: title,
                     contextLabel: chapterTitle,
                     tocVisible: tocVisible.value,
@@ -1460,10 +1496,10 @@ class ReaderWorkspace extends HookConsumerWidget {
               bottom: 0,
               left: 0,
               right: 0,
-              child: _ReaderChrome(
+              child: ReaderChromeContainer(
                 visible: controlsVisible.value,
                 hiddenOffset: const Offset(0, 1),
-                child: _ReaderFooter(
+                child: ReaderFooter(
                   chapterIndex: activeChapterIndex,
                   chapterCount: totalChapters,
                   layoutMode: settings.layoutMode,
@@ -1504,2058 +1540,6 @@ class ReaderWorkspace extends HookConsumerWidget {
           child: readerBody,
         );
       },
-    );
-  }
-}
-
-class _ReaderToolbar extends StatelessWidget {
-  const _ReaderToolbar({
-    required this.title,
-    required this.contextLabel,
-    required this.tocVisible,
-    required this.sidePanelVisible,
-    required this.chromeLayout,
-    required this.usesOverflowActions,
-    required this.bookmarked,
-    required this.canCreateAnnotation,
-    required this.autoScrollActive,
-    required this.canAutoScroll,
-    required this.onToggleToc,
-    required this.onToggleSidePanel,
-    required this.onExitReader,
-    required this.onHideControls,
-    required this.onToggleBookmark,
-    required this.onCreateAnnotation,
-    required this.onOpenBookSettings,
-    required this.onOpenSearch,
-    required this.onOpenAssistant,
-    required this.onOpenVisualization,
-    required this.onToggleAutoScroll,
-    required this.ttsController,
-    required this.bookId,
-  });
-
-  final String title;
-  final String contextLabel;
-  final bool tocVisible;
-  final bool sidePanelVisible;
-  final ReaderChromeLayout chromeLayout;
-  final bool usesOverflowActions;
-  bool get mobileReaderControls => chromeLayout.isMedium;
-  final bool bookmarked;
-  final bool canCreateAnnotation;
-  final bool autoScrollActive;
-  final bool canAutoScroll;
-  final VoidCallback onToggleToc;
-  final VoidCallback onToggleSidePanel;
-  final VoidCallback onExitReader;
-  final VoidCallback onHideControls;
-  final VoidCallback onToggleBookmark;
-  final VoidCallback onCreateAnnotation;
-  final VoidCallback onOpenBookSettings;
-  final VoidCallback onOpenSearch;
-  final VoidCallback onOpenAssistant;
-  final VoidCallback onOpenVisualization;
-  final VoidCallback onToggleAutoScroll;
-  final TtsPlaybackController ttsController;
-  final String bookId;
-
-  @override
-  Widget build(BuildContext context) {
-    void openMoreSheet() {
-      unawaited(
-        showReaderMoreSheet(
-          context,
-          title: '更多阅读操作',
-          groups: [
-            ReaderChromeActionGroup(
-              title: '查阅',
-              actions: [
-                ReaderChromeAction(
-                  id: 'notes',
-                  key: const Key('reader-side-panel'),
-                  label: '书签与笔记',
-                  icon: Icons.sticky_note_2_outlined,
-                  onPressed: onToggleSidePanel,
-                ),
-                ReaderChromeAction(
-                  id: 'bookmark',
-                  key: const Key('reader-bookmark'),
-                  label: bookmarked ? '移除书签' : '添加书签',
-                  icon: bookmarked ? Icons.bookmark : Icons.bookmark_border,
-                  onPressed: onToggleBookmark,
-                ),
-                ReaderChromeAction(
-                  id: 'search',
-                  label: '搜索书内内容',
-                  icon: Icons.search,
-                  onPressed: onOpenSearch,
-                ),
-                ReaderChromeAction(
-                  id: 'annotation',
-                  label: '高亮或添加笔记',
-                  icon: Icons.highlight_alt_outlined,
-                  onPressed: canCreateAnnotation ? onCreateAnnotation : null,
-                  disabledDescription: '请先选择文本',
-                ),
-              ],
-            ),
-            ReaderChromeActionGroup(
-              title: '阅读',
-              actions: [
-                ReaderChromeAction(
-                  id: 'tts',
-                  label: '系统朗读',
-                  icon: Icons.headphones_outlined,
-                  onPressed: () {
-                    if (autoScrollActive) onToggleAutoScroll();
-                    unawaited(showTtsControls(context, ttsController));
-                  },
-                ),
-                ReaderChromeAction(
-                  id: 'auto-scroll',
-                  label: autoScrollActive ? '停止自动滚动' : '开始自动滚动',
-                  icon: autoScrollActive
-                      ? Icons.pause_circle_outline
-                      : Icons.slow_motion_video_outlined,
-                  onPressed: canAutoScroll ? onToggleAutoScroll : null,
-                  disabledDescription: '自动滚动仅支持滚动布局',
-                  selected: autoScrollActive,
-                ),
-                ReaderChromeAction(
-                  id: 'pomodoro',
-                  label: '阅读专注计时',
-                  icon: Icons.timer_outlined,
-                  onPressed: () {
-                    if (autoScrollActive) onToggleAutoScroll();
-                    unawaited(
-                      showDialog<void>(
-                        context: context,
-                        builder: (context) => PomodoroDialog(bookId: bookId),
-                      ),
-                    );
-                  },
-                ),
-                ReaderChromeAction(
-                  id: 'focus',
-                  label: '隐藏阅读控制',
-                  icon: Icons.center_focus_strong_outlined,
-                  onPressed: onHideControls,
-                ),
-              ],
-            ),
-            ReaderChromeActionGroup(
-              title: '智能工具',
-              actions: [
-                ReaderChromeAction(
-                  id: 'assistant',
-                  label: '阅读助手',
-                  icon: Icons.auto_awesome_outlined,
-                  onPressed: onOpenAssistant,
-                ),
-                ReaderChromeAction(
-                  id: 'visualization',
-                  label: '词云与思维导图',
-                  icon: Icons.account_tree_outlined,
-                  onPressed: onOpenVisualization,
-                ),
-              ],
-            ),
-            ReaderChromeActionGroup(
-              title: '设置',
-              actions: [
-                ReaderChromeAction(
-                  id: 'book-settings',
-                  key: const Key('reader-book-settings'),
-                  label: '本书阅读设置',
-                  icon: Icons.format_size,
-                  onPressed: onOpenBookSettings,
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (chromeLayout.isCompact) {
-      return ReaderCompactTopBar(
-        title: title,
-        contextLabel: contextLabel,
-        onBack: onExitReader,
-        onOpenMore: openMoreSheet,
-        backKey: const Key('reader-back'),
-        moreKey: const Key('reader-mobile-more'),
-      );
-    }
-
-    if (usesOverflowActions) {
-      return Material(
-        color: Theme.of(context).colorScheme.surface,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              ReaderChromeIconButton(
-                key: const Key('reader-back'),
-                tooltip: '返回书库',
-                icon: Icons.arrow_back,
-                onPressed: onExitReader,
-              ),
-              const SizedBox(width: ReaderChromeLayout.actionGap),
-              Expanded(
-                child: Semantics(
-                  header: true,
-                  label: '$title，$contextLabel',
-                  child: Text(
-                    '$title · $contextLabel',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              const SizedBox(width: ReaderChromeLayout.actionGap),
-              ReaderChromeIconButton(
-                key: const Key('reader-bookmark'),
-                tooltip: bookmarked ? '移除书签' : '添加书签',
-                icon: bookmarked ? Icons.bookmark : Icons.bookmark_border,
-                onPressed: onToggleBookmark,
-              ),
-              const SizedBox(width: ReaderChromeLayout.actionGap),
-              ReaderChromeIconButton(
-                tooltip: '搜索书内内容',
-                icon: Icons.search,
-                onPressed: onOpenSearch,
-              ),
-              const SizedBox(width: ReaderChromeLayout.actionGap),
-              ReaderChromeIconButton(
-                key: const Key('reader-mobile-more'),
-                tooltip: '更多阅读操作',
-                icon: Icons.more_vert,
-                onPressed: openMoreSheet,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            IconButton(
-              tooltip: '返回书库',
-              onPressed: onExitReader,
-              icon: const Icon(Icons.arrow_back),
-            ),
-            IconButton(
-              tooltip: mobileReaderControls
-                  ? '打开目录'
-                  : tocVisible
-                  ? '隐藏目录'
-                  : '显示目录',
-              onPressed: onToggleToc,
-              key: const Key('reader-toc'),
-              icon: Icon(
-                mobileReaderControls
-                    ? Icons.menu
-                    : tocVisible
-                    ? Icons.format_list_bulleted
-                    : Icons.menu_open,
-              ),
-            ),
-            IconButton(
-              tooltip: mobileReaderControls
-                  ? '打开书签和笔记'
-                  : sidePanelVisible
-                  ? '隐藏笔记面板'
-                  : '显示笔记面板',
-              onPressed: onToggleSidePanel,
-              key: const Key('reader-side-panel'),
-              icon: const Icon(Icons.sticky_note_2_outlined),
-            ),
-            if (!mobileReaderControls) const VerticalDivider(width: 20),
-            IconButton(
-              tooltip: bookmarked ? '移除书签' : '添加书签',
-              onPressed: onToggleBookmark,
-              key: const Key('reader-bookmark'),
-              icon: Icon(bookmarked ? Icons.bookmark : Icons.bookmark_border),
-            ),
-            if (!mobileReaderControls)
-              IconButton(
-                tooltip: canCreateAnnotation ? '高亮或添加笔记' : '请先选择文本',
-                onPressed: canCreateAnnotation ? onCreateAnnotation : null,
-                icon: const Icon(Icons.highlight_alt_outlined),
-              ),
-            SizedBox(width: mobileReaderControls ? 4 : 12),
-            Expanded(child: Text(title, overflow: TextOverflow.ellipsis)),
-            TtsToolbarButton(
-              controller: ttsController,
-              onBeforeOpen: autoScrollActive ? onToggleAutoScroll : null,
-            ),
-            IconButton(
-              key: const Key('reader-auto-scroll'),
-              tooltip: canAutoScroll
-                  ? autoScrollActive
-                        ? '停止自动滚动'
-                        : '开始自动滚动'
-                  : '自动滚动仅支持滚动布局',
-              onPressed: canAutoScroll ? onToggleAutoScroll : null,
-              isSelected: autoScrollActive,
-              icon: Icon(
-                autoScrollActive
-                    ? Icons.pause_circle_outline
-                    : Icons.slow_motion_video_outlined,
-              ),
-            ),
-            if (!mobileReaderControls)
-              PomodoroToolbarButton(
-                bookId: bookId,
-                onOpen: autoScrollActive ? onToggleAutoScroll : null,
-              ),
-            if (!mobileReaderControls)
-              IconButton(
-                tooltip: '搜索书内内容',
-                onPressed: onOpenSearch,
-                icon: const Icon(Icons.search),
-              ),
-            if (!mobileReaderControls)
-              IconButton(
-                tooltip: '阅读助手',
-                onPressed: onOpenAssistant,
-                icon: const Icon(Icons.auto_awesome_outlined),
-              ),
-            if (!mobileReaderControls)
-              IconButton(
-                tooltip: '词云与思维导图',
-                onPressed: onOpenVisualization,
-                icon: const Icon(Icons.account_tree_outlined),
-              ),
-            if (!mobileReaderControls) const VerticalDivider(width: 20),
-            if (!mobileReaderControls)
-              IconButton(
-                tooltip: '本书阅读设置',
-                onPressed: onOpenBookSettings,
-                key: const Key('reader-book-settings'),
-                icon: const Icon(Icons.format_size),
-              ),
-            if (!mobileReaderControls)
-              IconButton(
-                tooltip: '隐藏阅读控制',
-                key: const Key('reader-focus-mode'),
-                onPressed: onHideControls,
-                icon: const Icon(Icons.center_focus_strong_outlined),
-              ),
-            if (mobileReaderControls)
-              PopupMenuButton<_MobileReaderToolbarAction>(
-                key: const Key('reader-mobile-more'),
-                tooltip: '更多阅读控制',
-                onSelected: (action) {
-                  switch (action) {
-                    case _MobileReaderToolbarAction.search:
-                      onOpenSearch();
-                    case _MobileReaderToolbarAction.assistant:
-                      onOpenAssistant();
-                    case _MobileReaderToolbarAction.visualization:
-                      onOpenVisualization();
-                    case _MobileReaderToolbarAction.settings:
-                      onOpenBookSettings();
-                    case _MobileReaderToolbarAction.pomodoro:
-                      if (autoScrollActive) onToggleAutoScroll();
-                      unawaited(
-                        showDialog<void>(
-                          context: context,
-                          builder: (context) => PomodoroDialog(bookId: bookId),
-                        ),
-                      );
-                    case _MobileReaderToolbarAction.focus:
-                      onHideControls();
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: _MobileReaderToolbarAction.search,
-                    child: ListTile(
-                      leading: Icon(Icons.search),
-                      title: Text('搜索书内内容'),
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: _MobileReaderToolbarAction.assistant,
-                    child: ListTile(
-                      leading: Icon(Icons.auto_awesome_outlined),
-                      title: Text('阅读助手'),
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: _MobileReaderToolbarAction.visualization,
-                    child: ListTile(
-                      leading: Icon(Icons.account_tree_outlined),
-                      title: Text('词云与思维导图'),
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: _MobileReaderToolbarAction.settings,
-                    child: ListTile(
-                      leading: Icon(Icons.format_size),
-                      title: Text('本书阅读设置'),
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: _MobileReaderToolbarAction.pomodoro,
-                    child: ListTile(
-                      leading: Icon(Icons.timer_outlined),
-                      title: Text('阅读专注计时'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: _MobileReaderToolbarAction.focus,
-                    child: ListTile(
-                      leading: Icon(Icons.center_focus_strong_outlined),
-                      title: Text('隐藏阅读控制'),
-                    ),
-                  ),
-                ],
-                icon: const Icon(Icons.more_vert),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ReaderTocPanel extends HookWidget {
-  const _ReaderTocPanel({
-    required this.toc,
-    required this.activeChapterIndex,
-    required this.onSelected,
-  });
-
-  final List<EpubTocItem> toc;
-  final int activeChapterIndex;
-  final ValueChanged<EpubTocItem> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final query = useState('');
-    final scrollController = useScrollController();
-    final activeItemKey = useMemoized(GlobalKey.new);
-    final expandedKeys = useState(
-      _tocExpandedKeysForActive(toc, activeChapterIndex, rootKey: 'desktop'),
-    );
-    final hasMatches = _hasMatchingItem(toc, query.value);
-    useEffect(() {
-      final activePath = _tocExpandedKeysForActive(
-        toc,
-        activeChapterIndex,
-        rootKey: 'desktop',
-      );
-      if (activePath.any((key) => !expandedKeys.value.contains(key))) {
-        expandedKeys.value = {...expandedKeys.value, ...activePath};
-      }
-      return null;
-    }, [toc, activeChapterIndex]);
-    useEffect(() {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final targetContext = activeItemKey.currentContext;
-        if (targetContext != null) {
-          Scrollable.ensureVisible(
-            targetContext,
-            duration: const Duration(milliseconds: 180),
-            alignment: 0.3,
-          );
-        }
-      });
-      return null;
-    }, [activeChapterIndex, query.value]);
-    return ListView(
-      controller: scrollController,
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text('目录', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 12),
-        TextField(
-          key: const Key('reader-toc-search'),
-          onChanged: (value) => query.value = value,
-          decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.search),
-            hintText: '搜索目录',
-            border: const OutlineInputBorder(),
-            suffixIcon: query.value.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: '清除搜索',
-                    onPressed: () => query.value = '',
-                    icon: const Icon(Icons.clear),
-                  ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (toc.isEmpty)
-          const Text('该书没有可用目录。')
-        else if (!hasMatches)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
-            child: Center(child: Text('没有匹配的章节。')),
-          )
-        else
-          ..._buildTocItems(
-            toc,
-            activeItemKey: activeItemKey,
-            depth: 0,
-            query: query.value,
-            parentKey: 'desktop',
-            expandedKeys: expandedKeys.value,
-            onToggle: (key) {
-              final next = {...expandedKeys.value};
-              if (!next.add(key)) next.remove(key);
-              expandedKeys.value = next;
-            },
-          ),
-      ],
-    );
-  }
-
-  bool _hasMatchingItem(List<EpubTocItem> items, String query) {
-    final normalizedQuery = query.trim().toLowerCase();
-    if (normalizedQuery.isEmpty) return true;
-    return items.any(
-      (item) =>
-          item.title.toLowerCase().contains(normalizedQuery) ||
-          _hasMatchingItem(item.children, query),
-    );
-  }
-
-  List<Widget> _buildTocItems(
-    List<EpubTocItem> items, {
-    required GlobalKey activeItemKey,
-    required int depth,
-    required String query,
-    required String parentKey,
-    required Set<String> expandedKeys,
-    required ValueChanged<String> onToggle,
-  }) {
-    final normalizedQuery = query.trim().toLowerCase();
-    final widgets = <Widget>[];
-    for (var index = 0; index < items.length; index++) {
-      final item = items[index];
-      final nodeKey = '$parentKey/$index';
-      final matchesTitle =
-          normalizedQuery.isEmpty ||
-          item.title.toLowerCase().contains(normalizedQuery);
-      final matchesChildren = _hasMatchingItem(item.children, query);
-      if (!matchesTitle && !matchesChildren) continue;
-      final hasChildren = item.children.isNotEmpty;
-      final expanded =
-          expandedKeys.contains(nodeKey) ||
-          (normalizedQuery.isNotEmpty && matchesChildren);
-      widgets.add(
-        _TocListItem(
-          key: item.spineIndex == activeChapterIndex ? activeItemKey : null,
-          title: item.title,
-          depth: depth,
-          enabled: item.spineIndex >= 0,
-          selected: item.spineIndex == activeChapterIndex,
-          onTap: item.spineIndex < 0 ? null : () => onSelected(item),
-          hasChildren: hasChildren,
-          expanded: expanded,
-          onToggle: hasChildren ? () => onToggle(nodeKey) : null,
-        ),
-      );
-      if (hasChildren && expanded) {
-        widgets.addAll(
-          _buildTocItems(
-            item.children,
-            activeItemKey: activeItemKey,
-            depth: depth + 1,
-            query: query,
-            parentKey: nodeKey,
-            expandedKeys: expandedKeys,
-            onToggle: onToggle,
-          ),
-        );
-      }
-    }
-    return widgets;
-  }
-}
-
-class _TocListItem extends StatelessWidget {
-  const _TocListItem({
-    super.key,
-    required this.title,
-    required this.depth,
-    required this.enabled,
-    required this.selected,
-    required this.onTap,
-    required this.hasChildren,
-    required this.expanded,
-    required this.onToggle,
-  });
-
-  final String title;
-  final int depth;
-  final bool enabled;
-  final bool selected;
-  final VoidCallback? onTap;
-  final bool hasChildren;
-  final bool expanded;
-  final VoidCallback? onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 1),
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(
-            color: selected ? colorScheme.primary : Colors.transparent,
-            width: 3,
-          ),
-        ),
-      ),
-      child: Material(
-        color: selected ? colorScheme.surfaceContainerLow : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
-        child: ListTile(
-          contentPadding: EdgeInsets.only(left: depth * 16.0 + 12, right: 12),
-          enabled: enabled || hasChildren,
-          title: Text(
-            title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: selected
-                ? TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w600,
-                  )
-                : null,
-          ),
-          onTap: onTap,
-          trailing: hasChildren
-              ? IconButton(
-                  tooltip: expanded ? '折叠章节' : '展开章节',
-                  onPressed: onToggle,
-                  icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-                )
-              : null,
-        ),
-      ),
-    );
-  }
-}
-
-class _MobileReaderTocDrawer extends HookWidget {
-  const _MobileReaderTocDrawer({
-    required this.title,
-    required this.book,
-    required this.chapterCount,
-    required this.toc,
-    required this.activeChapterIndex,
-    required this.onSelected,
-  });
-
-  final String title;
-  final LibraryBook? book;
-  final int chapterCount;
-  final List<EpubTocItem> toc;
-  final int activeChapterIndex;
-  final ValueChanged<EpubTocItem> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final query = useState('');
-    final expandedKeys = useState(
-      _tocExpandedKeysForActive(toc, activeChapterIndex, rootKey: 'mobile'),
-    );
-    useEffect(() {
-      final activePath = _tocExpandedKeysForActive(
-        toc,
-        activeChapterIndex,
-        rootKey: 'mobile',
-      );
-      if (activePath.any((key) => !expandedKeys.value.contains(key))) {
-        expandedKeys.value = {...expandedKeys.value, ...activePath};
-      }
-      return null;
-    }, [toc, activeChapterIndex]);
-
-    void toggleNode(String key) {
-      final next = {...expandedKeys.value};
-      if (!next.add(key)) next.remove(key);
-      expandedKeys.value = next;
-    }
-
-    final bookTitle = book?.title ?? title;
-    final author = book?.author;
-    return _ReaderBottomSheet(
-      child: Column(
-        children: [
-          Padding(
-            key: const Key('reader-mobile-toc-header'),
-            padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 64,
-                  height: 92,
-                  child: book == null
-                      ? const DecoratedBox(
-                          decoration: BoxDecoration(color: Colors.grey),
-                          child: Icon(Icons.menu_book_outlined),
-                        )
-                      : ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: BookCover(book: book!),
-                        ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        bookTitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        author == null || author.isEmpty ? '未知作者' : author,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '$chapterCount 章',
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  key: const Key('reader-mobile-toc-close'),
-                  tooltip: '关闭目录',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              key: const Key('reader-mobile-toc-search'),
-              onChanged: (value) => query.value = value,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
-                hintText: '搜索目录',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: query.value.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: '清除搜索',
-                        onPressed: () => query.value = '',
-                        icon: const Icon(Icons.clear),
-                      ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: toc.isEmpty
-                ? const Center(child: Text('暂无可用目录。'))
-                : ListView(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    children: [
-                      for (var index = 0; index < toc.length; index++)
-                        _MobileTocEntry(
-                          item: toc[index],
-                          activeChapterIndex: activeChapterIndex,
-                          onSelected: onSelected,
-                          nodeKey: 'mobile/$index',
-                          query: query.value,
-                          expandedKeys: expandedKeys.value,
-                          onToggle: toggleNode,
-                        ),
-                    ],
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MobileTocEntry extends StatelessWidget {
-  const _MobileTocEntry({
-    required this.item,
-    required this.activeChapterIndex,
-    required this.onSelected,
-    required this.nodeKey,
-    required this.query,
-    required this.expandedKeys,
-    required this.onToggle,
-    this.depth = 0,
-  });
-
-  final EpubTocItem item;
-  final int activeChapterIndex;
-  final ValueChanged<EpubTocItem> onSelected;
-  final String nodeKey;
-  final String query;
-  final Set<String> expandedKeys;
-  final ValueChanged<String> onToggle;
-  final int depth;
-
-  @override
-  Widget build(BuildContext context) {
-    final normalizedQuery = query.trim().toLowerCase();
-    final matchesTitle =
-        normalizedQuery.isEmpty ||
-        item.title.toLowerCase().contains(normalizedQuery);
-    final matchesChildren = _hasMatchingTocItem(item.children, query);
-    if (!matchesTitle && !matchesChildren) return const SizedBox.shrink();
-    final padding = EdgeInsetsDirectional.only(start: 12 + depth * 16.0);
-    if (item.children.isEmpty) {
-      return ListTile(
-        contentPadding: padding,
-        selected: item.spineIndex == activeChapterIndex,
-        enabled: item.spineIndex >= 0,
-        title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-        onTap: item.spineIndex < 0 ? null : () => onSelected(item),
-      );
-    }
-    final expanded =
-        expandedKeys.contains(nodeKey) ||
-        (normalizedQuery.isNotEmpty && matchesChildren);
-    return Column(
-      children: [
-        ListTile(
-          contentPadding: padding,
-          selected: item.spineIndex == activeChapterIndex,
-          title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-          onTap: item.spineIndex < 0 ? null : () => onSelected(item),
-          trailing: IconButton(
-            tooltip: expanded ? '折叠章节' : '展开章节',
-            onPressed: () => onToggle(nodeKey),
-            icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-          ),
-        ),
-        if (expanded)
-          for (var index = 0; index < item.children.length; index++)
-            _MobileTocEntry(
-              item: item.children[index],
-              activeChapterIndex: activeChapterIndex,
-              onSelected: onSelected,
-              nodeKey: '$nodeKey/$index',
-              query: query,
-              expandedKeys: expandedKeys,
-              onToggle: onToggle,
-              depth: depth + 1,
-            ),
-      ],
-    );
-  }
-
-  bool _hasMatchingTocItem(List<EpubTocItem> items, String searchQuery) {
-    final normalizedQuery = searchQuery.trim().toLowerCase();
-    if (normalizedQuery.isEmpty) return true;
-    return items.any(
-      (entry) =>
-          entry.title.toLowerCase().contains(normalizedQuery) ||
-          _hasMatchingTocItem(entry.children, searchQuery),
-    );
-  }
-}
-
-class _MobileReaderSideDrawer extends StatelessWidget {
-  const _MobileReaderSideDrawer({
-    required this.showBookmarks,
-    required this.bookmarks,
-    required this.annotations,
-    required this.onPanelChanged,
-    required this.onSelectBookmark,
-    required this.onRemoveBookmark,
-    required this.onEditBookmark,
-    required this.onSelectAnnotation,
-    required this.onEditAnnotation,
-    required this.onRemoveAnnotation,
-  });
-
-  final bool showBookmarks;
-  final List<Bookmark> bookmarks;
-  final List<ReadingAnnotation> annotations;
-  final ValueChanged<bool> onPanelChanged;
-  final Future<void> Function(Bookmark bookmark) onSelectBookmark;
-  final Future<void> Function(Bookmark bookmark) onRemoveBookmark;
-  final Future<void> Function(Bookmark bookmark) onEditBookmark;
-  final ValueChanged<ReadingAnnotation> onSelectAnnotation;
-  final Future<void> Function(ReadingAnnotation annotation) onEditAnnotation;
-  final Future<void> Function(ReadingAnnotation annotation) onRemoveAnnotation;
-
-  @override
-  Widget build(BuildContext context) => _ReaderBottomSheet(
-    child: Column(
-      children: [
-        Padding(
-          key: const Key('reader-mobile-side-header'),
-          padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '书签与笔记',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              IconButton(
-                tooltip: '关闭面板',
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: _ReaderSidePanel(
-            showBookmarks: showBookmarks,
-            bookmarks: bookmarks,
-            annotations: annotations,
-            onPanelChanged: onPanelChanged,
-            onSelectBookmark: onSelectBookmark,
-            onRemoveBookmark: onRemoveBookmark,
-            onEditBookmark: onEditBookmark,
-            onSelectAnnotation: onSelectAnnotation,
-            onEditAnnotation: onEditAnnotation,
-            onRemoveAnnotation: onRemoveAnnotation,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _ReaderBottomSheet extends StatelessWidget {
-  const _ReaderBottomSheet({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => FractionallySizedBox(
-    heightFactor: .82,
-    alignment: Alignment.bottomCenter,
-    child: Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-      clipBehavior: Clip.antiAlias,
-      child: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Expanded(child: child),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _ReaderArticle extends StatelessWidget {
-  const _ReaderArticle({
-    required this.settings,
-    required this.textColoring,
-    required this.chapter,
-    required this.error,
-    required this.bookId,
-    required this.initialScrollRatio,
-    required this.initialAnchor,
-    required this.initialCfi,
-    required this.direction,
-    required this.navigationCommand,
-    required this.restoreRevision,
-    required this.annotations,
-    required this.searchQuery,
-    required this.focusedAnnotationId,
-    required this.ttsSegment,
-    required this.annotationFocusRevision,
-    required this.onNavigateToHref,
-    required this.onScrollPositionChanged,
-    required this.onPaginationChanged,
-    required this.onRequestPrevious,
-    required this.onRequestNext,
-    required this.onNavigationCommandFinished,
-    required this.onAutoScrollChanged,
-    required this.onTextSelectionChanged,
-    required this.onSelectionContextMenu,
-    required this.onToggleControls,
-  });
-
-  final ReadingSettings settings;
-  final ResolvedTextColoring textColoring;
-  final ReaderChapter? chapter;
-  final Object? error;
-  final String? bookId;
-  final double initialScrollRatio;
-  final String? initialAnchor;
-  final String? initialCfi;
-  final ReadingDirection direction;
-  final ReaderNavigationCommand? navigationCommand;
-  final int restoreRevision;
-  final List<ReadingAnnotation> annotations;
-  final String? searchQuery;
-  final String? focusedAnnotationId;
-  final TtsSegment? ttsSegment;
-  final int annotationFocusRevision;
-  final ValueChanged<String> onNavigateToHref;
-  final void Function(String href, double ratio, String? anchor, String? cfi)
-  onScrollPositionChanged;
-  final void Function(int pageIndex, int pageCount) onPaginationChanged;
-  final VoidCallback onRequestPrevious;
-  final VoidCallback onRequestNext;
-  final ValueChanged<int> onNavigationCommandFinished;
-  final ValueChanged<bool> onAutoScrollChanged;
-  final ValueChanged<ReaderTextSelection> onTextSelectionChanged;
-  final ValueChanged<ReaderSelectionContextMenu> onSelectionContextMenu;
-  final VoidCallback onToggleControls;
-
-  @override
-  Widget build(BuildContext context) {
-    if (chapter == null) {
-      return ReaderContentTapDetector(
-        key: const Key('reader-content'),
-        onTap: onToggleControls,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(error == null ? '正在加载章节…' : '无法加载章节：$error'),
-          ),
-        ),
-      );
-    }
-    if (bookId != null) {
-      return Builder(
-        builder: (webViewContext) => EpubWebView(
-          bookId: bookId!,
-          href: chapter!.href,
-          settings: settings,
-          textColoring: textColoring,
-          initialScrollRatio: initialScrollRatio,
-          initialAnchor: initialAnchor,
-          initialCfi: initialCfi,
-          direction: direction,
-          navigationCommand: navigationCommand,
-          restoreRevision: restoreRevision,
-          annotations: annotations,
-          searchQuery: searchQuery,
-          focusedAnnotationId: focusedAnnotationId,
-          ttsHighlightHref: ttsSegment?.href,
-          ttsHighlightText: ttsSegment?.text,
-          ttsHighlightStart: ttsSegment?.rawStart,
-          ttsHighlightEnd: ttsSegment?.rawEnd,
-          annotationFocusRevision: annotationFocusRevision,
-          onNavigateToHref: onNavigateToHref,
-          onScrollPositionChanged: onScrollPositionChanged,
-          onPaginationChanged: onPaginationChanged,
-          onRequestPrevious: onRequestPrevious,
-          onRequestNext: onRequestNext,
-          onNavigationCommandFinished: onNavigationCommandFinished,
-          onAutoScrollChanged: onAutoScrollChanged,
-          onTextSelectionChanged: onTextSelectionChanged,
-          onSelectionContextMenu: (menu) {
-            final box = webViewContext.findRenderObject() as RenderBox?;
-            final globalPosition = box?.localToGlobal(Offset(menu.x, menu.y));
-            onSelectionContextMenu(
-              ReaderSelectionContextMenu(
-                selection: menu.selection,
-                x: globalPosition?.dx ?? menu.x,
-                y: globalPosition?.dy ?? menu.y,
-              ),
-            );
-          },
-          onToggleControls: onToggleControls,
-        ),
-      );
-    }
-    final blocks = chapter!.blocks;
-    final titleBlock = blocks.where((block) => block.isHeading).firstOrNull;
-    final bodyBlocks = titleBlock == null
-        ? blocks
-        : blocks.where((block) => !identical(block, titleBlock)).toList();
-    return ReaderContentTapDetector(
-      onTap: onToggleControls,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 980),
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(
-              settings.pageMargin,
-              36,
-              settings.pageMargin,
-              48,
-            ),
-            children: [
-              Text(
-                '第 ${chapter!.index + 1} 章',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                chapter!.title,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontFamily: settings.font.fontFamily,
-                ),
-              ),
-              const SizedBox(height: 28),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final canUseDoubleColumn =
-                      settings.doubleColumn && constraints.maxWidth >= 760;
-                  if (!canUseDoubleColumn) {
-                    return _ArticleColumn(
-                      blocks: bodyBlocks,
-                      settings: settings,
-                    );
-                  }
-                  final splitAt = (bodyBlocks.length / 2).ceil();
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _ArticleColumn(
-                          blocks: bodyBlocks.take(splitAt).toList(),
-                          settings: settings,
-                        ),
-                      ),
-                      const SizedBox(width: 48),
-                      Expanded(
-                        child: _ArticleColumn(
-                          blocks: bodyBlocks.skip(splitAt).toList(),
-                          settings: settings,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ReaderChrome extends StatelessWidget {
-  const _ReaderChrome({
-    required this.visible,
-    required this.hiddenOffset,
-    required this.child,
-  });
-
-  final bool visible;
-  final Offset hiddenOffset;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-    ignoring: !visible,
-    child: AnimatedSlide(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-      offset: visible ? Offset.zero : hiddenOffset,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 120),
-        opacity: visible ? 1 : 0,
-        child: child,
-      ),
-    ),
-  );
-}
-
-class _ReaderOverlaySurface extends StatelessWidget {
-  const _ReaderOverlaySurface({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surface,
-    elevation: 4,
-    shadowColor: Colors.black26,
-    borderRadius: BorderRadius.circular(8),
-    clipBehavior: Clip.antiAlias,
-    child: child,
-  );
-}
-
-class _ArticleColumn extends StatelessWidget {
-  const _ArticleColumn({required this.blocks, required this.settings});
-
-  final List<ReaderChapterBlock> blocks;
-  final ReadingSettings settings;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: blocks
-        .map(
-          (block) => Padding(
-            padding: const EdgeInsets.only(bottom: 20),
-            child: Text(
-              block.text,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontFamily: settings.font.fontFamily,
-                fontSize: settings.fontSize,
-                height: settings.lineHeight,
-                fontWeight: block.isHeading ? FontWeight.w600 : null,
-              ),
-            ),
-          ),
-        )
-        .toList(),
-  );
-}
-
-class _ReaderSidePanel extends StatelessWidget {
-  const _ReaderSidePanel({
-    required this.showBookmarks,
-    required this.bookmarks,
-    required this.annotations,
-    required this.onPanelChanged,
-    required this.onSelectBookmark,
-    required this.onRemoveBookmark,
-    required this.onEditBookmark,
-    required this.onSelectAnnotation,
-    required this.onEditAnnotation,
-    required this.onRemoveAnnotation,
-  });
-
-  final bool showBookmarks;
-  final List<Bookmark> bookmarks;
-  final List<ReadingAnnotation> annotations;
-  final ValueChanged<bool> onPanelChanged;
-  final Future<void> Function(Bookmark bookmark) onSelectBookmark;
-  final Future<void> Function(Bookmark bookmark) onRemoveBookmark;
-  final Future<void> Function(Bookmark bookmark) onEditBookmark;
-  final ValueChanged<ReadingAnnotation> onSelectAnnotation;
-  final Future<void> Function(ReadingAnnotation annotation) onEditAnnotation;
-  final Future<void> Function(ReadingAnnotation annotation) onRemoveAnnotation;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SegmentedButton<bool>(
-            segments: [
-              ButtonSegment(
-                value: false,
-                icon: const Icon(Icons.sticky_note_2_outlined),
-                label: Text('笔记 ${annotations.length}'),
-              ),
-              ButtonSegment(
-                value: true,
-                icon: const Icon(Icons.bookmark_border),
-                label: Text('书签 ${bookmarks.length}'),
-              ),
-            ],
-            selected: {showBookmarks},
-            onSelectionChanged: (selection) => onPanelChanged(selection.first),
-          ),
-          const SizedBox(height: 20),
-          if (showBookmarks) ...[
-            Text('书签', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            if (bookmarks.isEmpty)
-              const Expanded(child: Center(child: Text('当前书籍还没有书签。')))
-            else
-              Expanded(
-                child: ListView.builder(
-                  itemCount: bookmarks.length,
-                  itemBuilder: (context, index) {
-                    final bookmark = bookmarks[index];
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.bookmark),
-                      title: Text(bookmark.label ?? bookmark.chapterTitle),
-                      subtitle: Text(
-                        '保存于 ${bookmark.createdAt.hour.toString().padLeft(2, '0')}:${bookmark.createdAt.minute.toString().padLeft(2, '0')}',
-                      ),
-                      onTap: () => onSelectBookmark(bookmark),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: '编辑书签',
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => onEditBookmark(bookmark),
-                          ),
-                          IconButton(
-                            tooltip: '删除书签',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => onRemoveBookmark(bookmark),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ] else ...[
-            Text('笔记与标注', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            if (annotations.isEmpty)
-              const Expanded(child: Center(child: Text('选中文本后可创建高亮和笔记。')))
-            else
-              Expanded(
-                child: ListView.separated(
-                  itemCount: annotations.length,
-                  separatorBuilder: (context, index) => const Divider(),
-                  itemBuilder: (context, index) {
-                    final annotation = annotations[index];
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                        radius: 8,
-                        backgroundColor: _annotationColor(annotation.color),
-                      ),
-                      title: Text(
-                        annotation.selectedText,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: annotation.note == null
-                          ? const Text('高亮')
-                          : Text(annotation.note!, maxLines: 3),
-                      onTap: () => onSelectAnnotation(annotation),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: '编辑笔记',
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => onEditAnnotation(annotation),
-                          ),
-                          IconButton(
-                            tooltip: '删除标注',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => onRemoveAnnotation(annotation),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Color _annotationColor(AnnotationColor color) => switch (color) {
-    AnnotationColor.yellow => Colors.amber,
-    AnnotationColor.green => Colors.green,
-    AnnotationColor.blue => Colors.lightBlue,
-    AnnotationColor.pink => Colors.pink,
-  };
-}
-
-class _BookmarkLabelDialog extends HookWidget {
-  const _BookmarkLabelDialog({required this.bookmark});
-
-  final Bookmark bookmark;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = useTextEditingController(text: bookmark.label ?? '');
-    return AlertDialog(
-      title: const Text('编辑书签'),
-      content: SizedBox(
-        width: 360,
-        child: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 80,
-          decoration: InputDecoration(
-            labelText: '书签名称',
-            hintText: bookmark.chapterTitle,
-            border: const OutlineInputBorder(),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, controller.text),
-          child: const Text('保存'),
-        ),
-      ],
-    );
-  }
-}
-
-class _SelectionContextMenuItem extends StatelessWidget {
-  const _SelectionContextMenuItem({required this.color});
-
-  final AnnotationColor color;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(Icons.circle, color: _swatch(color), size: 18),
-      const SizedBox(width: 12),
-      Text('${color.label}高亮'),
-    ],
-  );
-
-  Color _swatch(AnnotationColor value) => switch (value) {
-    AnnotationColor.yellow => Colors.amber,
-    AnnotationColor.green => Colors.green,
-    AnnotationColor.blue => Colors.lightBlue,
-    AnnotationColor.pink => Colors.pink,
-  };
-}
-
-class _AnnotationDraft {
-  const _AnnotationDraft({required this.color, this.note});
-
-  final AnnotationColor color;
-  final String? note;
-}
-
-class _AnnotationNoteDraft {
-  const _AnnotationNoteDraft(this.note);
-
-  final String note;
-}
-
-class _AnnotationNoteDialog extends HookWidget {
-  const _AnnotationNoteDialog({required this.annotation});
-
-  final ReadingAnnotation annotation;
-
-  @override
-  Widget build(BuildContext context) {
-    final noteController = useTextEditingController(
-      text: annotation.note ?? '',
-    );
-    return AlertDialog(
-      title: const Text('编辑笔记'),
-      scrollable: true,
-      content: SizedBox(
-        width: 440,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              annotation.selectedText,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: noteController,
-              maxLines: 4,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: '笔记（留空以移除）',
-                alignLabelWithHint: true,
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.pop(context, _AnnotationNoteDraft(noteController.text)),
-          child: const Text('保存'),
-        ),
-      ],
-    );
-  }
-}
-
-class _AnnotationDialog extends HookWidget {
-  const _AnnotationDialog({required this.selection});
-
-  final ReaderTextSelection selection;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = useState(AnnotationColor.yellow);
-    final noteController = useTextEditingController();
-    return AlertDialog(
-      title: const Text('添加高亮与笔记'),
-      scrollable: true,
-      content: SizedBox(
-        width: 440,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              selection.text,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                for (final option in AnnotationColor.values)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Tooltip(
-                      message: option.label,
-                      child: IconButton(
-                        isSelected: color.value == option,
-                        onPressed: () => color.value = option,
-                        icon: CircleAvatar(
-                          radius: 12,
-                          backgroundColor: _annotationSwatch(option),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteController,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: '笔记（可选）',
-                alignLabelWithHint: true,
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            _AnnotationDraft(color: color.value, note: noteController.text),
-          ),
-          child: const Text('保存'),
-        ),
-      ],
-    );
-  }
-
-  Color _annotationSwatch(AnnotationColor color) => switch (color) {
-    AnnotationColor.yellow => Colors.amber,
-    AnnotationColor.green => Colors.green,
-    AnnotationColor.blue => Colors.lightBlue,
-    AnnotationColor.pink => Colors.pink,
-  };
-}
-
-class _ReaderFooter extends StatelessWidget {
-  const _ReaderFooter({
-    required this.chapterIndex,
-    required this.chapterCount,
-    required this.layoutMode,
-    required this.chromeLayout,
-    required this.overallProgress,
-    required this.positionMetrics,
-    required this.onSeekProgress,
-    required this.onOpenToc,
-    required this.onOpenStyle,
-    required this.onOpenProgress,
-    required this.onPrevious,
-    required this.onNext,
-  });
-
-  final int chapterIndex;
-  final int chapterCount;
-  final ReaderLayoutMode layoutMode;
-  final ReaderChromeLayout chromeLayout;
-  final double overallProgress;
-  final ReadingPositionMetrics positionMetrics;
-  final ValueChanged<double> onSeekProgress;
-  final VoidCallback onOpenToc;
-  final VoidCallback onOpenStyle;
-  final VoidCallback onOpenProgress;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = overallProgress.clamp(0, 1).toDouble();
-    final positionLabel = chapterCount == 0
-        ? '正在读取目录'
-        : '${positionMetrics.label} · 第 ${chapterIndex + 1} / $chapterCount 章';
-    if (!chromeLayout.isExpanded) {
-      return ReaderCompactNavigationBar(
-        key: const Key('reader-footer'),
-        tocKey: const Key('reader-toc'),
-        positionKey: const Key('reader-position-label'),
-        styleKey: const Key('reader-book-settings'),
-        positionLabel: positionLabel,
-        onOpenToc: onOpenToc,
-        onPrevious: onPrevious,
-        onNext: onNext,
-        onOpenStyle: onOpenStyle,
-        onOpenProgress: onOpenProgress,
-      );
-    }
-    return Material(
-      key: const Key('reader-footer'),
-      color: Theme.of(context).colorScheme.surface,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-          child: Row(
-            children: [
-              ReaderChromeIconButton(
-                tooltip: layoutMode == ReaderLayoutMode.paginated
-                    ? '上一页，或上一章'
-                    : '上一章',
-                icon: Icons.chevron_left,
-                onPressed: onPrevious,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ReaderProgressSlider(
-                  progress: progress,
-                  onChanged: onSeekProgress,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Semantics(
-                key: const Key('reader-position-label'),
-                label: '$positionLabel，打开阅读进度',
-                button: true,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: onOpenProgress,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    child: Text(positionLabel),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              ReaderChromeIconButton(
-                tooltip: layoutMode == ReaderLayoutMode.paginated
-                    ? '下一页，或下一章'
-                    : '下一章',
-                icon: Icons.chevron_right,
-                onPressed: onNext,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ReaderProgressSlider extends StatefulWidget {
-  const _ReaderProgressSlider({
-    required this.progress,
-    required this.onChanged,
-  });
-
-  final double progress;
-  final ValueChanged<double> onChanged;
-
-  @override
-  State<_ReaderProgressSlider> createState() => _ReaderProgressSliderState();
-}
-
-class _ReaderProgressSliderState extends State<_ReaderProgressSlider> {
-  double? _dragProgress;
-
-  @override
-  Widget build(BuildContext context) {
-    final value = (_dragProgress ?? widget.progress).clamp(0, 1).toDouble();
-    return Slider(
-      key: const Key('reader-progress-slider'),
-      value: value,
-      label: '${(value * 100).round()}%',
-      semanticFormatterCallback: (next) => '${(next * 100).round()}%',
-      onChanged: (next) => setState(() => _dragProgress = next),
-      onChangeEnd: (next) {
-        setState(() => _dragProgress = null);
-        widget.onChanged(next);
-      },
-    );
-  }
-}
-
-class _BookSettingsResult {
-  const _BookSettingsResult({
-    required this.bookOverride,
-    required this.textColoringOverride,
-  });
-
-  final BookReadingOverride? bookOverride;
-  final bool? textColoringOverride;
-}
-
-Set<String> _tocExpandedKeysForActive(
-  List<EpubTocItem> items,
-  int activeChapterIndex, {
-  required String rootKey,
-}) {
-  final expanded = <String>{};
-
-  bool visit(List<EpubTocItem> entries, String parentKey) {
-    var containsActive = false;
-    for (var index = 0; index < entries.length; index++) {
-      final item = entries[index];
-      final nodeKey = '$parentKey/$index';
-      final childContainsActive = visit(item.children, nodeKey);
-      final itemContainsActive =
-          item.spineIndex == activeChapterIndex || childContainsActive;
-      if (itemContainsActive && item.children.isNotEmpty) {
-        expanded.add(nodeKey);
-      }
-      if (itemContainsActive) containsActive = true;
-    }
-    return containsActive;
-  }
-
-  visit(items, rootKey);
-  return expanded;
-}
-
-class _UnderlineColorDialog extends StatelessWidget {
-  const _UnderlineColorDialog();
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('选择划线颜色'),
-    content: Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: AnnotationColor.values
-          .map(
-            (color) => ActionChip(
-              avatar: CircleAvatar(backgroundColor: _annotationSwatch(color)),
-              label: Text(color.label),
-              onPressed: () => Navigator.pop(context, color),
-            ),
-          )
-          .toList(),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
-      ),
-    ],
-  );
-
-  Color _annotationSwatch(AnnotationColor color) => switch (color) {
-    AnnotationColor.yellow => Colors.amber,
-    AnnotationColor.green => Colors.green,
-    AnnotationColor.blue => Colors.lightBlue,
-    AnnotationColor.pink => Colors.pink,
-  };
-}
-
-enum _BookTextColoringMode { followGlobal, enabled, disabled }
-
-class _BookReadingSettingsDialog extends HookConsumerWidget {
-  const _BookReadingSettingsDialog({
-    required this.bookId,
-    required this.defaults,
-    required this.readingOverride,
-    required this.textColoringSettings,
-    required this.textColoringOverride,
-  });
-
-  final String bookId;
-  final ReadingSettings defaults;
-  final BookReadingOverride? readingOverride;
-  final TextColoringSettings textColoringSettings;
-  final bool? textColoringOverride;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final useOverride = useState(readingOverride != null);
-    final settings = useState(readingOverride?.settings ?? defaults);
-    final catalog = ref.watch(fontCatalogControllerProvider).value;
-    final fonts = <ReadingFontRef>{
-      ReadingFontRef.system,
-      ReadingFontRef.serif,
-      ReadingFontRef.sansSerif,
-      ReadingFontRef.monospace,
-      ...?catalog?.systemFonts.map(
-        (font) => ReadingFontRef.systemFamily(font.family),
-      ),
-      ...?catalog?.importedFonts.map((font) => font.ref),
-      settings.value.font,
-    }.toList();
-    final textColoringMode = useState(switch (textColoringOverride) {
-      true => _BookTextColoringMode.enabled,
-      false => _BookTextColoringMode.disabled,
-      null => _BookTextColoringMode.followGlobal,
-    });
-    return AlertDialog(
-      title: const Text('本书阅读设置'),
-      scrollable: true,
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: useOverride.value,
-              onChanged: (value) => useOverride.value = value,
-              title: const Text('使用本书独立设置'),
-              subtitle: const Text('关闭后，本书将跟随全局阅读设置。'),
-            ),
-            if (useOverride.value) ...[
-              DropdownButtonFormField<ReadingFontRef>(
-                initialValue: settings.value.font,
-                decoration: const InputDecoration(labelText: '书本字体'),
-                items: fonts
-                    .map(
-                      (font) => DropdownMenuItem(
-                        value: font,
-                        child: Text(font.label),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (font) {
-                  if (font != null) {
-                    settings.value = settings.value.copyWith(font: font);
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              SegmentedButton<ReaderLayoutMode>(
-                segments: [
-                  for (final mode in ReaderLayoutMode.values)
-                    ButtonSegment(
-                      value: mode,
-                      icon: Icon(
-                        mode == ReaderLayoutMode.scroll
-                            ? Icons.swap_vert
-                            : Icons.auto_stories_outlined,
-                      ),
-                      label: Text(mode.label),
-                    ),
-                ],
-                selected: {settings.value.layoutMode},
-                onSelectionChanged: (selection) {
-                  settings.value = settings.value.copyWith(
-                    layoutMode: selection.first,
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              SegmentedButton<ReaderPageTransition>(
-                segments: [
-                  for (final transition in ReaderPageTransition.values)
-                    ButtonSegment(
-                      value: transition,
-                      icon: Icon(switch (transition) {
-                        ReaderPageTransition.slide => Icons.swipe,
-                        ReaderPageTransition.cover => Icons.layers_outlined,
-                        ReaderPageTransition.fade => Icons.opacity,
-                        ReaderPageTransition.none =>
-                          Icons.do_not_disturb_alt_outlined,
-                      }),
-                      label: Text(transition.label),
-                    ),
-                ],
-                selected: {settings.value.pageTransition},
-                onSelectionChanged: (selection) {
-                  settings.value = settings.value.copyWith(
-                    pageTransition: selection.first,
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const SizedBox(width: 64, child: Text('字号')),
-                  Expanded(
-                    child: Slider(
-                      value: settings.value.fontSize,
-                      min: 14,
-                      max: 28,
-                      divisions: 14,
-                      label: settings.value.fontSize.round().toString(),
-                      onChanged: (value) => settings.value = settings.value
-                          .copyWith(fontSize: value),
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  const SizedBox(width: 64, child: Text('行高')),
-                  Expanded(
-                    child: Slider(
-                      value: settings.value.lineHeight,
-                      min: 1.4,
-                      max: 2.2,
-                      divisions: 8,
-                      label: settings.value.lineHeight.toStringAsFixed(1),
-                      onChanged: (value) => settings.value = settings.value
-                          .copyWith(lineHeight: value),
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  const SizedBox(width: 64, child: Text('页边距')),
-                  Expanded(
-                    child: Slider(
-                      key: const Key('book-reading-margin'),
-                      value: settings.value.pageMargin,
-                      min: 16,
-                      max: 64,
-                      divisions: 12,
-                      label: settings.value.pageMargin.round().toString(),
-                      onChanged: (value) => settings.value = settings.value
-                          .copyWith(pageMargin: value),
-                    ),
-                  ),
-                ],
-              ),
-              SwitchListTile(
-                key: const Key('book-reading-double-column'),
-                contentPadding: EdgeInsets.zero,
-                value: settings.value.doubleColumn,
-                onChanged: (value) => settings.value = settings.value.copyWith(
-                  doubleColumn: value,
-                ),
-                title: const Text('宽屏双栏'),
-                subtitle: const Text('分页阅读在宽屏显示双栏，窄屏自动使用单栏。'),
-              ),
-              SwitchListTile(
-                key: const Key('book-reading-tap-to-turn-pages'),
-                contentPadding: EdgeInsets.zero,
-                value: settings.value.tapToTurnPages,
-                onChanged: (value) => settings.value = settings.value.copyWith(
-                  tapToTurnPages: value,
-                ),
-                title: const Text('点击正文翻页'),
-                subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
-              ),
-            ],
-            const SizedBox(height: 12),
-            const Divider(),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '文本前景色',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            const SizedBox(height: 12),
-            SegmentedButton<_BookTextColoringMode>(
-              segments: const [
-                ButtonSegment(
-                  value: _BookTextColoringMode.followGlobal,
-                  label: Text('跟随全局'),
-                ),
-                ButtonSegment(
-                  value: _BookTextColoringMode.enabled,
-                  label: Text('开启'),
-                ),
-                ButtonSegment(
-                  value: _BookTextColoringMode.disabled,
-                  label: Text('关闭'),
-                ),
-              ],
-              selected: {textColoringMode.value},
-              onSelectionChanged: (value) =>
-                  textColoringMode.value = value.first,
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: () => showDialog<void>(
-                  context: context,
-                  builder: (context) => TextColorTermsManagerDialog(
-                    settings: textColoringSettings,
-                    title: '本书文字词条',
-                    bookId: bookId,
-                  ),
-                ),
-                icon: const Icon(Icons.format_color_text_outlined),
-                label: const Text('管理本书词条'),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            _BookSettingsResult(
-              bookOverride: useOverride.value
-                  ? BookReadingOverride(
-                      bookId: bookId,
-                      settings: settings.value,
-                    )
-                  : null,
-              textColoringOverride: switch (textColoringMode.value) {
-                _BookTextColoringMode.followGlobal => null,
-                _BookTextColoringMode.enabled => true,
-                _BookTextColoringMode.disabled => false,
-              },
-            ),
-          ),
-          child: const Text('保存'),
-        ),
-      ],
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../domain/models/library_book.dart';
+import '../../shared/text/book_description_formatter.dart';
 import '../../shared/widgets/book_cover.dart';
 
 class BookDetailsPage extends HookConsumerWidget {
@@ -304,7 +305,7 @@ class _BookDetailsContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final description = book.description?.trim() ?? '';
+    final description = BookDescriptionFormatter.format(book.description);
     final author = book.author.isEmpty ? '未知作者' : book.author;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

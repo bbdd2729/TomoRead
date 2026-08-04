@@ -32,8 +32,10 @@ import 'reader_command_controller.dart';
 import 'reader_command_shortcuts.dart';
 import 'content_search_dialog.dart';
 import 'text_coloring_controller.dart';
+import 'text_coloring_book_dialog.dart';
 import 'text_coloring_text.dart';
 import 'text_coloring_widgets.dart';
+import 'text_reader_drafts.dart';
 import 'tts_controller.dart';
 import 'tts_controls.dart';
 import '../text_import/text_content_controller.dart';
@@ -44,18 +46,6 @@ import '../chat/chat_controller.dart';
 import '../visualization/reader_visualization_dialog.dart';
 
 enum _TextChapterAction { rename, split, mergeNext }
-
-class _PendingTextReaderProgress {
-  const _PendingTextReaderProgress({
-    required this.chapterIndex,
-    required this.progress,
-    required this.locator,
-  });
-
-  final int chapterIndex;
-  final double progress;
-  final String locator;
-}
 
 class TextReaderWorkspace extends HookConsumerWidget {
   const TextReaderWorkspace({
@@ -98,7 +88,7 @@ class TextReaderWorkspace extends HookConsumerWidget {
     final scrollController = useScrollController();
     final currentScrollRatio = useState(0.0);
     final scrollSaveTimer = useRef<Timer?>(null);
-    final pendingScrollProgress = useRef<_PendingTextReaderProgress?>(null);
+    final pendingScrollProgress = useRef<PendingTextReaderProgress?>(null);
     final selectedContext = useState<ReadingContextSelection?>(null);
     final projectionConfigState = ref.watch(
       textProjectionConfigProvider(bookId),
@@ -421,11 +411,19 @@ class TextReaderWorkspace extends HookConsumerWidget {
               ? 0.0
               : rawOffset / current.rawText.length;
           final locator = chapter.locator(start: rawOffset, end: rawOffset);
-          pendingScrollProgress.value = _PendingTextReaderProgress(
+          pendingScrollProgress.value = PendingTextReaderProgress(
             chapterIndex: chapter.ordinal,
             progress: progress,
             locator: locator,
           );
+          ref
+              .read(libraryBooksProvider.notifier)
+              .reportReadingPosition(
+                bookId: bookId,
+                chapterIndex: chapter.ordinal,
+                progress: progress,
+                locator: locator,
+              );
           scrollSaveTimer.value?.cancel();
           scrollSaveTimer.value = Timer(const Duration(milliseconds: 600), () {
             unawaited(persistPendingScrollProgress());
@@ -916,9 +914,9 @@ class TextReaderWorkspace extends HookConsumerWidget {
 
     Future<void> openTextColoringSettings() async {
       autoScrollController.stop(AutoScrollStopReason.dialog);
-      final result = await showDialog<_TextColoringOverrideResult>(
+      final result = await showDialog<TextColoringOverrideResult>(
         context: context,
-        builder: (context) => _TextColoringBookDialog(
+        builder: (context) => TextColoringBookDialog(
           bookId: bookId,
           settings: textColoring.settings,
           bookOverride: textColoringOverride.value,
@@ -1679,124 +1677,4 @@ class TextReaderWorkspace extends HookConsumerWidget {
       child: scaffold,
     );
   }
-}
-
-enum _TextColoringBookMode { followGlobal, enabled, disabled }
-
-class _TextColoringOverrideResult {
-  const _TextColoringOverrideResult(this.value);
-
-  final bool? value;
-}
-
-class _TextColoringBookDialog extends StatefulWidget {
-  const _TextColoringBookDialog({
-    required this.bookId,
-    required this.settings,
-    required this.bookOverride,
-  });
-
-  final String bookId;
-  final TextColoringSettings settings;
-  final bool? bookOverride;
-
-  @override
-  State<_TextColoringBookDialog> createState() =>
-      _TextColoringBookDialogState();
-}
-
-class _TextColoringBookDialogState extends State<_TextColoringBookDialog> {
-  late _TextColoringBookMode _mode = switch (widget.bookOverride) {
-    true => _TextColoringBookMode.enabled,
-    false => _TextColoringBookMode.disabled,
-    null => _TextColoringBookMode.followGlobal,
-  };
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('本书文字前景色'),
-    content: SizedBox(
-      width: 440,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SegmentedButton<_TextColoringBookMode>(
-            segments: const [
-              ButtonSegment(
-                value: _TextColoringBookMode.followGlobal,
-                label: Text('跟随全局'),
-              ),
-              ButtonSegment(
-                value: _TextColoringBookMode.enabled,
-                label: Text('开启'),
-              ),
-              ButtonSegment(
-                value: _TextColoringBookMode.disabled,
-                label: Text('关闭'),
-              ),
-            ],
-            selected: {_mode},
-            onSelectionChanged: (value) => setState(() => _mode = value.first),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            widget.settings.enabled
-                ? '全局文字前景色当前已开启；本书设置可覆盖全局开关。'
-                : '全局文字前景色当前已关闭；可仅为本书开启。',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (context) => TextColorTermsManagerDialog(
-                settings: widget.settings,
-                title: '本书文字词条',
-                bookId: widget.bookId,
-              ),
-            ),
-            icon: const Icon(Icons.format_color_text_outlined),
-            label: const Text('管理本书词条'),
-          ),
-        ],
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
-      ),
-      FilledButton(
-        onPressed: () => Navigator.pop(
-          context,
-          _TextColoringOverrideResult(switch (_mode) {
-            _TextColoringBookMode.followGlobal => null,
-            _TextColoringBookMode.enabled => true,
-            _TextColoringBookMode.disabled => false,
-          }),
-        ),
-        child: const Text('保存'),
-      ),
-    ],
-  );
-}
-
-int _safeSplitOffset(String text) {
-  if (text.length < 2) return text.length;
-  final middle = text.length ~/ 2;
-  final blankAfter = text.indexOf('\n\n', middle);
-  if (blankAfter >= 0 && blankAfter + 2 < text.length) return blankAfter + 2;
-  final lineAfter = text.indexOf('\n', middle);
-  if (lineAfter >= 0 && lineAfter + 1 < text.length) return lineAfter + 1;
-  var offset = middle.clamp(1, text.length - 1).toInt();
-  final previous = text.codeUnitAt(offset - 1);
-  final current = text.codeUnitAt(offset);
-  if (previous >= 0xd800 &&
-      previous <= 0xdbff &&
-      current >= 0xdc00 &&
-      current <= 0xdfff) {
-    offset++;
-  }
-  return offset.clamp(1, text.length - 1).toInt();
 }

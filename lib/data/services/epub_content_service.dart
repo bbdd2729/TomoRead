@@ -20,6 +20,40 @@ class EpubContentException implements Exception {
 class EpubContentService {
   const EpubContentService();
 
+  /// Returns the same normalized reading text used by search and indexing.
+  /// Progress indexing calls this without opening the whole EPUB archive again.
+  String plainTextFromXhtml(String source) {
+    try {
+      return _parseChapter(source, index: 0, href: '').plainText;
+    } catch (_) {
+      // A malformed spine document should not prevent the reader from opening.
+      // Keep a best-effort fallback for its progress weight.
+      return _normalizeText(
+        source
+            .replaceAll(
+              RegExp(
+                r'<script\b[^>]*>.*?</script>',
+                caseSensitive: false,
+                dotAll: true,
+              ),
+              '',
+            )
+            .replaceAll(
+              RegExp(
+                r'<style\b[^>]*>.*?</style>',
+                caseSensitive: false,
+                dotAll: true,
+              ),
+              '',
+            )
+            .replaceAll(RegExp(r'<[^>]+>', dotAll: true), ' '),
+      );
+    }
+  }
+
+  int characterCountFromXhtml(String source) =>
+      plainTextFromXhtml(source).length;
+
   Future<ReaderChapter> loadChapter({
     required LibraryBook book,
     required EpubManifest manifest,

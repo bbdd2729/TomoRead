@@ -23,6 +23,15 @@ void main() {
       expect(metrics.unit, ReadingPositionUnit.progress);
       expect(metrics.label, '全书 40%');
     });
+
+    test('formats a measured whole-book character position', () {
+      final metrics = ReadingPositionMetrics.characterPosition(
+        current: 438,
+        total: 1200,
+      );
+
+      expect(metrics.label, '全文第 438 / 1200 字 · 36%');
+    });
   });
 
   group('ReadingTextPositionIndex', () {

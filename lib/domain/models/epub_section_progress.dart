@@ -11,65 +11,143 @@ class EpubSectionLocation {
 /// Maps a location within an EPUB spine item to a location in the book.
 ///
 /// EPUB pages are reflowed whenever the viewport or reading settings change,
-/// so a stable whole-book page count does not exist. Source sizes provide a
-/// content-weighted locator without forcing every chapter to be paginated.
+/// so a stable whole-book page count does not exist. When available, parsed
+/// chapter character counts provide the stable weighting and make the reader's
+/// whole-book character position meaningful.
 class EpubSectionProgress {
-  const EpubSectionProgress._({required this._sizes, required this._totalSize});
+  const EpubSectionProgress._({
+    required this._weights,
+    required this._totalWeight,
+    required this._characterCounts,
+  });
 
+  /// Legacy source-size weighting retained for old callers and fallbacks.
   factory EpubSectionProgress.fromSizes(List<int> sizes) {
-    final normalized = sizes
-        .map((size) => size > 0 ? size.toDouble() : 0.0)
+    final result = EpubSectionProgress._fromWeights(
+      sizes.map((size) => size > 0 ? size.toDouble() : 0.0).toList(),
+    );
+    return result._totalWeight > 0
+        ? result
+        : EpubSectionProgress.even(sizes.length);
+  }
+
+  factory EpubSectionProgress.fromCharacterCounts(List<int> characterCounts) {
+    final normalized = characterCounts
+        .map((count) => count < 0 ? 0 : count)
         .toList(growable: false);
-    final totalSize = normalized.fold<double>(0, (sum, size) => sum + size);
-    if (totalSize > 0) {
-      return EpubSectionProgress._(sizes: normalized, totalSize: totalSize);
-    }
-    return EpubSectionProgress.even(sizes.length);
+    final result = EpubSectionProgress._fromWeights(
+      normalized.map((count) => count.toDouble()).toList(growable: false),
+      characterCounts: normalized,
+    );
+    return result._totalWeight > 0
+        ? result
+        : EpubSectionProgress.even(normalized.length);
   }
 
   factory EpubSectionProgress.even(int chapterCount) => EpubSectionProgress._(
-    sizes: List<double>.filled(chapterCount, 1),
-    totalSize: chapterCount.toDouble(),
+    weights: List<double>.filled(chapterCount, 1),
+    totalWeight: chapterCount.toDouble(),
+    characterCounts: null,
   );
 
-  final List<double> _sizes;
-  final double _totalSize;
+  factory EpubSectionProgress._fromWeights(
+    List<double> weights, {
+    List<int>? characterCounts,
+  }) {
+    final normalized = weights
+        .map((weight) => weight > 0 ? weight : 0.0)
+        .toList(growable: false);
+    final totalWeight = normalized.fold<double>(
+      0,
+      (sum, weight) => sum + weight,
+    );
+    return EpubSectionProgress._(
+      weights: normalized,
+      totalWeight: totalWeight,
+      characterCounts: characterCounts,
+    );
+  }
 
-  int get chapterCount => _sizes.length;
+  final List<double> _weights;
+  final double _totalWeight;
+  final List<int>? _characterCounts;
 
-  double overallProgress(int chapterIndex, double chapterRatio) {
-    if (_sizes.isEmpty || _totalSize <= 0) return 0;
-    final index = chapterIndex.clamp(0, _sizes.length - 1).toInt();
-    final before = _sizes
+  int get chapterCount => _weights.length;
+
+  int get totalCharacters =>
+      _characterCounts?.fold<int>(0, (sum, count) => sum + count) ?? 0;
+
+  bool get hasCharacterCounts => _characterCounts != null;
+
+  int? characterCountForChapter(int chapterIndex) {
+    final counts = _characterCounts;
+    if (counts == null || counts.isEmpty) return null;
+    return counts[chapterIndex.clamp(0, counts.length - 1).toInt()];
+  }
+
+  int? characterPosition(
+    int chapterIndex,
+    double chapterRatio, {
+    int? chapterCharacterOffset,
+  }) {
+    final counts = _characterCounts;
+    if (counts == null || counts.isEmpty || totalCharacters <= 0) return null;
+    final index = chapterIndex.clamp(0, counts.length - 1).toInt();
+    final before = counts.take(index).fold<int>(0, (sum, count) => sum + count);
+    final count = counts[index];
+    final offset =
+        (chapterCharacterOffset ?? (count * chapterRatio.clamp(0, 1)).round())
+            .clamp(0, count)
+            .toInt();
+    return (before + offset).clamp(0, totalCharacters).toInt();
+  }
+
+  double overallProgress(
+    int chapterIndex,
+    double chapterRatio, {
+    int? chapterCharacterOffset,
+  }) {
+    final characterPosition = this.characterPosition(
+      chapterIndex,
+      chapterRatio,
+      chapterCharacterOffset: chapterCharacterOffset,
+    );
+    if (characterPosition != null && totalCharacters > 0) {
+      return (characterPosition / totalCharacters).clamp(0, 1).toDouble();
+    }
+    if (_weights.isEmpty || _totalWeight <= 0) return 0;
+    final index = chapterIndex.clamp(0, _weights.length - 1).toInt();
+    final before = _weights
         .take(index)
         .fold<double>(0, (sum, size) => sum + size);
-    return ((before + _sizes[index] * chapterRatio.clamp(0, 1)) / _totalSize)
+    return ((before + _weights[index] * chapterRatio.clamp(0, 1)) /
+            _totalWeight)
         .clamp(0, 1)
         .toDouble();
   }
 
   EpubSectionLocation locationForProgress(double progress) {
-    if (_sizes.isEmpty || _totalSize <= 0) {
+    if (_weights.isEmpty || _totalWeight <= 0) {
       return const EpubSectionLocation(chapterIndex: 0, chapterRatio: 0);
     }
     final target = progress.clamp(0, 1).toDouble();
     if (target >= 1) {
-      final lastIndex = _sizes.lastIndexWhere((size) => size > 0);
+      final lastIndex = _weights.lastIndexWhere((size) => size > 0);
       return EpubSectionLocation(
-        chapterIndex: lastIndex < 0 ? _sizes.length - 1 : lastIndex,
+        chapterIndex: lastIndex < 0 ? _weights.length - 1 : lastIndex,
         chapterRatio: 1,
       );
     }
 
     var consumed = 0.0;
-    for (var index = 0; index < _sizes.length; index++) {
-      final size = _sizes[index];
+    for (var index = 0; index < _weights.length; index++) {
+      final size = _weights[index];
       if (size <= 0) continue;
-      final end = consumed + size / _totalSize;
+      final end = consumed + size / _totalWeight;
       if (target < end) {
         return EpubSectionLocation(
           chapterIndex: index,
-          chapterRatio: ((target - consumed) / (size / _totalSize))
+          chapterRatio: ((target - consumed) / (size / _totalWeight))
               .clamp(0, 1)
               .toDouble(),
         );
@@ -78,7 +156,7 @@ class EpubSectionProgress {
     }
 
     return EpubSectionLocation(
-      chapterIndex: _sizes.length - 1,
+      chapterIndex: _weights.length - 1,
       chapterRatio: 1,
     );
   }

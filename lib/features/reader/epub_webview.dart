@@ -26,6 +26,7 @@ class EpubWebView extends HookConsumerWidget {
     required this.href,
     required this.settings,
     required this.textColoring,
+    required this.controlsVisible,
     required this.annotations,
     required this.searchQuery,
     this.ttsHighlightHref,
@@ -58,6 +59,7 @@ class EpubWebView extends HookConsumerWidget {
   final String href;
   final ReadingSettings settings;
   final ResolvedTextColoring textColoring;
+  final bool controlsVisible;
   final List<ReadingAnnotation> annotations;
   final String? searchQuery;
   final String? ttsHighlightHref;
@@ -73,7 +75,14 @@ class EpubWebView extends HookConsumerWidget {
   final ReaderNavigationCommand? navigationCommand;
   final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
-  final void Function(String href, double ratio, String? anchor, String? cfi)
+  final void Function(
+    String href,
+    double ratio,
+    String? anchor,
+    String? cfi,
+    int? chapterCharacterOffset,
+    int? chapterCharacterCount,
+  )
   onScrollPositionChanged;
   final void Function(int pageIndex, int pageCount) onPaginationChanged;
   final VoidCallback onRequestPrevious;
@@ -92,6 +101,7 @@ class EpubWebView extends HookConsumerWidget {
         href: href,
         settings: settings,
         textColoring: textColoring,
+        controlsVisible: controlsVisible,
         annotations: annotations,
         searchQuery: searchQuery,
         ttsHighlightHref: ttsHighlightHref,
@@ -146,7 +156,9 @@ class EpubWebView extends HookConsumerWidget {
       context,
       settings,
       fontFaceCss,
+      controlsVisible,
     );
+    final runtimeControlsScript = _runtimeControlsScript(controlsVisible);
     final runtimeTextColoringScript = _runtimeTextColoringScript(
       context,
       textColoring,
@@ -213,6 +225,7 @@ class EpubWebView extends HookConsumerWidget {
             initialAnchor,
             initialCfi,
             fontFaceCss,
+            controlsVisible,
           ),
         );
       } catch (_) {
@@ -356,6 +369,8 @@ class EpubWebView extends HookConsumerWidget {
                 ratio.toDouble(),
                 anchor is String && anchor.isNotEmpty ? anchor : null,
                 null,
+                null,
+                null,
               );
             }
           } else if (message['type'] == 'pageChanged') {
@@ -371,6 +386,8 @@ class EpubWebView extends HookConsumerWidget {
             final cfi = message['cfi'];
             final pageIndex = message['pageIndex'];
             final pageCount = message['pageCount'];
+            final chapterCharacterOffset = message['chapterCharacterOffset'];
+            final chapterCharacterCount = message['chapterCharacterCount'];
             if (href is String && ratio is num) {
               onScrollPositionChanged(
                 href,
@@ -382,6 +399,12 @@ class EpubWebView extends HookConsumerWidget {
                 ),
                 anchor is String && anchor.isNotEmpty ? anchor : null,
                 cfi is String && cfi.isNotEmpty ? cfi : null,
+                chapterCharacterOffset is num
+                    ? chapterCharacterOffset.toInt()
+                    : null,
+                chapterCharacterCount is num
+                    ? chapterCharacterCount.toInt()
+                    : null,
               );
             }
             if (message['flow'] != 'scrolled' &&
@@ -490,6 +513,15 @@ class EpubWebView extends HookConsumerWidget {
       }
       return null;
     }, [initialized.value, runtimeTextColoringScript, useFoliateRuntime]);
+
+    useEffect(
+      () {
+        if (!initialized.value || !useFoliateRuntime) return null;
+        unawaited(controller.executeScript(runtimeControlsScript));
+        return null;
+      },
+      [controller, initialized.value, runtimeControlsScript, useFoliateRuntime],
+    );
 
     useEffect(
       () {
@@ -972,13 +1004,19 @@ a { color: ${_cssColor(colorScheme.primary)}; }
     String? anchor,
     String? cfi,
     String? fontFaceCss,
+    bool controlsVisible,
   ) {
     final payload = jsonEncode({
       'href': href,
       'ratio': ratio.clamp(0, 1),
       'anchor': anchor,
       'cfi': cfi,
-      'settings': _runtimeSettings(context, settings, fontFaceCss),
+      'settings': _runtimeSettings(
+        context,
+        settings,
+        fontFaceCss,
+        controlsVisible,
+      ),
     });
     return _runtimeCall(
       "runtime.command({ id: 0, type: 'open', payload: $payload })",
@@ -989,9 +1027,13 @@ a { color: ${_cssColor(colorScheme.primary)}; }
     BuildContext context,
     ReadingSettings settings,
     String? fontFaceCss,
+    bool controlsVisible,
   ) => _runtimeCall(
-    "runtime.command({ type: 'setSettings', payload: { settings: ${jsonEncode(_runtimeSettings(context, settings, fontFaceCss))} } })",
+    "runtime.command({ type: 'setSettings', payload: { settings: ${jsonEncode(_runtimeSettings(context, settings, fontFaceCss, controlsVisible))} } })",
   );
+
+  String _runtimeControlsScript(bool visible) =>
+      _runtimeCall('runtime.setControlsVisible($visible)');
 
   String _runtimeTextColoringScript(
     BuildContext context,
@@ -1076,6 +1118,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
     BuildContext context,
     ReadingSettings settings, [
     String? fontFaceCss,
+    bool controlsVisible = false,
   ]) {
     final scheme = Theme.of(context).colorScheme;
     return {
@@ -1091,6 +1134,7 @@ a { color: ${_cssColor(colorScheme.primary)}; }
       'lineHeight': settings.lineHeight,
       'pageTransition': settings.pageTransition.name,
       'tapNavigationEnabled': settings.tapToTurnPages,
+      'controlsVisible': controlsVisible,
       'foreground': _cssColor(scheme.onSurface),
       'background': _cssColor(scheme.surface),
       'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr',

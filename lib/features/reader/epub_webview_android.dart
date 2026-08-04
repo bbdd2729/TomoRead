@@ -29,6 +29,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     required this.href,
     required this.settings,
     required this.textColoring,
+    required this.controlsVisible,
     required this.annotations,
     required this.searchQuery,
     this.ttsHighlightHref,
@@ -58,6 +59,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final String href;
   final ReadingSettings settings;
   final ResolvedTextColoring textColoring;
+  final bool controlsVisible;
   final List<ReadingAnnotation> annotations;
   final String? searchQuery;
   final String? ttsHighlightHref;
@@ -72,7 +74,14 @@ class AndroidEpubWebView extends HookConsumerWidget {
   final ReaderNavigationCommand? navigationCommand;
   final int restoreRevision;
   final ValueChanged<String> onNavigateToHref;
-  final void Function(String href, double ratio, String? anchor, String? cfi)
+  final void Function(
+    String href,
+    double ratio,
+    String? anchor,
+    String? cfi,
+    int? chapterCharacterOffset,
+    int? chapterCharacterCount,
+  )
   onScrollPositionChanged;
   final void Function(int pageIndex, int pageCount) onPaginationChanged;
   final VoidCallback onRequestPrevious;
@@ -96,7 +105,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
       context,
       settings,
       fontFaceCss,
+      controlsVisible,
     );
+    final runtimeControlsScript = _runtimeControlsScript(controlsVisible);
     final runtimeTextColoringScript = _runtimeTextColoringScript(
       context,
       textColoring,
@@ -123,6 +134,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
             initialCfi,
             epubManifest.value!,
             fontFaceCss,
+            controlsVisible,
           );
     final runtimeScriptRef = useRef<String?>(runtimeScript);
     runtimeScriptRef.value = runtimeScript;
@@ -273,6 +285,21 @@ class AndroidEpubWebView extends HookConsumerWidget {
       }
       return null;
     }, [controller.value, runtimeSettingsScript, loadPhase.value]);
+
+    useEffect(() {
+      final webViewController = controller.value;
+      if (loadPhase.value == _AndroidEpubLoadPhase.ready &&
+          webViewController != null) {
+        unawaited(
+          _runJavaScript(
+            webViewController,
+            runtimeControlsScript,
+            onError: reportFailure,
+          ),
+        );
+      }
+      return null;
+    }, [controller.value, runtimeControlsScript, loadPhase.value]);
 
     useEffect(() {
       final webViewController = controller.value;
@@ -575,6 +602,8 @@ class AndroidEpubWebView extends HookConsumerWidget {
       final ratio = runtimeMessage['ratio'];
       final pageIndex = runtimeMessage['pageIndex'];
       final pageCount = runtimeMessage['pageCount'];
+      final chapterCharacterOffset = runtimeMessage['chapterCharacterOffset'];
+      final chapterCharacterCount = runtimeMessage['chapterCharacterCount'];
       if (messageHref is String && ratio is num) {
         onScrollPositionChanged(
           messageHref,
@@ -586,6 +615,8 @@ class AndroidEpubWebView extends HookConsumerWidget {
           ),
           runtimeMessage['anchor'] as String?,
           runtimeMessage['cfi'] as String?,
+          chapterCharacterOffset is num ? chapterCharacterOffset.toInt() : null,
+          chapterCharacterCount is num ? chapterCharacterCount.toInt() : null,
         );
       }
       if (runtimeMessage['flow'] != 'scrolled' &&
@@ -703,7 +734,9 @@ class AndroidEpubWebView extends HookConsumerWidget {
       case 'scroll':
         if (parts.length < 2) return;
         final ratio = double.tryParse(parts[1]);
-        if (ratio != null) onScrollPositionChanged(href, ratio, null, null);
+        if (ratio != null) {
+          onScrollPositionChanged(href, ratio, null, null, null, null);
+        }
       case 'tap':
         onToggleControls();
     }
@@ -718,6 +751,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     String? cfi,
     EpubManifest manifest,
     String? fontFaceCss,
+    bool controlsVisible,
   ) {
     final scheme = Theme.of(context).colorScheme;
     final payload = jsonEncode({
@@ -747,6 +781,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
         'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr',
         'pageTransition': settings.pageTransition.name,
         'tapNavigationEnabled': settings.tapToTurnPages,
+        'controlsVisible': controlsVisible,
       },
     });
     return '''(() => {
@@ -783,6 +818,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     BuildContext context,
     ReadingSettings settings,
     String? fontFaceCss,
+    bool controlsVisible,
   ) {
     final scheme = Theme.of(context).colorScheme;
     return '''(() => {
@@ -790,11 +826,14 @@ class AndroidEpubWebView extends HookConsumerWidget {
       if (runtime) void runtime.command(${jsonEncode({
       'type': 'setSettings',
       'payload': {
-        'settings': {'flow': settings.layoutMode == ReaderLayoutMode.paginated ? 'paginated' : 'scrolled', 'columnCount': settings.doubleColumn ? 2 : 1, 'maxInlineSize': 760, 'margin': settings.pageMargin, 'fontFamily': settings.font.fontFamily, 'fontFaceCss': fontFaceCss, 'fontSize': settings.fontSize, 'lineHeight': settings.lineHeight, 'foreground': _cssColor(scheme.onSurface), 'background': _cssColor(scheme.surface), 'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr', 'pageTransition': settings.pageTransition.name, 'tapNavigationEnabled': settings.tapToTurnPages},
+        'settings': {'flow': settings.layoutMode == ReaderLayoutMode.paginated ? 'paginated' : 'scrolled', 'columnCount': settings.doubleColumn ? 2 : 1, 'maxInlineSize': 760, 'margin': settings.pageMargin, 'fontFamily': settings.font.fontFamily, 'fontFaceCss': fontFaceCss, 'fontSize': settings.fontSize, 'lineHeight': settings.lineHeight, 'foreground': _cssColor(scheme.onSurface), 'background': _cssColor(scheme.surface), 'direction': direction == ReadingDirection.rtl ? 'rtl' : 'ltr', 'pageTransition': settings.pageTransition.name, 'tapNavigationEnabled': settings.tapToTurnPages, 'controlsVisible': controlsVisible},
       },
     })});
     })();''';
   }
+
+  String _runtimeControlsScript(bool visible) =>
+      _runtimeCall('runtime.setControlsVisible($visible)');
 
   String _runtimeTextColoringScript(
     BuildContext context,

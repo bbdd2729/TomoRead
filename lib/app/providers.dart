@@ -572,10 +572,38 @@ class LibraryBooksNotifier extends AsyncNotifier<List<LibraryBook>> {
   Future<List<LibraryBook>> build() =>
       ref.watch(bookRepositoryProvider).listBooks();
 
-  /// Persists a reader position and immediately reflects it in the library
-  /// cache. Reader-specific providers deliberately remain untouched here:
-  /// invalidating the active reader book would make a renderer restore its
-  /// position while the user is still reading.
+  /// Reflects a reader position immediately in the library cache.
+  ///
+  /// This deliberately does not invalidate reader-specific providers: doing
+  /// so would make an active renderer restore itself while the user is still
+  /// reading. Durable writes can remain debounced by individual renderers.
+  void reportReadingPosition({
+    required String bookId,
+    required int chapterIndex,
+    required double progress,
+    String? locator,
+  }) {
+    final books = state.value;
+    if (books == null) return;
+    final index = books.indexWhere((book) => book.id == bookId);
+    if (index < 0) return;
+    final normalizedProgress = progress.clamp(0, 1).toDouble();
+    final normalizedChapterIndex = chapterIndex < 0 ? 0 : chapterIndex;
+    final updated = books[index].copyWith(
+      chapterIndex: normalizedChapterIndex,
+      progress: normalizedProgress,
+      locator: locator,
+      clearLocator: locator == null,
+      updatedAt: DateTime.now(),
+    );
+    state = AsyncData([
+      for (var itemIndex = 0; itemIndex < books.length; itemIndex++)
+        itemIndex == index ? updated : books[itemIndex],
+    ]);
+  }
+
+  /// Persists a reader position after it has been reflected in the library
+  /// cache. Reader-specific providers deliberately remain untouched here.
   Future<void> updateReadingPosition({
     required String bookId,
     required int chapterIndex,
@@ -584,6 +612,13 @@ class LibraryBooksNotifier extends AsyncNotifier<List<LibraryBook>> {
   }) {
     final normalizedProgress = progress.clamp(0, 1).toDouble();
     final normalizedChapterIndex = chapterIndex < 0 ? 0 : chapterIndex;
+    final hadCachedBook = state.value?.any((book) => book.id == bookId) == true;
+    reportReadingPosition(
+      bookId: bookId,
+      chapterIndex: normalizedChapterIndex,
+      progress: normalizedProgress,
+      locator: locator,
+    );
     final write = _readingPositionWriteTail.then((_) async {
       await ref
           .read(bookRepositoryProvider)
@@ -594,27 +629,9 @@ class LibraryBooksNotifier extends AsyncNotifier<List<LibraryBook>> {
             locator: locator,
           );
 
-      final books = state.value;
-      if (books == null) {
+      if (!hadCachedBook) {
         ref.invalidateSelf();
-        return;
       }
-      final index = books.indexWhere((book) => book.id == bookId);
-      if (index < 0) {
-        ref.invalidateSelf();
-        return;
-      }
-      final updated = books[index].copyWith(
-        chapterIndex: normalizedChapterIndex,
-        progress: normalizedProgress,
-        locator: locator,
-        clearLocator: locator == null,
-        updatedAt: DateTime.now(),
-      );
-      state = AsyncData([
-        for (var itemIndex = 0; itemIndex < books.length; itemIndex++)
-          itemIndex == index ? updated : books[itemIndex],
-      ]);
     });
     _readingPositionWriteTail = write.catchError((_) {});
     return write;

@@ -46,6 +46,24 @@ class ReadingPositionMetrics {
     );
   }
 
+  factory ReadingPositionMetrics.characterPosition({
+    required int current,
+    required int total,
+    bool isApproximate = false,
+  }) {
+    final normalizedTotal = total < 0 ? 0 : total;
+    final normalizedCurrent = _normalizeCurrent(current, normalizedTotal);
+    return ReadingPositionMetrics(
+      progress: normalizedTotal == 0 ? 0 : normalizedCurrent / normalizedTotal,
+      unit: normalizedTotal == 0
+          ? ReadingPositionUnit.progress
+          : ReadingPositionUnit.character,
+      current: normalizedCurrent,
+      total: normalizedTotal,
+      isApproximate: isApproximate,
+    );
+  }
+
   factory ReadingPositionMetrics.progressOnly(double progress) =>
       ReadingPositionMetrics(
         progress: _normalizeProgress(progress),
@@ -108,11 +126,7 @@ class ReadingTextPositionIndex {
 
   ReadingPositionMetrics metricsForOffset(int rawOffset) {
     if (textLength == 0) {
-      return ReadingPositionMetrics.lines(
-        current: 0,
-        total: 0,
-        progress: 0,
-      );
+      return ReadingPositionMetrics.lines(current: 0, total: 0, progress: 0);
     }
     final offset = rawOffset.clamp(0, textLength).toInt();
     var low = 0;

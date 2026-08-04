@@ -16,12 +16,15 @@ let ttsHighlight
 let textColoring = { enabled: false, tokens: [], colors: {}, terms: [] }
 let pageTransition = 'slide'
 let tapNavigationEnabled = false
+let readerControlsVisible = false
 let readingDirection = 'ltr'
 let turnLocked = false
 let currentSectionIndex = 0
 let currentRatio = 0
 let currentPageIndex = 0
 let currentPageCount = 1
+let currentChapterCharacterOffset
+let currentChapterCharacterCount
 let measuredRelocationRevision = 0
 let commandTail = Promise.resolve()
 let nextCommandId = 1
@@ -189,6 +192,7 @@ const applySettings = settings => {
   if (!paginator) return
   pageTransition = settings.pageTransition ?? 'slide'
   tapNavigationEnabled = settings.tapNavigationEnabled === true
+  setControlsVisible(settings.controlsVisible === true)
   readingDirection = settings.direction === 'rtl' ? 'rtl' : 'ltr'
   paginator.setAttribute('flow', settings.flow ?? 'paginated')
   if (paginator.getAttribute('flow') !== 'scrolled') {
@@ -306,6 +310,39 @@ const rangeForOffsets = (doc, startOffset, endOffset) => {
   range.setStart(...start)
   range.setEnd(...end)
   return range
+}
+
+const normalizeReaderText = text => String(text ?? '')
+  .replace(/\s+/g, ' ')
+  .replace(/\u00a0/g, ' ')
+  .trim()
+
+// Foliate reports a precise DOM Range for normal relocations. Its start is a
+// stable text position, unlike a visual page fraction that changes with font
+// and viewport settings.
+const chapterCharacterPositionForRange = range => {
+  const doc = range?.startContainer?.ownerDocument
+  const root = doc?.body ?? doc?.documentElement
+  if (!doc || !root) return null
+  try {
+    const before = doc.createRange()
+    before.selectNodeContents(root)
+    before.setEnd(range.startContainer, range.startOffset)
+    return {
+      offset: normalizeReaderText(before.toString()).length,
+      count: normalizeReaderText(root.textContent).length,
+    }
+  } catch {
+    return null
+  }
+}
+
+// The Flutter chrome overlays the WebView instead of resizing it. While it is
+// visible, keep content gestures available for selection but do not let a
+// swipe or a left/right tap turn a page underneath the controls.
+const setControlsVisible = visible => {
+  readerControlsVisible = visible === true
+  paginator?.toggleAttribute('no-swipe', readerControlsVisible)
 }
 
 // EPUB spine documents are allowed to omit a <head> element. Chromium keeps
@@ -647,6 +684,7 @@ const applySelectionListener = (doc, index) => {
 const emitRelocation = detail => {
   const section = getSections()[detail.index]
   if (!section || !paginator) return
+  const sectionChanged = currentSectionIndex !== detail.index
   measuredRelocationRevision += 1
   currentSectionIndex = detail.index
   const flow = paginator.getAttribute('flow') ?? 'paginated'
@@ -658,6 +696,19 @@ const emitRelocation = detail => {
     chapterIndex: detail.index,
     anchor: nearestAnchor(detail.range),
     cfi: cfiFor(detail.range),
+  }
+  const characterPosition = chapterCharacterPositionForRange(detail.range)
+  if (characterPosition) {
+    currentChapterCharacterOffset = characterPosition.offset
+    currentChapterCharacterCount = characterPosition.count
+  } else if (sectionChanged) {
+    currentChapterCharacterOffset = undefined
+    currentChapterCharacterCount = undefined
+  }
+  if (Number.isInteger(currentChapterCharacterOffset)
+      && Number.isInteger(currentChapterCharacterCount)) {
+    message.chapterCharacterOffset = currentChapterCharacterOffset
+    message.chapterCharacterCount = currentChapterCharacterCount
   }
   if (flow !== 'scrolled') {
     const fallbackPageCount = Math.max(
@@ -698,6 +749,13 @@ const emitPagePosition = detail => {
     cfi: null,
     pageIndex: currentPageIndex,
     pageCount: currentPageCount,
+    ...(Number.isInteger(currentChapterCharacterOffset)
+      && Number.isInteger(currentChapterCharacterCount)
+      ? {
+          chapterCharacterOffset: currentChapterCharacterOffset,
+          chapterCharacterCount: currentChapterCharacterCount,
+        }
+      : {}),
   })
 }
 
@@ -1156,6 +1214,10 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
       return
     }
     if (doc.getSelection()?.toString().trim()) return
+    if (readerControlsVisible) {
+      postMessage({ type: 'readerControls' })
+      return
+    }
     const readerRect = paginator?.getBoundingClientRect()
     const frameRect = doc.defaultView?.frameElement?.getBoundingClientRect()
     const viewportX = (frameRect?.left ?? readerRect?.left ?? 0) + event.clientX
@@ -1438,6 +1500,7 @@ window.TomoReadEpubRuntime = Object.freeze({
   setTtsHighlight,
   setTextColoring,
   setSettings: applySettings,
+  setControlsVisible,
   postMessage,
 })
 

@@ -27,4 +27,16 @@ void main() {
     expect(location.chapterIndex, 1);
     expect(location.chapterRatio, closeTo(0.5, 0.00001));
   });
+
+  test('uses parsed character counts for whole-book locations', () {
+    final progress = EpubSectionProgress.fromCharacterCounts([10, 30, 60]);
+
+    expect(progress.totalCharacters, 100);
+    expect(progress.overallProgress(1, .5), closeTo(.25, .00001));
+    expect(progress.characterPosition(1, .5), 25);
+    expect(
+      progress.overallProgress(1, .5, chapterCharacterOffset: 24),
+      closeTo(.34, .00001),
+    );
+  });
 }
