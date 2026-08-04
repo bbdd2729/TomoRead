@@ -17,6 +17,7 @@ let textColoring = { enabled: false, tokens: [], colors: {}, terms: [] }
 let pageTransition = 'slide'
 let tapNavigationEnabled = false
 let readerControlsVisible = false
+let selectionGestureLocked = false
 let readingDirection = 'ltr'
 let turnLocked = false
 let currentSectionIndex = 0
@@ -339,10 +340,28 @@ const chapterCharacterPositionForRange = range => {
 
 // The Flutter chrome overlays the WebView instead of resizing it. While it is
 // visible, keep content gestures available for selection but do not let a
-// swipe or a left/right tap turn a page underneath the controls.
+// swipe or a left/right tap turn a page underneath the controls. Android
+// exposes a text selection only after its long-press gesture has begun, so
+// selectionGestureLocked also prevents Foliate from consuming a handle drag
+// before the WebView updates document.getSelection().
+const updatePaginatorGestureLock = () => {
+  if (!paginator) return
+  paginator.toggleAttribute(
+    'no-swipe',
+    readerControlsVisible || selectionGestureLocked,
+  )
+  paginator.navigationLocked = selectionGestureLocked
+}
+
+const setSelectionGestureLocked = locked => {
+  if (selectionGestureLocked === locked) return
+  selectionGestureLocked = locked === true
+  updatePaginatorGestureLock()
+}
+
 const setControlsVisible = visible => {
   readerControlsVisible = visible === true
-  paginator?.toggleAttribute('no-swipe', readerControlsVisible)
+  updatePaginatorGestureLock()
 }
 
 // EPUB spine documents are allowed to omit a <head> element. Chromium keeps
@@ -663,20 +682,87 @@ const applySelectionListener = (doc, index) => {
   if (doc.__tomoReadSelectionBridge) return
   doc.__tomoReadSelectionBridge = true
   let pending = false
+  let longPressTimer
+  let unlockTimer
+  let touchStart
+
+  const clearLongPress = () => {
+    window.clearTimeout(longPressTimer)
+    longPressTimer = undefined
+    touchStart = undefined
+  }
+
+  const releaseSelectionGestureWhenCollapsed = () => {
+    window.clearTimeout(unlockTimer)
+    unlockTimer = window.setTimeout(() => {
+      if (!readSelection(doc, index)) setSelectionGestureLocked(false)
+    }, 120)
+  }
+
   const reportSelection = () => {
     if (pending) return
     pending = true
     window.setTimeout(() => {
       pending = false
       const selection = readSelection(doc, index)
-      if (selection) postMessage({ type: 'textSelection', ...selection })
+      if (selection) {
+        setSelectionGestureLocked(true)
+        postMessage({ type: 'textSelection', ...selection })
+      } else {
+        releaseSelectionGestureWhenCollapsed()
+      }
     }, 80)
   }
+
+  const beginLongPressSelection = event => {
+    if (event.touches?.length !== 1) {
+      clearLongPress()
+      return
+    }
+    if (readSelection(doc, index)) {
+      setSelectionGestureLocked(true)
+      return
+    }
+    const touch = event.touches[0]
+    touchStart = { x: touch.clientX, y: touch.clientY }
+    window.clearTimeout(longPressTimer)
+    longPressTimer = window.setTimeout(() => {
+      longPressTimer = undefined
+      // Native Android selection handles are activated after a long press.
+      // Lock before the first handle move, when Selection is still collapsed.
+      setSelectionGestureLocked(true)
+    }, 320)
+  }
+
+  const cancelLongPressForMove = event => {
+    if (!touchStart || longPressTimer == null) return
+    const touch = event.touches?.[0]
+    if (!touch) return
+    if (Math.hypot(touch.clientX - touchStart.x, touch.clientY - touchStart.y) > 10) {
+      clearLongPress()
+    }
+  }
+
+  const finishTouchSelection = () => {
+    clearLongPress()
+    window.setTimeout(() => {
+      if (readSelection(doc, index)) {
+        setSelectionGestureLocked(true)
+      } else {
+        releaseSelectionGestureWhenCollapsed()
+      }
+    }, 80)
+  }
+
   doc.addEventListener('selectionchange', reportSelection)
   // Some embedded WebView implementations do not consistently forward
   // selectionchange from sandboxed EPUB iframes. These end-of-selection
   // signals provide the same payload after mouse, touch, or keyboard input.
   doc.addEventListener('pointerup', reportSelection)
+  doc.addEventListener('touchstart', beginLongPressSelection, { passive: true })
+  doc.addEventListener('touchmove', cancelLongPressForMove, { passive: true })
+  doc.addEventListener('touchend', finishTouchSelection, { passive: true })
+  doc.addEventListener('touchcancel', finishTouchSelection, { passive: true })
   doc.addEventListener('touchend', reportSelection, { passive: true })
   doc.addEventListener('keyup', reportSelection)
 }
