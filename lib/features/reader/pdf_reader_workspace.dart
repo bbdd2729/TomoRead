@@ -167,14 +167,9 @@ class PdfReaderWorkspace extends HookConsumerWidget {
         final usesOverflowActions = chromeLayout.usesOverflowActions(
           MediaQuery.sizeOf(context).width,
         );
-        final viewPadding = MediaQuery.viewPaddingOf(context);
         final pageLabel = pageCount > 0
             ? '第 $displayedPage 页 / $pageCount 页'
             : '正在读取页数';
-        final topContentInset =
-            viewPadding.top + (chromeLayout.isCompact ? kToolbarHeight : 64);
-        final bottomContentInset =
-            viewPadding.bottom + (chromeLayout.isExpanded ? 72 : 56);
         final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
         final currentLocator = PdfDocumentLocator(
           pageNumber: displayedPage,
@@ -675,56 +670,46 @@ class PdfReaderWorkspace extends HookConsumerWidget {
         return Stack(
           children: [
             Positioned.fill(
-              child: AnimatedPadding(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                padding: controlsVisible.value
-                    ? EdgeInsets.only(
-                        top: topContentInset,
-                        bottom: bottomContentInset,
-                      )
-                    : EdgeInsets.zero,
-                child: ReaderContentTapDetector(
-                  onTap: toggleControls,
-                  child: PdfViewer.file(
-                    book.filePath,
-                    controller: viewerController,
-                    initialPageNumber: initialPage,
-                    params: PdfViewerParams(
-                      onPageChanged: savePage,
-                      onViewerReady: (_, controller) {
-                        if (textSearcher.value == null) {
-                          textSearcher.value = PdfTextSearcher(controller);
-                        }
-                        if (pdfDocument.value == null) {
-                          pdfDocument.value = controller.document;
-                          loadOutline(controller.document);
-                        }
-                        final locator = PdfDocumentLocator.tryParse(
-                          book.locator,
+              // The PDF canvas keeps its full viewport; controls are a
+              // foreground layer so toggling them cannot rescale pages.
+              child: ReaderContentTapDetector(
+                onTap: toggleControls,
+                child: PdfViewer.file(
+                  book.filePath,
+                  controller: viewerController,
+                  initialPageNumber: initialPage,
+                  params: PdfViewerParams(
+                    onPageChanged: savePage,
+                    onViewerReady: (_, controller) {
+                      if (textSearcher.value == null) {
+                        textSearcher.value = PdfTextSearcher(controller);
+                      }
+                      if (pdfDocument.value == null) {
+                        pdfDocument.value = controller.document;
+                        loadOutline(controller.document);
+                      }
+                      final locator = PdfDocumentLocator.tryParse(book.locator);
+                      if (locator?.precision ==
+                          DocumentLocatorPrecision.exact) {
+                        pendingNavigationLocator.value = locator;
+                        unawaited(
+                          navigateToLocator(
+                            controller.document,
+                            locator!,
+                            showFailure: false,
+                          ),
                         );
-                        if (locator?.precision ==
-                            DocumentLocatorPrecision.exact) {
-                          pendingNavigationLocator.value = locator;
-                          unawaited(
-                            navigateToLocator(
-                              controller.document,
-                              locator!,
-                              showFailure: false,
-                            ),
-                          );
-                        }
-                      },
-                      textSelectionParams: const PdfTextSelectionParams(
-                        enabled: true,
-                      ),
-                      customizeContextMenuItems: customizeSelectionMenu,
-                      pagePaintCallbacks: [
-                        if (textSearcher.value != null)
-                          textSearcher.value!.pageTextMatchPaintCallback,
-                        paintAnnotations,
-                      ],
+                      }
+                    },
+                    textSelectionParams: const PdfTextSelectionParams(
+                      enabled: true,
                     ),
+                    customizeContextMenuItems: customizeSelectionMenu,
+                    pagePaintCallbacks: [
+                      if (textSearcher.value != null)
+                        textSearcher.value!.pageTextMatchPaintCallback,
+                      paintAnnotations,
+                    ],
                   ),
                 ),
               ),

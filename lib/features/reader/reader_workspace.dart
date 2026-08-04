@@ -1195,131 +1195,122 @@ class ReaderWorkspace extends HookConsumerWidget {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: AnimatedPadding(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOutCubic,
-                        padding: controlsVisible.value
-                            ? EdgeInsets.only(
-                                top: toolbarHeight,
-                                bottom: footerHeight,
-                              )
-                            : EdgeInsets.zero,
-                        child: isLoading
-                            ? ReaderContentTapDetector(
-                                key: const Key('reader-content'),
-                                onTap: toggleControls,
-                                child: const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
-                            : _ReaderArticle(
-                                settings: settings,
-                                textColoring: textColoring,
-                                chapter: chapter.value,
-                                error: chapter.error,
-                                bookId: readerBook.value == null
-                                    ? null
-                                    : bookId,
-                                initialScrollRatio: scrollRatio.value,
-                                initialAnchor: activeAnchor.value,
-                                initialCfi: activeCfi.value,
-                                direction:
-                                    manifest.value?.direction ??
-                                    ReadingDirection.ltr,
-                                navigationCommand: navigationCommand.value,
-                                annotations: annotations,
-                                searchQuery: searchQuery.value,
-                                focusedAnnotationId: focusedAnnotationId.value,
-                                ttsSegment:
-                                    ttsState.status ==
-                                            TtsPlaybackStatus.playing ||
-                                        ttsState.status ==
-                                            TtsPlaybackStatus.paused
-                                    ? ttsState.currentSegment
-                                    : null,
-                                annotationFocusRevision:
-                                    annotationFocusRevision.value,
-                                restoreRevision: restoreRevision.value,
-                                onNavigateToHref: navigateToHref,
-                                onScrollPositionChanged:
-                                    (href, ratio, anchor, cfi) {
-                                      runtimeController.reportRelocation();
-                                      final currentManifest = manifest.value;
-                                      final relocatedIndex =
-                                          currentManifest == null
-                                          ? null
-                                          : epubSpineIndexForHref(
-                                              currentManifest,
-                                              href,
-                                            );
-                                      if (relocatedIndex == null) {
-                                        return;
-                                      }
-                                      final clampedRatio = ratio
-                                          .clamp(0, 1)
-                                          .toDouble();
-                                      chapterIndex.value = relocatedIndex;
-                                      scrollRatio.value = clampedRatio;
-                                      activeAnchor.value = anchor;
-                                      activeCfi.value = cfi;
-                                      scheduleProgressWrite(
-                                        index: relocatedIndex,
-                                        chapterRatio: clampedRatio,
-                                        anchor: anchor,
-                                        cfi: cfi,
-                                      );
-                                      activityTracker.recordInteraction(
-                                        ReaderPosition(
-                                          progress: sectionProgress
-                                              .overallProgress(
-                                                relocatedIndex,
-                                                clampedRatio,
-                                              ),
-                                          locator: EpubLocation(
-                                            chapterIndex: relocatedIndex,
-                                            scrollRatio: clampedRatio,
-                                            anchor: anchor,
-                                            cfi: cfi,
-                                          ).toLocator(),
-                                        ),
-                                        isPaginated
-                                            ? ReadingInteraction.pageTurn
-                                            : ReadingInteraction.scroll,
-                                      );
-                                    },
-                                onPaginationChanged: (index, count) {
-                                  pageIndex.value = index;
-                                  pageCount.value = count;
-                                },
-                                onRequestPrevious: goToPrevious,
-                                onRequestNext: goToNext,
-                                onNavigationCommandFinished: (id) {
-                                  if (navigationCommand.value?.id == id) {
-                                    navigationCommand.value = null;
-                                  }
-                                },
-                                onAutoScrollChanged: (active) {
-                                  autoScrollActive.value = active;
-                                },
-                                onTextSelectionChanged: (selection) {
-                                  selectedText.value = selection;
-                                  activityTracker.recordInteraction(
-                                    ReaderPosition(
-                                      progress: sectionProgress.overallProgress(
-                                        activeChapterIndex,
-                                        scrollRatio.value,
-                                      ),
-                                      locator: currentLocator,
-                                    ),
-                                    ReadingInteraction.selection,
-                                  );
-                                },
-                                onSelectionContextMenu: (menu) {
-                                  unawaited(openSelectionContextMenu(menu));
-                                },
-                                onToggleControls: toggleControls,
+                      // Keep the EPUB viewport stable while reader controls
+                      // slide over it. Resizing the WebView here causes the
+                      // section to reflow and visibly jumps the reading spot.
+                      child: isLoading
+                          ? ReaderContentTapDetector(
+                              key: const Key('reader-content'),
+                              onTap: toggleControls,
+                              child: const Center(
+                                child: CircularProgressIndicator(),
                               ),
-                      ),
+                            )
+                          : _ReaderArticle(
+                              settings: settings,
+                              textColoring: textColoring,
+                              chapter: chapter.value,
+                              error: chapter.error,
+                              bookId: readerBook.value == null ? null : bookId,
+                              initialScrollRatio: scrollRatio.value,
+                              initialAnchor: activeAnchor.value,
+                              initialCfi: activeCfi.value,
+                              direction:
+                                  manifest.value?.direction ??
+                                  ReadingDirection.ltr,
+                              navigationCommand: navigationCommand.value,
+                              annotations: annotations,
+                              searchQuery: searchQuery.value,
+                              focusedAnnotationId: focusedAnnotationId.value,
+                              ttsSegment:
+                                  ttsState.status ==
+                                          TtsPlaybackStatus.playing ||
+                                      ttsState.status ==
+                                          TtsPlaybackStatus.paused
+                                  ? ttsState.currentSegment
+                                  : null,
+                              annotationFocusRevision:
+                                  annotationFocusRevision.value,
+                              restoreRevision: restoreRevision.value,
+                              onNavigateToHref: navigateToHref,
+                              onScrollPositionChanged:
+                                  (href, ratio, anchor, cfi) {
+                                    runtimeController.reportRelocation();
+                                    final currentManifest = manifest.value;
+                                    final relocatedIndex =
+                                        currentManifest == null
+                                        ? null
+                                        : epubSpineIndexForHref(
+                                            currentManifest,
+                                            href,
+                                          );
+                                    if (relocatedIndex == null) {
+                                      return;
+                                    }
+                                    final clampedRatio = ratio
+                                        .clamp(0, 1)
+                                        .toDouble();
+                                    chapterIndex.value = relocatedIndex;
+                                    scrollRatio.value = clampedRatio;
+                                    activeAnchor.value = anchor;
+                                    activeCfi.value = cfi;
+                                    scheduleProgressWrite(
+                                      index: relocatedIndex,
+                                      chapterRatio: clampedRatio,
+                                      anchor: anchor,
+                                      cfi: cfi,
+                                    );
+                                    activityTracker.recordInteraction(
+                                      ReaderPosition(
+                                        progress: sectionProgress
+                                            .overallProgress(
+                                              relocatedIndex,
+                                              clampedRatio,
+                                            ),
+                                        locator: EpubLocation(
+                                          chapterIndex: relocatedIndex,
+                                          scrollRatio: clampedRatio,
+                                          anchor: anchor,
+                                          cfi: cfi,
+                                        ).toLocator(),
+                                      ),
+                                      isPaginated
+                                          ? ReadingInteraction.pageTurn
+                                          : ReadingInteraction.scroll,
+                                    );
+                                  },
+                              onPaginationChanged: (index, count) {
+                                pageIndex.value = index;
+                                pageCount.value = count;
+                              },
+                              onRequestPrevious: goToPrevious,
+                              onRequestNext: goToNext,
+                              onNavigationCommandFinished: (id) {
+                                if (navigationCommand.value?.id == id) {
+                                  navigationCommand.value = null;
+                                }
+                              },
+                              onAutoScrollChanged: (active) {
+                                autoScrollActive.value = active;
+                              },
+                              onTextSelectionChanged: (selection) {
+                                selectedText.value = selection;
+                                activityTracker.recordInteraction(
+                                  ReaderPosition(
+                                    progress: sectionProgress.overallProgress(
+                                      activeChapterIndex,
+                                      scrollRatio.value,
+                                    ),
+                                    locator: currentLocator,
+                                  ),
+                                  ReadingInteraction.selection,
+                                );
+                              },
+                              onSelectionContextMenu: (menu) {
+                                unawaited(openSelectionContextMenu(menu));
+                              },
+                              onToggleControls: toggleControls,
+                            ),
                     ),
                     if (showToc)
                       Positioned(

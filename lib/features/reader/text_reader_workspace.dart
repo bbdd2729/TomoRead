@@ -1251,6 +1251,9 @@ class TextReaderWorkspace extends HookConsumerWidget {
       // Note dialogs move above the IME; the text viewport must keep its
       // original height so a keyboard does not rebuild the entire chapter.
       resizeToAvoidBottomInset: false,
+      // Reader chrome intentionally overlays the text viewport. This keeps
+      // the visible line and scroll position stable while controls toggle.
+      extendBodyBehindAppBar: true,
       appBar: focusMode.value
           ? null
           : chromeLayout.isCompact
@@ -1484,152 +1487,179 @@ class TextReaderWorkspace extends HookConsumerWidget {
                   );
                 }
               }
-              return Column(
+              return Stack(
                 children: [
-                  if (projectionSnapshot.hasError)
-                    MaterialBanner(
-                      content: Text('显示转换失败，已回退原文：${projectionSnapshot.error}'),
-                      actions: const [SizedBox.shrink()],
-                    )
-                  else if (projection.hasAmbiguousRanges)
-                    const MaterialBanner(
-                      content: Text('本章含无法精确映射的转换区段；这些区段不会创建可回跳标注或文字颜色。'),
-                      actions: [SizedBox.shrink()],
-                    ),
-                  if (coloringLayoutSnapshot.hasError)
-                    MaterialBanner(
-                      content: Text(
-                        '文字前景色计算失败，已显示无颜色正文：${coloringLayoutSnapshot.error}',
-                      ),
-                      actions: const [SizedBox.shrink()],
-                    ),
-                  if (!focusMode.value)
-                    Material(
-                      key: const Key('text-reader-sticky-chapter-title'),
-                      color: Theme.of(context).colorScheme.surfaceContainerLow,
-                      elevation: 1,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                chapter.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
+                  Positioned.fill(
+                    child: Column(
+                      children: [
+                        if (projectionSnapshot.hasError)
+                          MaterialBanner(
+                            content: Text(
+                              '显示转换失败，已回退原文：${projectionSnapshot.error}',
                             ),
-                            if (autoScrollController.active) ...[
-                              const SizedBox(width: 8),
-                              const Icon(Icons.slow_motion_video, size: 18),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  Expanded(
-                    child: ReaderContentTapDetector(
-                      onTap: toggleFocusMode,
-                      child: ReaderAutoScrollRegion(
-                        controller: autoScrollController,
-                        scrollController: scrollController,
-                        lineExtent: settings.fontSize * settings.lineHeight,
-                        child: SingleChildScrollView(
-                          controller: scrollController,
-                          key: ValueKey(chapter.id),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: settings.pageMargin,
-                            vertical: 32,
+                            actions: const [SizedBox.shrink()],
+                          )
+                        else if (projection.hasAmbiguousRanges)
+                          const MaterialBanner(
+                            content: Text('本章含无法精确映射的转换区段；这些区段不会创建可回跳标注或文字颜色。'),
+                            actions: [SizedBox.shrink()],
                           ),
-                          child: Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 820),
-                              child: TextColoringSelectableText(
-                                key: const Key(
-                                  'text-reader-selectable-content',
+                        if (coloringLayoutSnapshot.hasError)
+                          MaterialBanner(
+                            content: Text(
+                              '文字前景色计算失败，已显示无颜色正文：${coloringLayoutSnapshot.error}',
+                            ),
+                            actions: const [SizedBox.shrink()],
+                          ),
+                        Expanded(
+                          child: ReaderContentTapDetector(
+                            onTap: toggleFocusMode,
+                            child: ReaderAutoScrollRegion(
+                              controller: autoScrollController,
+                              scrollController: scrollController,
+                              lineExtent:
+                                  settings.fontSize * settings.lineHeight,
+                              child: SingleChildScrollView(
+                                controller: scrollController,
+                                key: ValueKey(chapter.id),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: settings.pageMargin,
+                                  vertical: 32,
                                 ),
-                                layout: layout,
-                                style: textStyle,
-                                emphasisRange: ttsEmphasis,
-                                onSelectionChanged: (selection, _) {
-                                  if (!selection.isCollapsed) {
-                                    autoScrollController.stop(
-                                      AutoScrollStopReason.selection,
-                                    );
-                                  }
-                                  if (selection.isCollapsed) {
-                                    selectedContext.value = null;
-                                    selectedColorText.value = null;
-                                    return;
-                                  }
-                                  final displayRange = layout.visibleToDisplay(
-                                    selection.start,
-                                    selection.end,
-                                  );
-                                  if (!displayRange.isExact) {
-                                    selectedContext.value = null;
-                                    selectedColorText.value = null;
-                                    return;
-                                  }
-                                  final range = projection.displayToRaw(
-                                    displayRange.start,
-                                    displayRange.end,
-                                  );
-                                  if (!range.isExact) {
-                                    selectedContext.value = null;
-                                    selectedColorText.value = null;
-                                    return;
-                                  }
-                                  final rawStart = start + range.start;
-                                  final rawEnd = start + range.end;
-                                  selectedColorText.value = layout.text
-                                      .substring(
-                                        selection.start,
-                                        selection.end,
-                                      );
-                                  selectedContext.value =
-                                      ReadingContextSelection(
-                                        text: value.rawText.substring(
-                                          rawStart,
-                                          rawEnd,
-                                        ),
-                                        href: 'text:${chapter.id}',
-                                        locator: chapter.locator(
-                                          start: rawStart,
-                                          end: rawEnd,
-                                        ),
-                                        chapterIndex: index,
-                                        chapterTitle: chapter.title,
-                                      );
-                                },
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 820,
+                                    ),
+                                    child: TextColoringSelectableText(
+                                      key: const Key(
+                                        'text-reader-selectable-content',
+                                      ),
+                                      layout: layout,
+                                      style: textStyle,
+                                      emphasisRange: ttsEmphasis,
+                                      onSelectionChanged: (selection, _) {
+                                        if (!selection.isCollapsed) {
+                                          autoScrollController.stop(
+                                            AutoScrollStopReason.selection,
+                                          );
+                                        }
+                                        if (selection.isCollapsed) {
+                                          selectedContext.value = null;
+                                          selectedColorText.value = null;
+                                          return;
+                                        }
+                                        final displayRange = layout
+                                            .visibleToDisplay(
+                                              selection.start,
+                                              selection.end,
+                                            );
+                                        if (!displayRange.isExact) {
+                                          selectedContext.value = null;
+                                          selectedColorText.value = null;
+                                          return;
+                                        }
+                                        final range = projection.displayToRaw(
+                                          displayRange.start,
+                                          displayRange.end,
+                                        );
+                                        if (!range.isExact) {
+                                          selectedContext.value = null;
+                                          selectedColorText.value = null;
+                                          return;
+                                        }
+                                        final rawStart = start + range.start;
+                                        final rawEnd = start + range.end;
+                                        selectedColorText.value = layout.text
+                                            .substring(
+                                              selection.start,
+                                              selection.end,
+                                            );
+                                        selectedContext.value =
+                                            ReadingContextSelection(
+                                              text: value.rawText.substring(
+                                                rawStart,
+                                                rawEnd,
+                                              ),
+                                              href: 'text:${chapter.id}',
+                                              locator: chapter.locator(
+                                                start: rawStart,
+                                                end: rawEnd,
+                                              ),
+                                              chapterIndex: index,
+                                              chapterTitle: chapter.title,
+                                            );
+                                      },
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
+                  if (!focusMode.value && !chromeLayout.isCompact)
+                    Positioned(
+                      top:
+                          kToolbarHeight +
+                          MediaQuery.viewPaddingOf(context).top,
+                      left: 0,
+                      right: 0,
+                      child: Material(
+                        key: const Key('text-reader-sticky-chapter-title'),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerLow,
+                        elevation: 1,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  chapter.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                              ),
+                              if (autoScrollController.active) ...[
+                                const SizedBox(width: 8),
+                                const Icon(Icons.slow_motion_video, size: 18),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   if (!focusMode.value)
-                    ReaderCompactNavigationBar(
-                      key: const Key('text-reader-footer'),
-                      tocKey: const Key('text-reader-toc'),
-                      previousKey: const Key('text-reader-previous-chapter'),
-                      positionKey: const Key('text-reader-position-label'),
-                      nextKey: const Key('text-reader-next-chapter'),
-                      styleKey: const Key('text-reader-style'),
-                      positionLabel: positionMetrics.label,
-                      onOpenToc: () => unawaited(openChapters(value.chapters)),
-                      onPrevious: index > 0
-                          ? () => unawaited(selectChapter(index - 1))
-                          : null,
-                      onNext: index < value.chapters.length - 1
-                          ? () => unawaited(selectChapter(index + 1))
-                          : null,
-                      onOpenStyle: openTextStyleSheet,
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: ReaderCompactNavigationBar(
+                        key: const Key('text-reader-footer'),
+                        tocKey: const Key('text-reader-toc'),
+                        previousKey: const Key('text-reader-previous-chapter'),
+                        positionKey: const Key('text-reader-position-label'),
+                        nextKey: const Key('text-reader-next-chapter'),
+                        styleKey: const Key('text-reader-style'),
+                        positionLabel: positionMetrics.label,
+                        onOpenToc: () =>
+                            unawaited(openChapters(value.chapters)),
+                        onPrevious: index > 0
+                            ? () => unawaited(selectChapter(index - 1))
+                            : null,
+                        onNext: index < value.chapters.length - 1
+                            ? () => unawaited(selectChapter(index + 1))
+                            : null,
+                        onOpenStyle: openTextStyleSheet,
+                      ),
                     ),
                 ],
               );
