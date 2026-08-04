@@ -8,11 +8,15 @@ import '../../app/providers.dart';
 import '../../data/services/book_import_service.dart';
 import '../../domain/models/book_import.dart';
 import '../../domain/models/library_book.dart';
-import '../../shared/widgets/book_cover.dart';
 import '../../shared/widgets/page_header.dart';
 import 'book_import_preview_dialog.dart';
 import 'import_result_handler.dart';
 import 'import_workflow_controller.dart';
+import 'library_cards.dart';
+import 'library_controls.dart';
+import 'library_empty_states.dart';
+import 'library_import_source_dialog.dart';
+import 'library_selection.dart';
 
 class LibraryHomePage extends HookConsumerWidget {
   const LibraryHomePage({
@@ -35,10 +39,10 @@ class LibraryHomePage extends HookConsumerWidget {
     );
     useEffect(() => importController.dispose, [importController]);
     final searchQuery = useState('');
-    final formatFilter = useState(_LibraryFormatFilter.all);
-    final sort = useState(_LibrarySort.recent);
-    final viewMode = useState(_LibraryViewMode.grid);
-    final categoryFilter = useState(_allCategories);
+    final formatFilter = useState(LibraryFormatFilter.all);
+    final sort = useState(LibrarySort.recent);
+    final viewMode = useState(LibraryViewMode.grid);
+    final categoryFilter = useState(allCategoriesFilter);
     final tagFilter = useState<String?>(null);
     final favoritesOnly = useState(false);
     final selectionMode = useState(false);
@@ -78,16 +82,16 @@ class LibraryHomePage extends HookConsumerWidget {
 
     Future<void> importBooks() async {
       if (isImporting.value) return;
-      final choice = await showDialog<_ImportSourceChoice>(
+      final choice = await showDialog<ImportSourceChoice>(
         context: context,
-        builder: (context) => const _ImportSourceDialog(),
+        builder: (context) => const ImportSourceDialog(),
       );
       if (choice == null || !context.mounted) return;
       switch (choice) {
-        case _ImportSourceChoice.files:
+        case ImportSourceChoice.files:
           await importSources(await importService.pickImportSources());
           return;
-        case _ImportSourceChoice.directory:
+        case ImportSourceChoice.directory:
           final source = await importService.pickImportDirectorySource();
           if (source != null) await importSources([source]);
           return;
@@ -176,10 +180,9 @@ class LibraryHomePage extends HookConsumerWidget {
     Future<void> updateSelectedCategory(List<LibraryBook> items) async {
       final selected = selectedBookIds.value;
       if (selected.isEmpty || isBatchOperating.value) return;
-      final update = await showDialog<_CategoryUpdate>(
+      final update = await showDialog<CategoryUpdate>(
         context: context,
-        builder: (context) =>
-            _CategoryDialog(categories: _categoriesFor(items)),
+        builder: (context) => CategoryDialog(categories: categoriesFor(items)),
       );
       if (!context.mounted || update == null) return;
       isBatchOperating.value = true;
@@ -231,12 +234,12 @@ class LibraryHomePage extends HookConsumerWidget {
 
     return books.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => _LibraryFailure(
+      error: (error, _) => LibraryFailure(
         message: '无法读取书库：$error',
         onRetry: () => ref.invalidate(libraryBooksProvider),
       ),
       data: (items) {
-        final visibleBooks = _filterAndSortBooks(
+        final visibleBooks = filterAndSortBooks(
           items,
           query: searchQuery.value,
           formatFilter: formatFilter.value,
@@ -245,12 +248,12 @@ class LibraryHomePage extends HookConsumerWidget {
           tag: tagFilter.value,
           favoritesOnly: favoritesOnly.value,
         );
-        final continueReadingBook = _continueReadingBook(visibleBooks);
+        final continueReadingBook = continueReadingBook(visibleBooks);
         return LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 600;
             final horizontalPadding = compact ? 16.0 : 32.0;
-            Widget buildBookCard(int index) => _BookCard(
+            Widget buildBookCard(int index) => BookCard(
               book: visibleBooks[index],
               onTap: () => selectionMode.value
                   ? toggleSelection(visibleBooks[index].id)
@@ -268,7 +271,7 @@ class LibraryHomePage extends HookConsumerWidget {
               onToggleFavorite: () => toggleFavorite(visibleBooks[index]),
             );
 
-            Widget buildBookListItem(int index) => _BookListItem(
+            Widget buildBookListItem(int index) => BookListItem(
               book: visibleBooks[index],
               onTap: () => selectionMode.value
                   ? toggleSelection(visibleBooks[index].id)
@@ -296,9 +299,9 @@ class LibraryHomePage extends HookConsumerWidget {
               ),
               const SizedBox(height: 20),
               if (items.isEmpty)
-                _EmptyLibrary(onImport: isImporting.value ? null : importBooks)
+                EmptyLibrary(onImport: isImporting.value ? null : importBooks)
               else ...[
-                _LibraryControls(
+                LibraryControls(
                   formatFilter: formatFilter.value,
                   sort: sort.value,
                   viewMode: viewMode.value,
@@ -306,8 +309,8 @@ class LibraryHomePage extends HookConsumerWidget {
                   onFormatChanged: (value) => formatFilter.value = value,
                   onSortChanged: (value) => sort.value = value,
                   onViewModeChanged: (value) => viewMode.value = value,
-                  categories: _categoriesFor(items),
-                  tags: _tagsFor(items),
+                  categories: categoriesFor(items),
+                  tags: tagsFor(items),
                   category: categoryFilter.value,
                   tag: tagFilter.value,
                   favoritesOnly: favoritesOnly.value,
@@ -317,7 +320,7 @@ class LibraryHomePage extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 20),
                 if (selectionMode.value)
-                  _SelectionToolbar(
+                  LibrarySelectionToolbar(
                     selectedCount: selectedBookIds.value.length,
                     isWorking: isBatchOperating.value,
                     allSelectedAreFavorite: items
@@ -332,9 +335,9 @@ class LibraryHomePage extends HookConsumerWidget {
                   ),
                 if (selectionMode.value) const SizedBox(height: 16),
                 if (visibleBooks.isEmpty)
-                  const _NoMatchingBooks()
+                  const NoMatchingBooks()
                 else ...[
-                  _ContinueReadingCard(
+                  ContinueReadingCard(
                     book: continueReadingBook!,
                     onOpenReader: () => onOpenReader(continueReadingBook),
                   ),
@@ -373,7 +376,7 @@ class LibraryHomePage extends HookConsumerWidget {
               return CustomScrollView(slivers: [headerSliver]);
             }
 
-            final booksSliver = viewMode.value == _LibraryViewMode.grid
+            final booksSliver = viewMode.value == LibraryViewMode.grid
                 ? SliverGrid(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) => buildBookCard(index),
@@ -415,843 +418,4 @@ class LibraryHomePage extends HookConsumerWidget {
       },
     );
   }
-}
-
-enum _ImportSourceChoice { files, directory }
-
-class _ImportSourceDialog extends StatelessWidget {
-  const _ImportSourceDialog();
-
-  @override
-  Widget build(BuildContext context) => SimpleDialog(
-    title: const Text('选择导入来源'),
-    children: [
-      SimpleDialogOption(
-        onPressed: () => Navigator.of(context).pop(_ImportSourceChoice.files),
-        child: const ListTile(
-          leading: Icon(Icons.file_open_outlined),
-          title: Text('选择文件'),
-          subtitle: Text('一次选择多个 EPUB、PDF、TXT 或 Markdown 文件'),
-        ),
-      ),
-      SimpleDialogOption(
-        onPressed: () =>
-            Navigator.of(context).pop(_ImportSourceChoice.directory),
-        child: const ListTile(
-          leading: Icon(Icons.folder_open_outlined),
-          title: Text('扫描文件夹'),
-          subtitle: Text('递归预览支持的文件，确认后再导入'),
-        ),
-      ),
-    ],
-  );
-}
-
-enum _LibraryFormatFilter { all, epub, pdf, text }
-
-extension on _LibraryFormatFilter {
-  String get label => switch (this) {
-    _LibraryFormatFilter.all => '全部',
-    _LibraryFormatFilter.epub => 'EPUB',
-    _LibraryFormatFilter.pdf => 'PDF',
-    _LibraryFormatFilter.text => 'TXT/Markdown',
-  };
-}
-
-enum _LibrarySort { recent, title, progress }
-
-enum _LibraryViewMode { grid, list }
-
-extension on _LibrarySort {
-  String get label => switch (this) {
-    _LibrarySort.recent => '最近阅读',
-    _LibrarySort.title => '书名',
-    _LibrarySort.progress => '阅读进度',
-  };
-}
-
-List<LibraryBook> _filterAndSortBooks(
-  List<LibraryBook> books, {
-  required String query,
-  required _LibraryFormatFilter formatFilter,
-  required _LibrarySort sort,
-  required String category,
-  required String? tag,
-  required bool favoritesOnly,
-}) {
-  final normalizedQuery = query.trim().toLowerCase();
-  final filtered = books.where((book) {
-    final matchesFormat = switch (formatFilter) {
-      _LibraryFormatFilter.all => true,
-      _LibraryFormatFilter.epub => book.format == 'epub',
-      _LibraryFormatFilter.pdf => book.format == 'pdf',
-      _LibraryFormatFilter.text =>
-        book.format == 'txt' || book.format == 'markdown',
-    };
-    final matchesCategory =
-        category == _allCategories ||
-        (category == _uncategorized
-            ? book.category?.isEmpty ?? true
-            : book.category == category);
-    final matchesTag = tag == null || book.tags.contains(tag);
-    final searchableText =
-        '${book.title} ${book.author} ${book.category ?? ''} ${book.tags.join(' ')}'
-            .toLowerCase();
-    return matchesFormat &&
-        matchesCategory &&
-        matchesTag &&
-        (!favoritesOnly || book.isFavorite) &&
-        (normalizedQuery.isEmpty || searchableText.contains(normalizedQuery));
-  }).toList();
-  filtered.sort(switch (sort) {
-    _LibrarySort.recent =>
-      (first, second) => (second.updatedAt ?? second.importedAt).compareTo(
-        first.updatedAt ?? first.importedAt,
-      ),
-    _LibrarySort.title =>
-      (first, second) =>
-          first.title.toLowerCase().compareTo(second.title.toLowerCase()),
-    _LibrarySort.progress => (first, second) => second.progress.compareTo(
-      first.progress,
-    ),
-  });
-  return filtered;
-}
-
-LibraryBook? _continueReadingBook(List<LibraryBook> books) {
-  if (books.isEmpty) return null;
-  final startedBooks =
-      books.where((book) => book.progress > 0 || book.locator != null).toList()
-        ..sort(
-          (first, second) => (second.updatedAt ?? second.importedAt).compareTo(
-            first.updatedAt ?? first.importedAt,
-          ),
-        );
-  return startedBooks.isEmpty ? books.first : startedBooks.first;
-}
-
-const _allCategories = '__all_categories__';
-const _uncategorized = '__uncategorized__';
-
-List<String> _categoriesFor(List<LibraryBook> books) {
-  final categories =
-      books
-          .map((book) => book.category?.trim() ?? '')
-          .where((category) => category.isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
-  return categories;
-}
-
-List<String> _tagsFor(List<LibraryBook> books) {
-  final tags = books.expand((book) => book.tags).toSet().toList()..sort();
-  return tags;
-}
-
-class _LibraryControls extends StatelessWidget {
-  const _LibraryControls({
-    required this.formatFilter,
-    required this.sort,
-    required this.viewMode,
-    required this.onQueryChanged,
-    required this.onFormatChanged,
-    required this.onSortChanged,
-    required this.onViewModeChanged,
-    required this.categories,
-    required this.tags,
-    required this.category,
-    required this.tag,
-    required this.favoritesOnly,
-    required this.onCategoryChanged,
-    required this.onTagChanged,
-    required this.onFavoritesChanged,
-  });
-
-  final _LibraryFormatFilter formatFilter;
-  final _LibrarySort sort;
-  final _LibraryViewMode viewMode;
-  final ValueChanged<String> onQueryChanged;
-  final ValueChanged<_LibraryFormatFilter> onFormatChanged;
-  final ValueChanged<_LibrarySort> onSortChanged;
-  final ValueChanged<_LibraryViewMode> onViewModeChanged;
-  final List<String> categories;
-  final List<String> tags;
-  final String category;
-  final String? tag;
-  final bool favoritesOnly;
-  final ValueChanged<String> onCategoryChanged;
-  final ValueChanged<String?> onTagChanged;
-  final ValueChanged<bool> onFavoritesChanged;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final searchWidth = constraints.maxWidth < 520
-          ? constraints.maxWidth
-          : 320.0;
-      final colors = Theme.of(context).colorScheme;
-      return Material(
-        color: colors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: colors.outlineVariant),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  SizedBox(
-                    width: searchWidth,
-                    child: TextField(
-                      key: const Key('library-search'),
-                      onChanged: onQueryChanged,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        hintText: '搜索书名或作者',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  SegmentedButton<_LibraryFormatFilter>(
-                    segments: [
-                      for (final filter in _LibraryFormatFilter.values)
-                        ButtonSegment(value: filter, label: Text(filter.label)),
-                    ],
-                    selected: {formatFilter},
-                    onSelectionChanged: (selection) =>
-                        onFormatChanged(selection.first),
-                  ),
-                  SizedBox(
-                    width: 152,
-                    child: DropdownButtonFormField<_LibrarySort>(
-                      initialValue: sort,
-                      decoration: const InputDecoration(
-                        labelText: '排序',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        for (final option in _LibrarySort.values)
-                          DropdownMenuItem(
-                            value: option,
-                            child: Text(option.label),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) onSortChanged(value);
-                      },
-                    ),
-                  ),
-                  SizedBox(
-                    width: 220,
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey(category),
-                      initialValue: category,
-                      decoration: const InputDecoration(
-                        labelText: '分类',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: _allCategories,
-                          child: Text('全部分类'),
-                        ),
-                        const DropdownMenuItem(
-                          value: _uncategorized,
-                          child: Text('未分类'),
-                        ),
-                        for (final item in categories)
-                          DropdownMenuItem(value: item, child: Text(item)),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) onCategoryChanged(value);
-                      },
-                    ),
-                  ),
-                  FilterChip(
-                    selected: favoritesOnly,
-                    onSelected: onFavoritesChanged,
-                    avatar: Icon(
-                      favoritesOnly ? Icons.favorite : Icons.favorite_border,
-                      size: 18,
-                    ),
-                    label: const Text('收藏'),
-                  ),
-                  Tooltip(
-                    message: '切换书库视图',
-                    child: SegmentedButton<_LibraryViewMode>(
-                      showSelectedIcon: false,
-                      segments: const [
-                        ButtonSegment(
-                          value: _LibraryViewMode.grid,
-                          icon: Icon(Icons.grid_view_outlined),
-                        ),
-                        ButtonSegment(
-                          value: _LibraryViewMode.list,
-                          icon: Icon(Icons.view_list_outlined),
-                        ),
-                      ],
-                      selected: {viewMode},
-                      onSelectionChanged: (selection) =>
-                          onViewModeChanged(selection.first),
-                    ),
-                  ),
-                ],
-              ),
-              if (tags.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final item in tags)
-                      ChoiceChip(
-                        selected: tag == item,
-                        onSelected: (selected) =>
-                            onTagChanged(selected ? item : null),
-                        label: Text(item),
-                      ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}
-
-class _SelectionToolbar extends StatelessWidget {
-  const _SelectionToolbar({
-    required this.selectedCount,
-    required this.isWorking,
-    required this.allSelectedAreFavorite,
-    required this.onCancel,
-    required this.onToggleFavorite,
-    required this.onChangeCategory,
-    required this.onDelete,
-  });
-
-  final int selectedCount;
-  final bool isWorking;
-  final bool allSelectedAreFavorite;
-  final VoidCallback onCancel;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onChangeCategory;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    key: const Key('library-selection-toolbar'),
-    color: Theme.of(context).colorScheme.secondaryContainer,
-    borderRadius: BorderRadius.circular(8),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: '退出多选',
-            onPressed: isWorking ? null : onCancel,
-            icon: const Icon(Icons.close),
-          ),
-          Expanded(child: Text('已选择 $selectedCount 本书')),
-          IconButton(
-            tooltip: allSelectedAreFavorite ? '取消收藏' : '收藏书籍',
-            onPressed: isWorking || selectedCount == 0
-                ? null
-                : onToggleFavorite,
-            icon: Icon(
-              allSelectedAreFavorite ? Icons.favorite : Icons.favorite_border,
-            ),
-          ),
-          IconButton(
-            tooltip: '设置分类',
-            onPressed: isWorking || selectedCount == 0
-                ? null
-                : onChangeCategory,
-            icon: const Icon(Icons.folder_outlined),
-          ),
-          IconButton(
-            tooltip: '删除书籍',
-            onPressed: isWorking || selectedCount == 0 ? null : onDelete,
-            icon: const Icon(Icons.delete_outline),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _CategoryUpdate {
-  const _CategoryUpdate(this.category);
-
-  final String? category;
-}
-
-class _CategoryDialog extends HookWidget {
-  const _CategoryDialog({required this.categories});
-
-  final List<String> categories;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = useTextEditingController();
-    return AlertDialog(
-      title: const Text('设置分类'),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: '分类名称',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            if (categories.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final category in categories)
-                    ActionChip(
-                      label: Text(category),
-                      onPressed: () => controller.text = category,
-                    ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context, const _CategoryUpdate(null)),
-          child: const Text('清除分类'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final category = controller.text.trim();
-            if (category.isEmpty) return;
-            Navigator.pop(context, _CategoryUpdate(category));
-          },
-          child: const Text('保存'),
-        ),
-      ],
-    );
-  }
-}
-
-class _NoMatchingBooks extends StatelessWidget {
-  const _NoMatchingBooks();
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 72),
-    child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.manage_search_outlined, size: 44),
-          const SizedBox(height: 12),
-          Text('没有匹配的书籍', style: Theme.of(context).textTheme.titleMedium),
-        ],
-      ),
-    ),
-  );
-}
-
-class _EmptyLibrary extends StatelessWidget {
-  const _EmptyLibrary({required this.onImport});
-
-  final VoidCallback? onImport;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 96),
-    child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.auto_stories_outlined, size: 52),
-          const SizedBox(height: 16),
-          Text('还没有书籍', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          const Text('导入 EPUB 或 PDF 后会在这里显示。'),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: onImport,
-            icon: const Icon(Icons.add),
-            label: const Text('导入书籍'),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _LibraryFailure extends StatelessWidget {
-  const _LibraryFailure({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: FilledButton.icon(
-      onPressed: onRetry,
-      icon: const Icon(Icons.refresh),
-      label: Text(message),
-    ),
-  );
-}
-
-class _ContinueReadingCard extends StatelessWidget {
-  const _ContinueReadingCard({required this.book, required this.onOpenReader});
-
-  final LibraryBook book;
-  final VoidCallback onOpenReader;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Material(
-      key: Key('continue-reading-${book.id}'),
-      color: colors.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: colors.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(5),
-              child: SizedBox(
-                width: 96,
-                height: 132,
-                child: BookCover(book: book),
-              ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('继续阅读', style: Theme.of(context).textTheme.labelLarge),
-                  const SizedBox(height: 8),
-                  Text(
-                    book.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    book.author.isEmpty ? '未知作者' : book.author,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    book.format.toUpperCase(),
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(value: book.progress),
-                  const SizedBox(height: 8),
-                  Text(
-                    '已读 ${(book.progress * 100).round()}%',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            IconButton.filledTonal(
-              tooltip: '继续阅读',
-              onPressed: onOpenReader,
-              icon: const Icon(Icons.play_arrow),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BookCard extends HookWidget {
-  const _BookCard({
-    required this.book,
-    required this.onTap,
-    required this.onLongPress,
-    required this.isSelected,
-    required this.selectionMode,
-    required this.isRemoving,
-    required this.onDelete,
-    required this.onToggleFavorite,
-  });
-
-  final LibraryBook book;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-  final bool isSelected;
-  final bool selectionMode;
-  final bool isRemoving;
-  final VoidCallback onDelete;
-  final VoidCallback onToggleFavorite;
-
-  @override
-  Widget build(BuildContext context) {
-    final isHovered = useState(false);
-    final colorScheme = Theme.of(context).colorScheme;
-    final background = isSelected
-        ? colorScheme.secondaryContainer
-        : isHovered.value
-        ? colorScheme.surfaceContainerLow
-        : colorScheme.surface;
-    final border = isSelected
-        ? colorScheme.primary
-        : colorScheme.outlineVariant;
-    return MouseRegion(
-      onEnter: (_) => isHovered.value = true,
-      onExit: (_) => isHovered.value = false,
-      child: AnimatedContainer(
-        key: Key('book-${book.id}'),
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: border),
-        ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: isRemoving ? null : onTap,
-            onLongPress: isRemoving ? null : onLongPress,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(5),
-                          child: Hero(
-                            tag: bookCoverHeroTag(book),
-                            child: BookCover(book: book),
-                          ),
-                        ),
-                        if (selectionMode)
-                          Positioned(
-                            top: 4,
-                            left: 4,
-                            child: Checkbox(
-                              value: isSelected,
-                              onChanged: (_) => onTap(),
-                            ),
-                          ),
-                        if (!selectionMode)
-                          Positioned(
-                            top: 4,
-                            right: 4,
-                            child: Material(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.surfaceContainer,
-                              shape: const CircleBorder(),
-                              child: PopupMenuButton<String>(
-                                tooltip: '更多操作',
-                                enabled: !isRemoving,
-                                onSelected: (action) => action == 'favorite'
-                                    ? onToggleFavorite()
-                                    : onDelete(),
-                                itemBuilder: (context) => [
-                                  PopupMenuItem(
-                                    value: 'favorite',
-                                    child: Text(
-                                      book.isFavorite ? '取消收藏' : '收藏书籍',
-                                    ),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Text('删除书籍'),
-                                  ),
-                                ],
-                                icon: isRemoving
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.more_vert),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    book.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    book.author.isEmpty ? '未知作者' : book.author,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(value: book.progress),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BookListItem extends StatelessWidget {
-  const _BookListItem({
-    required this.book,
-    required this.onTap,
-    required this.onLongPress,
-    required this.isSelected,
-    required this.selectionMode,
-    required this.isRemoving,
-    required this.onDelete,
-    required this.onToggleFavorite,
-  });
-
-  final LibraryBook book;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-  final bool isSelected;
-  final bool selectionMode;
-  final bool isRemoving;
-  final VoidCallback onDelete;
-  final VoidCallback onToggleFavorite;
-
-  @override
-  Widget build(BuildContext context) => Card(
-    key: Key('book-list-${book.id}'),
-    color: isSelected ? Theme.of(context).colorScheme.secondaryContainer : null,
-    child: InkWell(
-      onTap: isRemoving ? null : onTap,
-      onLongPress: isRemoving ? null : onLongPress,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            if (selectionMode)
-              Checkbox(value: isSelected, onChanged: (_) => onTap()),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: SizedBox(
-                width: 52,
-                height: 76,
-                child: Hero(
-                  tag: bookCoverHeroTag(book),
-                  child: BookCover(book: book),
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    book.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    book.author.isEmpty ? '未知作者' : book.author,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Text(
-                        book.format.toUpperCase(),
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: LinearProgressIndicator(value: book.progress),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${(book.progress * 100).round()}%',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (!selectionMode)
-              PopupMenuButton<String>(
-                tooltip: '更多操作',
-                enabled: !isRemoving,
-                onSelected: (action) =>
-                    action == 'favorite' ? onToggleFavorite() : onDelete(),
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'favorite',
-                    child: Text(book.isFavorite ? '取消收藏' : '收藏书籍'),
-                  ),
-                  PopupMenuItem(value: 'delete', child: Text('删除书籍')),
-                ],
-                icon: isRemoving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.more_vert),
-              ),
-          ],
-        ),
-      ),
-    ),
-  );
 }
