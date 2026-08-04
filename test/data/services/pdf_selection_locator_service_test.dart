@@ -116,5 +116,100 @@ void main() {
         ),
       );
     });
+
+    test('normalized rects survive zoom and viewport changes', () {
+      final selection = service.create(
+        const PdfSelectionSource(
+          pageNumber: 1,
+          pageText: 'target phrase stays put',
+          start: 0,
+          end: 14,
+          pageWidth: 200,
+          pageHeight: 400,
+          rects: [
+            PdfSelectionSourceRect(
+              left: 20,
+              top: 80,
+              width: 160,
+              height: 20,
+            ),
+          ],
+        ),
+      );
+      final rect = selection.locator.rects.single;
+
+      const zoomed = PdfSelectionSource(
+        pageNumber: 1,
+        pageText: 'target phrase stays put',
+        start: 0,
+        end: 14,
+        pageWidth: 1200,
+        pageHeight: 2400,
+        rects: [
+          PdfSelectionSourceRect(
+            left: 120,
+            top: 480,
+            width: 960,
+            height: 120,
+          ),
+        ],
+      );
+      final zoomedSelection = service.create(zoomed);
+
+      expect(zoomedSelection.locator.rects.single.left, closeTo(rect.left, .000001));
+      expect(zoomedSelection.locator.rects.single.top, closeTo(rect.top, .000001));
+      expect(zoomedSelection.locator.rects.single.width, closeTo(rect.width, .000001));
+      expect(zoomedSelection.locator.rects.single.height, closeTo(rect.height, .000001));
+    });
+
+    test('verifies a persisted locator after text reflow keeps the quote', () {
+      final original = service.create(
+        const PdfSelectionSource(
+          pageNumber: 3,
+          pageText: 'The quick brown fox jumps over the lazy dog',
+          start: 4,
+          end: 15,
+          pageWidth: 100,
+          pageHeight: 100,
+          rects: [
+            PdfSelectionSourceRect(
+              left: 10,
+              top: 20,
+              width: 60,
+              height: 10,
+            ),
+          ],
+        ),
+      );
+
+      final reflowed = 'The quick\nbrown fox\njumps over\nthe lazy dog';
+      expect(service.verifies(original.locator, reflowed), isTrue);
+    });
+
+    test('persisted quote context no longer matches after content change', () {
+      final original = service.create(
+        const PdfSelectionSource(
+          pageNumber: 3,
+          pageText: 'The quick brown fox jumps over the lazy dog',
+          start: 4,
+          end: 15,
+          pageWidth: 100,
+          pageHeight: 100,
+          rects: [
+            PdfSelectionSourceRect(
+              left: 10,
+              top: 20,
+              width: 60,
+              height: 10,
+            ),
+          ],
+        ),
+      );
+
+      expect(
+        service.verifies(original.locator, 'The slow green turtle crawls past'),
+        isFalse,
+      );
+    });
   });
 }

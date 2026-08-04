@@ -87,4 +87,67 @@ void main() {
       isFalse,
     );
   });
+
+  test('keeps pagination progress normalized when page count changes', () {
+    expect(
+      EpubLocation.normalizedRelocationRatio(
+        reportedRatio: 0,
+        paginated: true,
+        pageIndex: 2,
+        pageCount: 5,
+      ),
+      0.5,
+    );
+    expect(
+      EpubLocation.normalizedRelocationRatio(
+        reportedRatio: 0,
+        paginated: true,
+        pageIndex: 2,
+        pageCount: 3,
+      ),
+      1.0,
+    );
+    expect(
+      EpubLocation.normalizedRelocationRatio(
+        reportedRatio: 0,
+        paginated: true,
+        pageIndex: 0,
+        pageCount: 3,
+      ),
+      0.0,
+    );
+  });
+
+  test('matches a legacy v2 anchor after layout change', () {
+    const location = EpubLocation(
+      chapterIndex: 1,
+      scrollRatio: 0.25,
+      anchor: 'heading',
+    );
+
+    expect(
+      EpubLocation.matchesLocator(
+        'epub:v2|1|0.90000|heading',
+        location,
+        fallbackChapterIndex: 0,
+      ),
+      isTrue,
+    );
+  });
+
+  test('matches legacy ratio-only progress in the same chapter', () {
+    const location = EpubLocation(
+      chapterIndex: 2,
+      scrollRatio: 0.5,
+    );
+
+    expect(
+      EpubLocation.matchesLocator(
+        'epub:2|0.50000|',
+        location,
+        fallbackChapterIndex: 0,
+      ),
+      isTrue,
+    );
+  });
 }

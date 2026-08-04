@@ -26,6 +26,30 @@ void main() {
         value['valid'],
         reason: '${value['format']}: ${value['locator']}',
       );
+      if (value['valid'] == true && locator != null) {
+        final reparsed = switch (locator.kind) {
+          DocumentLocatorKind.epub => EpubDocumentLocator.tryParse(
+            locator.serialize(),
+            fallbackChapterIndex: 0,
+          ),
+          DocumentLocatorKind.pdf => PdfDocumentLocator.tryParse(
+            locator.serialize(),
+          ),
+          DocumentLocatorKind.text => TextDocumentLocator.tryParse(
+            locator.serialize(),
+          ),
+        };
+        expect(
+          reparsed,
+          isNotNull,
+          reason: 'reparse ${value['format']}: ${value['locator']}',
+        );
+        expect(
+          reparsed!.serialize(),
+          locator.serialize(),
+          reason: 'round-trip stable ${value['format']}: ${value['locator']}',
+        );
+      }
     }
   });
 
