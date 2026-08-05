@@ -2199,6 +2199,8 @@ class Paginator extends HTMLElement {
             startX: touch?.screenX,
             startY: touch?.screenY,
             didPreventDefault: false,
+            axisLocked: undefined,
+            aborted: false,
         }
         // Hint to browser that scrolling will occur for better GPU layer management
         const pv = this.#primaryView
@@ -2274,16 +2276,25 @@ class Paginator extends HTMLElement {
         const isStylus = touch.touchType === 'stylus'
         const totalDx = Math.abs(touch.screenX - (state.startX ?? touch.screenX))
         const totalDy = Math.abs(touch.screenY - (state.startY ?? touch.screenY))
-        if (!state.axisLocked && (totalDx > 10 || totalDy > 10)) {
-            if (totalDy > totalDx * 1.3) {
-                state.axisLocked = 'y'
+        // Do not claim a gesture until its page-turn direction is unambiguous.
+        // In Android WebView, claiming a small diagonal move with
+        // preventDefault() interrupts the browser's text-selection handles.
+        const primaryTotal = this.#vertical ? totalDy : totalDx
+        const crossTotal = this.#vertical ? totalDx : totalDy
+        const touchSlop = 16
+        if (!state.axisLocked && (primaryTotal >= touchSlop || crossTotal >= touchSlop)) {
+            if (primaryTotal < touchSlop || primaryTotal < crossTotal * 1.5) {
+                state.axisLocked = 'cross'
                 state.aborted = true
             } else {
-                state.axisLocked = 'x'
+                state.axisLocked = 'primary'
             }
         }
         if (state.aborted) return
-        if (!isStylus && (totalDx > 10 || totalDy > 10 || state.didPreventDefault)) {
+        // Leave every undecided gesture to the browser. Only a confirmed
+        // page-turn swipe is cancelled and animated by the paginator.
+        if (state.axisLocked !== 'primary') return
+        if (!isStylus && !state.didPreventDefault) {
             e.preventDefault()
             state.didPreventDefault = true
         }
@@ -2323,7 +2334,8 @@ class Paginator extends HTMLElement {
         // anything that doesn't work
         const state = this.#touchState
         requestAnimationFrame(async () => {
-            if (!state || globalThis.visualViewport.scale !== 1) return
+            if (!state || state.aborted || state.axisLocked !== 'primary'
+                || globalThis.visualViewport.scale !== 1) return
             const contents = this.getContents?.() ?? []
             if (contents.some(({ doc }) => {
                 const selection = doc?.getSelection?.()

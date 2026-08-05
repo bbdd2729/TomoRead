@@ -101,6 +101,41 @@ class AndroidEpubWebView extends HookConsumerWidget {
     final loadPhase = useState(_AndroidEpubLoadPhase.loading);
     final retryRevision = useState(0);
     final active = useRef(true);
+    // Android's native ActionMode is the only menu that can coexist with
+    // WebView selection handles. Keep the latest bridge selection so its
+    // TomoRead action can open our richer annotation/AI panel on demand.
+    final nativeSelection = useRef<ReaderTextSelection?>(null);
+    final selectionMenuCallback = useRef(onSelectionContextMenu);
+    selectionMenuCallback.value = onSelectionContextMenu;
+    final selectionMenuViewport = useRef(MediaQuery.sizeOf(context));
+    selectionMenuViewport.value = MediaQuery.sizeOf(context);
+    final nativeSelectionContextMenu = useMemoized(
+      () => ContextMenu(
+        menuItems: [
+          ContextMenuItem(
+            id: 1001,
+            title: 'TomoRead 操作',
+            action: () {
+              final selection = nativeSelection.value;
+              if (selection == null) return;
+              final viewport = selectionMenuViewport.value;
+              selectionMenuCallback.value(
+                ReaderSelectionContextMenu(
+                  selection: selection,
+                  x: viewport.width / 2,
+                  y: viewport.height / 2,
+                ),
+              );
+            },
+          ),
+        ],
+        // Retain the operating system's Copy/Share actions and, crucially,
+        // its selection handles. The TomoRead item opens the existing rich
+        // annotation and AI action menu only after the user chooses it.
+        settings: ContextMenuSettings(hideDefaultSystemContextMenuItems: false),
+      ),
+      const [],
+    );
     final runtimeSettingsScript = _runtimeSettingsScript(
       context,
       settings,
@@ -194,6 +229,10 @@ class AndroidEpubWebView extends HookConsumerWidget {
       markOpened,
       reportFailure,
       onAutoScrollChanged,
+      (selection) {
+        nativeSelection.value = selection;
+        onTextSelectionChanged(selection);
+      },
     );
     final resourceHandler = useMemoized<AndroidEpubResourceHandler?>(() {
       final directory = readerSession.value?.directoryPath;
@@ -428,6 +467,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
       children: [
         InAppWebView(
           key: ValueKey('android-epub-runtime-$bookId-${retryRevision.value}'),
+          contextMenu: nativeSelectionContextMenu,
           initialData: InAppWebViewInitialData(
             data: runtimeDocument.data!,
             baseUrl: WebUri(resourceHandler.runtimeEntryPoint.toString()),
@@ -554,6 +594,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     VoidCallback onReady,
     ValueChanged<Object> onFailure,
     ValueChanged<bool> onAutoScrollChanged,
+    ValueChanged<ReaderTextSelection> onTextSelection,
   ) {
     Object? runtimeMessage;
     try {
@@ -711,7 +752,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
           text is String &&
           startOffset is num &&
           endOffset is num) {
-        onTextSelectionChanged(
+        onTextSelection(
           ReaderTextSelection(
             href: messageHref,
             text: text,

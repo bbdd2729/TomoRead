@@ -189,6 +189,26 @@ void main() {
     );
   });
 
+  test('does not reuse a previous character offset for page-only relocation',
+      () async {
+    final runtime = await rootBundle.loadString(
+      'assets/epub_reader_runtime/tomoread-reader.js',
+    );
+    final pagePositionStart = runtime.indexOf('const emitPagePosition =');
+    final pagePositionEnd = runtime.indexOf(
+      'const nextFrame =',
+      pagePositionStart,
+    );
+
+    expect(pagePositionStart, greaterThanOrEqualTo(0));
+    expect(pagePositionEnd, greaterThan(pagePositionStart));
+    expect(
+      runtime.substring(pagePositionStart, pagePositionEnd),
+      isNot(contains('chapterCharacterOffset')),
+    );
+    expect(runtime, contains('A page-only relocation has no Range'));
+  });
+
   test('EPUB automatic scrolling uses elapsed animation-frame time', () async {
     final runtime = await rootBundle.loadString(
       'assets/epub_reader_runtime/tomoread-reader.js',

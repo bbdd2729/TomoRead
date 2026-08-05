@@ -2,7 +2,7 @@
 'use strict'
 
 const CFI = globalThis.TomoReadEpubCfi
-const runtimeVersion = '38'
+const runtimeVersion = '40'
 const bridgeVersion = 1
 const stage = document.getElementById('reader-stage')
 
@@ -759,8 +759,16 @@ const applySelectionListener = (doc, index) => {
   // selectionchange from sandboxed EPUB iframes. These end-of-selection
   // signals provide the same payload after mouse, touch, or keyboard input.
   doc.addEventListener('pointerup', reportSelection)
-  doc.addEventListener('touchstart', beginLongPressSelection, { passive: true })
-  doc.addEventListener('touchmove', cancelLongPressForMove, { passive: true })
+  // Register at capture phase so the selection lock is armed before the
+  // paginator's bubbling listeners can claim a native handle drag.
+  doc.addEventListener('touchstart', beginLongPressSelection, {
+    capture: true,
+    passive: true,
+  })
+  doc.addEventListener('touchmove', cancelLongPressForMove, {
+    capture: true,
+    passive: true,
+  })
   doc.addEventListener('touchend', finishTouchSelection, { passive: true })
   doc.addEventListener('touchcancel', finishTouchSelection, { passive: true })
   doc.addEventListener('touchend', reportSelection, { passive: true })
@@ -770,7 +778,6 @@ const applySelectionListener = (doc, index) => {
 const emitRelocation = detail => {
   const section = getSections()[detail.index]
   if (!section || !paginator) return
-  const sectionChanged = currentSectionIndex !== detail.index
   measuredRelocationRevision += 1
   currentSectionIndex = detail.index
   const flow = paginator.getAttribute('flow') ?? 'paginated'
@@ -787,7 +794,11 @@ const emitRelocation = detail => {
   if (characterPosition) {
     currentChapterCharacterOffset = characterPosition.offset
     currentChapterCharacterCount = characterPosition.count
-  } else if (sectionChanged) {
+  } else {
+    // A page-only relocation has no Range for the current viewport. Do not
+    // carry a character offset over from the previous page: on Android that
+    // stale offset can be the only value received after a page turn and would
+    // pin whole-book progress (often at 0%) despite a new page ratio.
     currentChapterCharacterOffset = undefined
     currentChapterCharacterCount = undefined
   }
@@ -835,13 +846,6 @@ const emitPagePosition = detail => {
     cfi: null,
     pageIndex: currentPageIndex,
     pageCount: currentPageCount,
-    ...(Number.isInteger(currentChapterCharacterOffset)
-      && Number.isInteger(currentChapterCharacterCount)
-      ? {
-          chapterCharacterOffset: currentChapterCharacterOffset,
-          chapterCharacterCount: currentChapterCharacterCount,
-        }
-      : {}),
   })
 }
 
@@ -1369,10 +1373,16 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   doc.addEventListener('contextmenu', event => {
     const selection = readSelection(doc, index)
     if (!selection) return
+    setSelectionGestureLocked(true)
+    // Android WebView owns the selection handles and its native ActionMode.
+    // Preventing this event and opening Flutter's modal popup immediately
+    // blocks the WebView below it; clearing the DOM Selection made the
+    // handles disappear altogether. Keep the platform selection alive and
+    // expose TomoRead actions through the native menu registered by the host.
+    if (canUseFlutterBridge()) return
     event.preventDefault()
-    // Android WebView can emit duplicate context-menu events for one
-    // long-press. Send a single payload, then clear the native selection so
-    // its platform action bar cannot race the Flutter menu.
+    // Desktop WebView can emit duplicate context-menu events for one
+    // interaction. A single Flutter popup is sufficient there.
     const selectionKey = [
       selection.href,
       selection.startOffset,
@@ -1392,7 +1402,6 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
       x: event.clientX + (frameRect?.left ?? 0),
       y: event.clientY + (frameRect?.top ?? 0),
     })
-    window.setTimeout(() => doc.getSelection()?.removeAllRanges(), 0)
   })
 }
 

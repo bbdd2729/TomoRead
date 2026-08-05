@@ -373,6 +373,17 @@ class ReaderWorkspace extends HookConsumerWidget {
       if (pending != null) await persistProgress(pending);
     }
 
+    useEffect(() {
+      // Android can pause or kill the activity without waiting for the reader
+      // route to dispose. Flush the latest stable locator when backgrounding,
+      // rather than relying on the normal debounce or an eventual exit tap.
+      if (lifecycleState != null &&
+          lifecycleState != AppLifecycleState.resumed) {
+        unawaited(flushPendingProgress());
+      }
+      return null;
+    }, [lifecycleState]);
+
     void stopAutoScroll() {
       if (!autoScrollActive.value) return;
       autoScrollActive.value = false;
@@ -1185,10 +1196,7 @@ class ReaderWorkspace extends HookConsumerWidget {
               context,
               title: '阅读进度',
               positionLabel: positionLabel,
-              progress: sectionProgress.overallProgress(
-                activeChapterIndex,
-                scrollRatio.value,
-              ),
+              progress: overallProgress,
               onChangeEnd: seekToOverallProgress,
             ),
           );
@@ -1340,6 +1348,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                                     progress: sectionProgress.overallProgress(
                                       activeChapterIndex,
                                       scrollRatio.value,
+                                      chapterCharacterOffset:
+                                          chapterCharacterOffset.value,
                                     ),
                                     locator: currentLocator,
                                   ),
@@ -1508,10 +1518,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                   chapterCount: totalChapters,
                   layoutMode: settings.layoutMode,
                   chromeLayout: chromeLayout,
-                  overallProgress: sectionProgress.overallProgress(
-                    activeChapterIndex,
-                    scrollRatio.value,
-                  ),
+                  overallProgress: overallProgress,
                   positionMetrics: positionMetrics,
                   onSeekProgress: seekToOverallProgress,
                   onOpenToc: usesModalPanels
