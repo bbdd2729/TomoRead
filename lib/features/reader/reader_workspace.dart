@@ -297,17 +297,21 @@ class ReaderWorkspace extends HookConsumerWidget {
       // Opening a book is itself a reading event. Persisting the current
       // locator makes a first-page book eligible for "continue reading" and
       // moves it to the recent-reading position before the first relocation
-      // callback arrives from the WebView.
-      unawaited(
-        ref
-            .read(libraryBooksProvider.notifier)
-            .updateReadingPosition(
-              bookId: bookId,
-              chapterIndex: savedLocation.chapterIndex,
-              progress: book.progress,
-              locator: book.locator ?? savedLocation.toLocator(),
-            ),
-      );
+      // callback arrives from the WebView. Deferred out of the build phase so
+      // the provider can be updated after the widget tree is done building.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        unawaited(
+          ref
+              .read(libraryBooksProvider.notifier)
+              .updateReadingPosition(
+                bookId: bookId,
+                chapterIndex: savedLocation.chapterIndex,
+                progress: book.progress,
+                locator: book.locator ?? savedLocation.toLocator(),
+              ),
+        );
+      });
       activityTracker.open(
         ReaderIdentity(bookId: bookId, format: ReaderFormat.epub),
         ReaderPosition(progress: book.progress, locator: book.locator),

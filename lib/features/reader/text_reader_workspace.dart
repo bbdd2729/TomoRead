@@ -338,16 +338,19 @@ class TextReaderWorkspace extends HookConsumerWidget {
           ReaderPosition(progress: book.progress, locator: book.locator),
         );
         final currentChapter = document.chapters[chapterIndex.value];
-        unawaited(
-          ref
-              .read(libraryBooksProvider.notifier)
-              .updateReadingPosition(
-                bookId: bookId,
-                chapterIndex: chapterIndex.value,
-                progress: book.progress,
-                locator: book.locator ?? currentChapter.locator(),
-              ),
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
+          unawaited(
+            ref
+                .read(libraryBooksProvider.notifier)
+                .updateReadingPosition(
+                  bookId: bookId,
+                  chapterIndex: chapterIndex.value,
+                  progress: book.progress,
+                  locator: book.locator ?? currentChapter.locator(),
+                ),
+          );
+        });
         tracker.recordInteraction(
           ReaderPosition(progress: book.progress, locator: book.locator),
           ReadingInteraction.navigation,
