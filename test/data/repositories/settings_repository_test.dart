@@ -35,6 +35,7 @@ void main() {
       const AppAppearance(
         mode: ThemeMode.dark,
         seed: ThemeSeed.green,
+        themeStyle: AppThemeStyle.paper,
         textScale: 1.25,
         uiFont: FontChoice.monospace,
         desktopNavigationWidth: 288,
@@ -75,6 +76,7 @@ void main() {
 
     expect(stored.appearance.mode, ThemeMode.dark);
     expect(stored.appearance.seed, ThemeSeed.green);
+    expect(stored.appearance.themeStyle, AppThemeStyle.paper);
     expect(stored.appearance.uiFont, FontChoice.monospace);
     expect(stored.appearance.desktopNavigationWidth, 288);
     expect(stored.appearance.desktopNavigationCollapsed, isTrue);

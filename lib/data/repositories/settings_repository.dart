@@ -43,6 +43,7 @@ class SettingsRepository {
       jsonEncode({
         'mode': appearance.mode.name,
         'seed': appearance.seed.name,
+        'themeStyle': appearance.themeStyle.name,
         'textScale': appearance.textScale,
         'uiFont': appearance.uiFont.name,
         'desktopNavigationWidth': appearance.desktopNavigationWidth,
@@ -105,6 +106,9 @@ class SettingsRepository {
     return AppAppearance(
       mode: ThemeMode.values.byName(value['mode']! as String),
       seed: ThemeSeed.values.byName(value['seed']! as String),
+      themeStyle: AppThemeStyle.values.byName(
+        value['themeStyle'] as String? ?? AppThemeStyle.mist.name,
+      ),
       textScale: (value['textScale']! as num).toDouble(),
       uiFont: FontChoice.values.byName(value['uiFont']! as String),
       desktopNavigationWidth:

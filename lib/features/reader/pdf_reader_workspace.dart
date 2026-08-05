@@ -679,6 +679,13 @@ class PdfReaderWorkspace extends HookConsumerWidget {
                   controller: viewerController,
                   initialPageNumber: initialPage,
                   params: PdfViewerParams(
+                    // Never recolor the PDF itself: its page appearance is
+                    // part of the document. The surrounding reading canvas
+                    // still follows the selected app palette on every
+                    // platform, including the paper preset.
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerLow,
                     onPageChanged: savePage,
                     onViewerReady: (_, controller) {
                       if (textSearcher.value == null) {

@@ -80,13 +80,15 @@ class SettingsPage extends HookConsumerWidget {
                 .read(fontCatalogControllerProvider.notifier)
                 .importFromPicker();
             if (font != null && context.mounted) {
-              onReadingSettingsChanged(readingSettings.copyWith(font: font.ref));
+              onReadingSettingsChanged(
+                readingSettings.copyWith(font: font.ref),
+              );
             }
           } on Object catch (error) {
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('字体导入失败：$error')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('字体导入失败：$error')));
             }
           }
         },
@@ -97,9 +99,7 @@ class SettingsPage extends HookConsumerWidget {
                   context: context,
                   builder: (dialogContext) => AlertDialog(
                     title: const Text('删除已导入字体？'),
-                    content: const Text(
-                      '所有引用该字体的全局及单本书设置会先替换为系统默认字体。',
-                    ),
+                    content: const Text('所有引用该字体的全局及单本书设置会先替换为系统默认字体。'),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(dialogContext, false),
@@ -125,17 +125,16 @@ class SettingsPage extends HookConsumerWidget {
                   );
                 } on Object catch (error) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('字体删除失败：$error')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('字体删除失败：$error')));
                   }
                 }
               },
         textColoring: textColoring,
         textColoringLoading: textColoringState.isLoading,
-        onTextColoringChanged: (value) => ref
-            .read(textColoringSettingsProvider.notifier)
-            .saveSettings(value),
+        onTextColoringChanged: (value) =>
+            ref.read(textColoringSettingsProvider.notifier).saveSettings(value),
       ),
       _SettingsSection.aiVector => const EmbeddingSettingsPage(),
       _SettingsSection.dataPrivacy => const _DataPrivacySettings(),
@@ -364,6 +363,26 @@ class _AppearanceSettings extends StatelessWidget {
             onChanged(appearance.copyWith(mode: selection.first)),
       ),
       const SizedBox(height: 32),
+      const _SettingsHeading('界面配色'),
+      Text(
+        '配色会同步应用界面、EPUB 与 TXT 阅读背景；PDF 保留原始页面颜色，仅调整阅读区底色。',
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          for (final style in AppThemeStyle.values)
+            _ThemeStyleCard(
+              style: style,
+              selected: appearance.themeStyle == style,
+              onPressed: () =>
+                  onChanged(appearance.copyWith(themeStyle: style)),
+            ),
+        ],
+      ),
+      const SizedBox(height: 32),
       const _SettingsHeading('主题色'),
       Wrap(
         spacing: 12,
@@ -408,6 +427,120 @@ class _AppearanceSettings extends StatelessWidget {
       ),
     ],
   );
+}
+
+class _ThemeStyleCard extends StatelessWidget {
+  const _ThemeStyleCard({
+    required this.style,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final AppThemeStyle style;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${style.label}配色，${style.description}',
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          key: Key('theme-style-${style.name}'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: 150,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: selected
+                  ? colors.primaryContainer.withValues(alpha: .38)
+                  : colors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? colors.primary : colors.outlineVariant,
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 72,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: style.previewColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: style == AppThemeStyle.white
+                          ? const Color(0xFFDADADD)
+                          : Colors.transparent,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'TomoRead',
+                        style: TextStyle(
+                          color: style.previewForeground,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        height: 5,
+                        width: 94,
+                        decoration: BoxDecoration(
+                          color: style.previewForeground.withValues(alpha: .34),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Container(
+                        height: 5,
+                        width: 66,
+                        decoration: BoxDecoration(
+                          color: style.previewForeground.withValues(alpha: .2),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        style.label,
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                    if (selected)
+                      Icon(Icons.check_circle, color: colors.primary, size: 18),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  style.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ReadingDefaultsSettings extends StatelessWidget {

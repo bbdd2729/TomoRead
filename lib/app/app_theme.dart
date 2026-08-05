@@ -3,40 +3,53 @@ import 'package:flutter/material.dart';
 import '../domain/models/font_choice.dart';
 import 'appearance.dart';
 
+class _TomoReadSurfacePalette {
+  const _TomoReadSurfacePalette({
+    required this.scaffold,
+    required this.surface,
+    required this.onSurface,
+    required this.onSurfaceVariant,
+    required this.surfaceContainerLowest,
+    required this.surfaceContainerLow,
+    required this.surfaceContainer,
+    required this.surfaceContainerHigh,
+    required this.surfaceContainerHighest,
+    required this.outline,
+    required this.outlineVariant,
+  });
+
+  final Color scaffold;
+  final Color surface;
+  final Color onSurface;
+  final Color onSurfaceVariant;
+  final Color surfaceContainerLowest;
+  final Color surfaceContainerLow;
+  final Color surfaceContainer;
+  final Color surfaceContainerHigh;
+  final Color surfaceContainerHighest;
+  final Color outline;
+  final Color outlineVariant;
+}
+
 abstract final class TomoReadTheme {
   static ThemeData build(AppAppearance appearance, {Brightness? brightness}) {
     final isDark = brightness == Brightness.dark;
+    final palette = _surfacePalette(appearance.themeStyle, isDark);
     final generatedScheme = ColorScheme.fromSeed(
       seedColor: appearance.seed.color,
       brightness: brightness ?? Brightness.light,
     );
     final colorScheme = generatedScheme.copyWith(
-      surface: isDark ? const Color(0xFF17201E) : const Color(0xFFFFFFFF),
-      onSurface: isDark ? const Color(0xFFE7EFEB) : const Color(0xFF17211F),
-      onSurfaceVariant: isDark
-          ? const Color(0xFFBAC8C1)
-          : const Color(0xFF53615C),
-      surfaceContainerLowest: isDark
-          ? const Color(0xFF101715)
-          : const Color(0xFFFFFFFF),
-      surfaceContainerLow: isDark
-          ? const Color(0xFF1D2825)
-          : const Color(0xFFF2F6F4),
-      surfaceContainer: isDark
-          ? const Color(0xFF25312D)
-          : const Color(0xFFECF1EF),
-      surfaceContainerHigh: isDark
-          ? const Color(0xFF2D3935)
-          : const Color(0xFFE4EBE8),
-      surfaceContainerHighest: isDark
-          ? const Color(0xFF37433F)
-          : const Color(0xFFDCE5E1),
-      outline: isDark ? const Color(0xFF85958D) : const Color(0xFF6F7D76),
-      outlineVariant: isDark
-          ? const Color(0xFF3E4D47)
-          : const Color(0xFFD3DDD8),
-      secondary: isDark ? const Color(0xFFB6C6FF) : const Color(0xFF4C5D93),
-      tertiary: isDark ? const Color(0xFFFFB1C6) : const Color(0xFF8B405A),
+      surface: palette.surface,
+      onSurface: palette.onSurface,
+      onSurfaceVariant: palette.onSurfaceVariant,
+      surfaceContainerLowest: palette.surfaceContainerLowest,
+      surfaceContainerLow: palette.surfaceContainerLow,
+      surfaceContainer: palette.surfaceContainer,
+      surfaceContainerHigh: palette.surfaceContainerHigh,
+      surfaceContainerHighest: palette.surfaceContainerHighest,
+      outline: palette.outline,
+      outlineVariant: palette.outlineVariant,
     );
     final fontFamily = appearance.uiFont.fontFamily;
     final textTheme = _textTheme(colorScheme, fontFamily);
@@ -54,9 +67,7 @@ abstract final class TomoReadTheme {
       useMaterial3: true,
       fontFamily: fontFamily,
       textTheme: textTheme,
-      scaffoldBackgroundColor: isDark
-          ? const Color(0xFF101715)
-          : const Color(0xFFF7F9F8),
+      scaffoldBackgroundColor: palette.scaffold,
       appBarTheme: AppBarTheme(
         centerTitle: false,
         toolbarHeight: 56,
@@ -284,5 +295,95 @@ abstract final class TomoReadTheme {
         fontWeight: FontWeight.w600,
       ),
     );
+  }
+
+  static _TomoReadSurfacePalette _surfacePalette(
+    AppThemeStyle style,
+    bool isDark,
+  ) {
+    if (isDark) {
+      return switch (style) {
+        AppThemeStyle.mist => const _TomoReadSurfacePalette(
+          scaffold: Color(0xFF101715),
+          surface: Color(0xFF17201E),
+          onSurface: Color(0xFFE7EFEB),
+          onSurfaceVariant: Color(0xFFBAC8C1),
+          surfaceContainerLowest: Color(0xFF101715),
+          surfaceContainerLow: Color(0xFF1D2825),
+          surfaceContainer: Color(0xFF25312D),
+          surfaceContainerHigh: Color(0xFF2D3935),
+          surfaceContainerHighest: Color(0xFF37433F),
+          outline: Color(0xFF85958D),
+          outlineVariant: Color(0xFF3E4D47),
+        ),
+        AppThemeStyle.white => const _TomoReadSurfacePalette(
+          scaffold: Color(0xFF18181A),
+          surface: Color(0xFF202023),
+          onSurface: Color(0xFFE8E8ED),
+          onSurfaceVariant: Color(0xFFC8C7CE),
+          surfaceContainerLowest: Color(0xFF18181A),
+          surfaceContainerLow: Color(0xFF28282B),
+          surfaceContainer: Color(0xFF303034),
+          surfaceContainerHigh: Color(0xFF39393E),
+          surfaceContainerHighest: Color(0xFF444449),
+          outline: Color(0xFF929198),
+          outlineVariant: Color(0xFF46464C),
+        ),
+        AppThemeStyle.paper => const _TomoReadSurfacePalette(
+          scaffold: Color(0xFF211B16),
+          surface: Color(0xFF2C241D),
+          onSurface: Color(0xFFF0E6D2),
+          onSurfaceVariant: Color(0xFFD5C6AF),
+          surfaceContainerLowest: Color(0xFF211B16),
+          surfaceContainerLow: Color(0xFF352C24),
+          surfaceContainer: Color(0xFF40362C),
+          surfaceContainerHigh: Color(0xFF4B4035),
+          surfaceContainerHighest: Color(0xFF594C40),
+          outline: Color(0xFFA99A84),
+          outlineVariant: Color(0xFF51463B),
+        ),
+      };
+    }
+    return switch (style) {
+      AppThemeStyle.mist => const _TomoReadSurfacePalette(
+        scaffold: Color(0xFFF7F9F8),
+        surface: Color(0xFFFFFFFF),
+        onSurface: Color(0xFF17211F),
+        onSurfaceVariant: Color(0xFF53615C),
+        surfaceContainerLowest: Color(0xFFFFFFFF),
+        surfaceContainerLow: Color(0xFFF2F6F4),
+        surfaceContainer: Color(0xFFECF1EF),
+        surfaceContainerHigh: Color(0xFFE4EBE8),
+        surfaceContainerHighest: Color(0xFFDCE5E1),
+        outline: Color(0xFF6F7D76),
+        outlineVariant: Color(0xFFD3DDD8),
+      ),
+      AppThemeStyle.white => const _TomoReadSurfacePalette(
+        scaffold: Color(0xFFFAFAFA),
+        surface: Color(0xFFFFFFFF),
+        onSurface: Color(0xFF1C1C1E),
+        onSurfaceVariant: Color(0xFF606167),
+        surfaceContainerLowest: Color(0xFFFFFFFF),
+        surfaceContainerLow: Color(0xFFF7F7F8),
+        surfaceContainer: Color(0xFFF1F1F3),
+        surfaceContainerHigh: Color(0xFFEBEBED),
+        surfaceContainerHighest: Color(0xFFE4E4E7),
+        outline: Color(0xFF74747A),
+        outlineVariant: Color(0xFFDEDEE3),
+      ),
+      AppThemeStyle.paper => const _TomoReadSurfacePalette(
+        scaffold: Color(0xFFF0E6D2),
+        surface: Color(0xFFF5EBD7),
+        onSurface: Color(0xFF3D2B1F),
+        onSurfaceVariant: Color(0xFF7A6652),
+        surfaceContainerLowest: Color(0xFFFFF7E8),
+        surfaceContainerLow: Color(0xFFFAF0DD),
+        surfaceContainer: Color(0xFFF0E3CC),
+        surfaceContainerHigh: Color(0xFFE9DCC5),
+        surfaceContainerHighest: Color(0xFFE1D2B9),
+        outline: Color(0xFF7A6652),
+        outlineVariant: Color(0xFFD4C4A8),
+      ),
+    };
   }
 }
