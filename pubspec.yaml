@@ -80,6 +80,13 @@ dev_dependencies:
 
 dependency_overrides:
   analyzer: ^13.0.0
+  # `flutter_inappwebview` is only used by the Android EPUB renderer. Its
+  # upstream umbrella package also registers a Windows implementation, which
+  # creates a competing DispatcherQueue/Graphics Capture context before the
+  # desktop `webview_flutter_windows` reader starts. Keep the Windows package
+  # as an inert Dart-only implementation so Flutter does not register it.
+  flutter_inappwebview_windows:
+    path: third_party/flutter_inappwebview_windows_stub
 
 hooks:
   user_defines:
