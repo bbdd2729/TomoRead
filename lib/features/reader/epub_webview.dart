@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:webview_flutter_windows/webview_flutter_windows.dart';
@@ -566,11 +567,12 @@ class EpubWebView extends HookConsumerWidget {
     );
 
     if (readerSession.hasError || initializationError.value != null) {
+      final cause = initializationError.value ?? readerSession.error;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            '无法启动 EPUB 渲染器：${initializationError.value ?? readerSession.error}',
+            '无法启动 EPUB 渲染器：${_describeError(cause)}',
           ),
         ),
       );
@@ -579,6 +581,29 @@ class EpubWebView extends HookConsumerWidget {
       return const Center(child: CircularProgressIndicator());
     }
     return Webview(controller);
+  }
+
+  static String _describeError(Object? error) {
+    if (error is PlatformException) {
+      final raw = [
+        if (error.message?.trim().isNotEmpty == true) error.message!.trim(),
+        if (error.details != null) '$error.details',
+      ].join('：');
+      final lower = raw.toLowerCase();
+      final suggestsWebView2 =
+          lower.contains('webview2') ||
+          lower.contains('webview2runtime') ||
+          lower.contains('hresult') ||
+          lower.contains('0x80040154') ||
+          lower.contains('class not registered') ||
+          lower.contains('failed to create');
+      if (suggestsWebView2) {
+        return 'Windows 缺少 WebView2 运行时。请从 Microsoft Edge WebView2 页面下载并安装 Evergreen 运行时后重试。'
+            '（原始错误：$raw）';
+      }
+      return raw.isEmpty ? error.code : raw;
+    }
+    return '$error';
   }
 
   String _chapterUrl(String chapterHref) =>
