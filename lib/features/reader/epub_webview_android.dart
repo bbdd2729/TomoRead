@@ -146,6 +146,12 @@ class AndroidEpubWebView extends HookConsumerWidget {
     searchScriptRef.value = runtimeSearchScript;
     final runtimeBridgeReady = useRef(false);
     final runtimeBootstrapStarted = useRef(false);
+    final openedRef = useRef(false);
+    void reportRuntimeReady() {
+      if (!active.value) return;
+      runtimeBridgeReady.value = true;
+    }
+
     void reportReady() {
       if (!active.value) return;
       final wasReady = loadPhase.value == _AndroidEpubLoadPhase.ready;
@@ -156,8 +162,24 @@ class AndroidEpubWebView extends HookConsumerWidget {
       }
     }
 
+    void markOpened() {
+      openedRef.value = true;
+      reportReady();
+    }
+
     void reportFailure(Object exception) {
       if (!active.value) return;
+      // A chapter may already be rendered when a global error listener reports
+      // an incidental runtime error. That must not replace a usable reader with
+      // a failure screen; only a pre-open failure is surfaced as one.
+      if (openedRef.value) {
+        AppDiagnostics.error(
+          'epub.webview',
+          'post-open runtime error ignored',
+          error: exception,
+        );
+        return;
+      }
       error.value = exception;
       loadPhase.value = _AndroidEpubLoadPhase.failed;
       AppDiagnostics.error('epub.webview', 'renderer failed', error: exception);
@@ -168,11 +190,8 @@ class AndroidEpubWebView extends HookConsumerWidget {
       context,
       rawMessage,
       epubManifest.value,
-      () {
-        runtimeBridgeReady.value = true;
-        reportReady();
-      },
-      reportReady,
+      reportRuntimeReady,
+      markOpened,
       reportFailure,
       onAutoScrollChanged,
     );
@@ -629,6 +648,10 @@ class AndroidEpubWebView extends HookConsumerWidget {
     if (runtimeMessage is Map<String, dynamic> &&
         runtimeMessage['type'] == 'runtimeError') {
       final runtimeStack = runtimeMessage['stack'];
+      // The global error listener reports incidental chapter-rendering errors
+      // after the runtime has booted. Those are not load failures: an actual
+      // `open` failure is reported through commandFailed(id: 0). Logging here
+      // keeps a usable chapter from being replaced by a failure screen.
       AppDiagnostics.error(
         'epub.bridge',
         'runtime reported an error',
@@ -636,9 +659,6 @@ class AndroidEpubWebView extends HookConsumerWidget {
         stackTrace: runtimeStack is String && runtimeStack.isNotEmpty
             ? StackTrace.fromString(runtimeStack)
             : null,
-      );
-      onFailure(
-        StateError(runtimeMessage['message'] ?? 'Unknown runtime error'),
       );
       return;
     }
@@ -667,7 +687,17 @@ class AndroidEpubWebView extends HookConsumerWidget {
             ? StackTrace.fromString(runtimeStack)
             : null,
       );
-      if (commandId is num) onNavigationCommandFinished(commandId.toInt());
+      if (commandId is num) {
+        // The initial `open` command failing is a genuine load failure. Later
+        // commands failing (navigation, settings, decorations) are surfaced
+        // through their own channels and must not tear down the reader.
+        if (commandId == 0) {
+          onFailure(
+            StateError(runtimeMessage['message'] ?? 'Unknown command error'),
+          );
+        }
+        onNavigationCommandFinished(commandId.toInt());
+      }
       return;
     }
     if (runtimeMessage is Map<String, dynamic> &&
