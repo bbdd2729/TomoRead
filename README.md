@@ -5,113 +5,116 @@
 
 > Licensed under the [GNU General Public License v3.0 only](LICENSE).
 
-TomoRead 是一款基于 Flutter 的跨平台 AI 阅读器，面向本地 EPUB/PDF 书库、沉浸式阅读、全局知识整理和基于原文的 AI 对话。
+> 中文版说明见 [docs/README.zh-CN.md](docs/README.zh-CN.md) / Read this in [Chinese](docs/README.zh-CN.md).
 
-项目目前以 Windows 和 Linux 桌面端为主要开发目标。书籍、阅读位置、书签、标注、笔记、对话和阅读统计默认保存在本地；模型 API Key 通过系统安全存储管理。使用 AI 功能时，用户输入和明确附加的原文会发送到所配置的模型服务商。
+TomoRead is a cross-platform, local-first AI reader built with Flutter. It manages a personal library of EPUB/PDF/TXT/Markdown books, immersive reading, knowledge organization, and source-grounded AI conversations.
 
-## 下载
+Books, reading positions, bookmarks, annotations, notes, conversations, and reading statistics are stored locally by default; model API keys are kept in system secure storage. When AI features are used, your input and any explicitly attached source text are sent to the configured model provider.
 
-前往 [GitHub Releases](https://github.com/bbdd2729/TomoRead/releases) 下载已发布版本：
+## Downloads
 
-- Windows x64：下载 ZIP，解压后运行 `tomoread.exe`
-- Linux x64：下载并解压 `tar.gz`，运行 bundle 中的 TomoRead
-- Android：实验性支持；APK 分为 `armeabi-v7a`（32 位 ARM）和 `arm64-v8a`（64 位 ARM），AAB 用于应用商店
+Grab the latest release from [GitHub Releases](https://github.com/bbdd2729/TomoRead/releases):
 
-> TomoRead 仍在积极开发中。升级前建议保留重要笔记的 Markdown 或 JSON 导出文件。
+- Windows x64: download the ZIP, extract it, then run `tomoread.exe`
+- Linux x64: download and extract the `tar.gz`, then run TomoRead from the bundle
+- Android (experimental): APKs are split into `armeabi-v7a` (32-bit ARM) and `arm64-v8a` (64-bit ARM); an AAB is provided for store submission
 
-## 当前能力
+> TomoRead is under active development. Before upgrading, consider keeping Markdown or JSON exports of your important notes.
 
-### 阅读器
+## Current Capabilities
 
-- [x] 本地 EPUB、PDF 导入、文件哈希去重与托管存储
-- [x] EPUB 元数据、封面、目录、阅读顺序与章节资源解析
-- [x] EPUB 分页和滚动模式、单栏/双栏排版、滚轮与点击翻页
-- [x] PDF 渲染、目录导航和阅读位置保存
-- [x] 沉浸式阅读，工具栏和目录/书签浮层不会挤压正文
-- [x] 桌面端可拖动侧栏宽度，移动端使用抽屉和底部面板
-- [x] 全局阅读设置与单本书覆盖设置
-- [x] 字体、字号、行距、页边距、配色、阅读方向和翻页方式
-- [x] EPUB/TXT 文本前景色：英文、数字、标点、引号/括号内容及全局/单书自定义词条
-- [x] 书签、高亮、彩色标注、笔记及自定义文本选择菜单
-- [x] PDF 选区标注、笔记与 AI 引用
-- [x] EPUB 脚注/图片查看、安全外链策略、系统 TTS 与自动滚动
-- [x] 番茄专注与阅读统计
+### Reader
 
-### 书库与知识整理
+- [x] Import local EPUB, PDF, TXT, and Markdown with file-hash deduplication and managed storage
+- [x] EPUB metadata, cover art, table of contents, reading order, and chapter resource parsing
+- [x] EPUB paginated and scrolling modes, single/double-column layouts, wheel and tap-to-turn navigation
+- [x] Cross-format locator contracts so reopening or relayout returns to the same passage reliably
+- [x] PDF rendering, outline navigation, and persistent reading positions
+- [x] Immersive reading; toolbars and TOC/bookmark overlays never squeeze the content
+- [x] Desktop resizable side panels; mobile drawers and bottom sheets
+- [x] Global reading settings with per-book overrides
+- [x] Fonts, font size, line height, margins, colors, reading direction, and page transitions
+- [x] EPUB/TXT/Markdown text foreground coloring: English, digits, punctuation, quotes/parentheses, plus global and per-book custom terms
+- [x] Bookmarks, highlights, colored annotations, notes, and a custom text-selection menu
+- [x] PDF selection annotations, notes, and AI citations
+- [x] Safe EPUB footnotes/image viewing, external-link policy, system TTS, and auto-scroll
+- [x] Pomodoro focus sessions and reading statistics
 
-- [x] 网格/列表书库、搜索、格式筛选、分类、标签与收藏
-- [x] 批量收藏、分类和删除
-- [x] 书籍详情页以及书名、作者、简介、分类、标签编辑
-- [x] 全局笔记页：全文搜索、书籍/颜色/标签筛选与排序
-- [x] 笔记 Markdown 编辑、预览、自动保存和原文定位
-- [x] 笔记导出为 Markdown 或 JSON
-- [x] 阅读统计：日/周/月/年/全部、阅读时长、活跃天数、连续阅读和书籍排行
+### Library & Knowledge
 
-### AI 阅读
+- [x] Grid/list library, search, format filters, categories, tags, and favorites
+- [x] Batch favorite, categorize, and delete
+- [x] Book details with title, author, description, category, and tag editing
+- [x] Global notes page: full-text search, book/color/tag filters, and sorting
+- [x] Markdown note editing, preview, autosave, and jump back to the source
+- [x] Export notes to Markdown or JSON
+- [x] Reading statistics: day/week/month/year/all, reading time, active days, streaks, and book rankings
 
-- [x] OpenAI 兼容接口配置和模型切换
-- [x] API Key 使用系统安全存储，不写入 SQLite
-- [x] 通用对话与单本书对话持久化
-- [x] 流式回复、停止生成、Markdown 展示与失败恢复
-- [x] 选中文本后询问、解释或总结，并保存可跳回原文的引用
-- [x] 可信内容分块、关键词与向量混合语义检索、防剧透阅读上下文
-- [x] Agent 工具调用、思考摘要、技能与结构化消息 Part
-- [ ] 阅读计划、学习卡片和笔记自动整理
-- [ ] 更多模型协议与本地模型接入
+### AI Reading
 
-## 支持平台
+- [x] OpenAI-compatible endpoint configuration and model switching
+- [x] API keys kept in system secure storage, never in SQLite
+- [x] General and per-book persistent conversations
+- [x] Streaming replies, stop generation, Markdown rendering, and error recovery
+- [x] Ask, explain, or summarize selected text with citations that link back to the source
+- [x] Trusted content chunking, hybrid keyword/vector semantic search, and spoiler-safe reading context
+- [x] Agent tool calls, thinking summaries, skills, and structured message parts
+- [ ] Reading plans, study cards, and automatic note organization
+- [ ] More model protocols and local model support
 
-| 平台 | 状态 | Release 产物 |
+## Supported Platforms
+
+| Platform | Status | Release artifacts |
 | --- | --- | --- |
-| Windows x64 | 主要支持 | ZIP |
-| Linux x64 | 支持 | `tar.gz` |
-| Android | 实验性，正在修复构建与性能问题 | v7a APK、v8a APK、AAB（可选） |
-| macOS | 计划中 | - |
-| iOS | 计划中 | - |
+| Windows x64 | Primary support | ZIP |
+| Linux x64 | Supported | `tar.gz` |
+| Android | Experimental; builds and WebView performance are being improved | v7a APK, v8a APK, AAB (optional) |
+| macOS | Planned | - |
+| iOS | Planned | - |
 
-每次推送和 Pull Request 会执行静态分析与测试，并运行配置中的平台构建。手动执行 `Release` 工作流时可以选择 Windows、Linux、Android 中的任意组合。
+Static analysis and tests run on every push and pull request, along with the configured platform builds. The manual `Release` workflow can build any combination of Windows, Linux, and Android.
 
-## 技术架构
+## Architecture
 
-项目使用 Hooks Riverpod 管理状态，使用 SQLite 保存结构化业务数据，使用系统安全存储保存模型密钥。功能按 UI、领域模型和数据访问职责拆分：
+The project uses Hooks Riverpod for state management, SQLite for structured business data, and system secure storage for model keys. Features are split by UI, domain model, and data-access responsibilities:
 
 ```text
 lib/
-├── app/                    # 应用入口、主题、全局 Provider
-├── domain/models/          # 书籍、定位、标注、对话、阅读活动等领域模型
+├── app/                    # App entry, theme, global providers
+├── domain/models/          # Books, locators, annotations, chat, reading activity models
 ├── data/
-│   ├── database/           # SQLite schema 与版本迁移
-│   ├── repositories/       # 书库、标注、对话、统计等数据访问
-│   └── services/           # 导入、EPUB、AI、导出与阅读活动追踪
+│   ├── database/           # SQLite schema and versioned migrations
+│   ├── repositories/       # Library, annotations, chat, statistics data access
+│   └── services/           # Import, EPUB, AI, export, reading-activity tracking
 ├── features/
-│   ├── library/            # 书库与书籍详情
-│   ├── reader/             # EPUB/PDF 阅读工作区
-│   ├── chat/               # AI 对话
-│   ├── notes/              # 全局笔记
-│   ├── statistics/         # 阅读统计
-│   ├── settings/           # 软件与阅读设置
-│   └── workspace/          # 响应式桌面/移动导航壳
-└── shared/                 # 跨功能复用组件
+│   ├── library/            # Library and book details
+│   ├── reader/             # EPUB/PDF/TXT/Markdown reader workspaces
+│   ├── chat/               # AI conversations
+│   ├── notes/              # Global notes
+│   ├── statistics/         # Reading statistics
+│   ├── settings/           # App and reading settings
+│   └── workspace/          # Responsive desktop/mobile navigation shell
+└── shared/                 # Cross-feature reusable widgets
 ```
 
-### 关键数据流
+### Key Data Flows
 
-1. 导入服务复制书籍到应用目录，计算哈希并解析 EPUB/PDF 元数据。
-2. Repository 将书库、阅读位置、书签、标注、对话和阅读会话写入 SQLite。
-3. Riverpod Provider 将异步仓储和服务组合为页面状态，Widget 只处理展示与交互。
-4. EPUB 使用内置 Foliate.js runtime 在 WebView 中渲染，PDF 使用 `pdfrx`；渲染器通过统一的定位模型与 Flutter 侧交互。
-5. 阅读器将有效前台阅读活动写入会话表，统计服务再按日期和书籍聚合。
-6. AI Gateway 通过 OpenAI 兼容 SSE 接口流式返回内容，对话与引用独立持久化。
+1. The import service copies books into the app directory, hashes them, and parses EPUB/PDF metadata.
+2. Repositories write library, reading positions, bookmarks, annotations, conversations, and reading sessions to SQLite.
+3. Riverpod providers compose async repositories and services into page state; widgets handle presentation and interaction only.
+4. EPUB renders with the bundled Foliate.js runtime inside a WebView; PDF uses `pdfrx`; renderers talk to Flutter through a unified locator model.
+5. The reader records active reading activity into session tables, which the statistics service aggregates by date and book.
+6. The AI gateway streams replies over an OpenAI-compatible SSE interface; conversations and citations are persisted independently.
 
-更多项目文档位于 [`docs/`](docs/)：
+More project documentation lives in [`docs/`](docs/):
 
-- [核心架构](docs/architecture.md)：本地数据、AI 对话、全局笔记与阅读统计的边界。
-- [阅读能力与数据边界](docs/reader-features.md)：当前格式能力、定位、标注、显示投影与内容安全规则。
-- [产品路线图](docs/roadmap.md)：以 ColorTxt、ReadAny 为参照的后续优先级与交付原则。
+- [Architecture](docs/architecture.md): the boundaries of local data, AI conversations, global notes, and reading statistics.
+- [Reader capabilities and data boundaries](docs/reader-features.md): current format support, locators, annotations, display projection, and content-safety rules.
+- [Product roadmap](docs/roadmap.md): priorities and delivery principles referenced against ColorTxt and ReadAny.
 
-## 本地开发
+## Local Development
 
-当前 CI 使用 Flutter `3.44.8`。准备对应平台的 Flutter 原生工具链后执行：
+CI currently uses Flutter `3.44.8`. After preparing the Flutter native toolchain for your platform:
 
 ```bash
 flutter pub get
@@ -120,67 +123,68 @@ flutter test
 flutter run -d windows
 ```
 
-桌面端构建：
+Desktop builds:
 
 ```bash
 flutter build windows --release
 flutter build linux --release
 ```
 
-Android 当前为实验性平台：
+Android is currently experimental:
 
 ```bash
 flutter build apk --debug
 ```
 
-## 发布流程
+## Release Process
 
-1. 打开仓库的 **Actions > Release > Run workflow**。
-2. 填写 `x.y.z` 格式版本号，例如 `0.2.0`，不要填写前导 `v`。
-3. 选择需要构建的平台。Android 默认关闭，不影响桌面版本构建。
-4. `publish_release=false` 时只生成 Actions Artifacts，不创建 tag 或 Release，适合测试正式构建。
-5. `publish_release=true` 时，工作流会在构建成功后创建 `v0.2.0` 形式的 Git tag 和同名 GitHub Release，并上传全部所选平台产物。
-6. 发布模式下，已经存在的 tag 不会被覆盖；失败修复后，如果 tag 尚未创建，可以使用相同版本重新运行。仅构建模式可以重复使用任意合法版本号。
+1. Open **Actions > Release > Run workflow** in the repository.
+2. Enter a version in `x.y.z` format, e.g. `0.2.0`, without a leading `v`.
+3. Select the platforms to build. Android is off by default and does not affect desktop builds.
+4. With `publish_release=false`, only Actions artifacts are produced; no tag or Release is created. Useful for testing a real build.
+5. With `publish_release=true`, the workflow creates a Git tag like `v0.2.0` and a GitHub Release of the same name after a successful build, uploading all selected platform artifacts.
+6. In publish mode, an existing tag is never overwritten; after fixing a failed release, re-run with the same version if the tag has not been created yet. Build-only mode may reuse any valid version number.
 
-选择 Android 构建时，需要在仓库 Secrets 中配置：
+When Android is selected, configure these repository secrets:
 
 - `ANDROID_KEYSTORE_BASE64`
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
 
-Android 会生成以下产物：
+Android produces:
 
 - `TomoRead-x.y.z-android-armeabi-v7a.apk`
 - `TomoRead-x.y.z-android-arm64-v8a.apk`
 - `TomoRead-x.y.z-android.aab`
 
-## 路线图
+## Roadmap
 
-### 已完成
+### Done
 
-- [x] 本地 EPUB/PDF 书库与书籍详情
-- [x] EPUB 分页/滚动阅读和 PDF 阅读
-- [x] 阅读位置、书签、标注、笔记和设置持久化
-- [x] 全局笔记、筛选、编辑、导出和原文跳转
-- [x] 阅读活动采集与多维统计页面
-- [x] OpenAI 兼容 AI 对话、原文引用、Agent 工具与安全密钥存储
-- [x] EPUB/TXT 文本 token 与自定义词条前景色（亮/暗色板、单书覆盖）
-- [x] 系统 TTS、自动滚动、PDF 选区标注、备份/恢复与存储诊断
-- [x] 内容分块、关键词与向量混合语义检索、词云与 AI 思维导图
-- [x] 同步数据模型（版本、墓碑、冲突）与设置中心
-- [x] Windows/Linux 构建与可选平台 Release 工作流
+- [x] Local EPUB/PDF library and book details
+- [x] EPUB paginated/scrolling reading and PDF reading
+- [x] Reading positions, bookmarks, annotations, notes, and settings persistence
+- [x] Global notes, filtering, editing, export, and jump back to source
+- [x] Reading-activity collection and multi-dimensional statistics
+- [x] OpenAI-compatible AI chat with source citations, Agent tools, and secure key storage
+- [x] EPUB/TXT token and custom-term foreground coloring (light/dark palettes, per-book overrides)
+- [x] TXT/Markdown reading pipeline with safe display projection and coloring
+- [x] System TTS, auto-scroll, PDF selection annotations, backup/restore, and storage diagnostics
+- [x] Content chunking, hybrid keyword/vector semantic search, word clouds, and AI mind maps
+- [x] Sync data model (revisions, tombstones, conflict) and a settings center
+- [x] Windows/Linux builds and an optional platform Release workflow
 
-### 近期
+### Near term
 
-- [ ] 继续提高复杂 EPUB 的分页、定位和样式兼容性
-- [ ] 完善 Android 构建、WebView 渲染与低端设备性能
-- [ ] 增加统计导出、阅读目标和更丰富的趋势分析
-- [ ] 完善 AI 上下文选择、会话管理和错误诊断
+- [ ] Continue improving pagination, locators, and styling compatibility for complex EPUBs
+- [ ] Polish Android builds, WebView rendering, and low-end device performance
+- [ ] Add statistics export, reading goals, and richer trend analysis
+- [ ] Improve AI context selection, conversation management, and error diagnostics
 
-### 后续
+### Later
 
-- [ ] WebDAV/云端同步（数据契约已就绪，缺远端传输层）
-- [ ] 整章/整书检索增强、阅读指导和知识卡片
-- [ ] macOS、iOS 支持
-- [ ] 可扩展的阅读格式和 AI Provider 接口
+- [ ] WebDAV/cloud sync (the data contract is ready; the remote transport layer is missing)
+- [ ] Whole-chapter/book search enhancement, reading guidance, and knowledge cards
+- [ ] macOS and iOS support
+- [ ] Extensible reading formats and AI provider interfaces
