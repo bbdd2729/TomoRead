@@ -178,9 +178,11 @@ abstract final class ReaderThemeData {
     ).copyWith(
       primary: colors.accent,
       onPrimary: onPrimary,
-      primaryContainer: colors.accent
-          .withValues(alpha: colors.isDark ? .3 : .18)
-          .compositeOver(colors.background),
+      primaryContainer: _mix(
+        colors.background,
+        colors.accent,
+        colors.isDark ? .3 : .18,
+      ),
       onPrimaryContainer: colors.foreground,
       // EPUB CSS and the text reader consume `surface` as the paper color.
       // Keep it exact so a user-entered background swatch is never shifted.
