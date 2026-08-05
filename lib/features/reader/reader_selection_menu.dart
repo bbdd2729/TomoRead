@@ -2,17 +2,34 @@ import 'package:flutter/material.dart';
 
 import '../../domain/models/reading_annotation.dart';
 
-enum ReaderSelectionContextAction {
-  yellow,
-  green,
-  blue,
-  pink,
-  underline,
-  note,
-  textColor,
-  askAi,
-  explainAi,
-  summarizeAi,
+enum ReaderSelectionContextAction { highlight, underline, note, textColor, ai }
+
+enum ReaderSelectionAiAction { ask, explain, summarize }
+
+class ReaderSelectionActionMenuItem extends StatelessWidget {
+  const ReaderSelectionActionMenuItem({
+    super.key,
+    required this.icon,
+    required this.label,
+    this.hasSubmenu = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool hasSubmenu;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 168,
+    child: Row(
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label)),
+        if (hasSubmenu) const Icon(Icons.chevron_right, size: 20),
+      ],
+    ),
+  );
 }
 
 class ReaderSelectionContextMenuItem extends StatelessWidget {

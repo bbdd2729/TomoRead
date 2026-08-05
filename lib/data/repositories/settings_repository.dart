@@ -7,6 +7,7 @@ import '../../app/appearance.dart';
 import '../../domain/models/font_choice.dart';
 import '../../domain/models/reading_font.dart';
 import '../../domain/models/reading_settings.dart';
+import '../../domain/models/reader_theme.dart';
 import '../database/app_database.dart';
 
 class StoredSettings {
@@ -60,6 +61,35 @@ class SettingsRepository {
     return _put('reading_defaults', jsonEncode(_readingToMap(settings)));
   }
 
+  Future<List<CustomReaderTheme>> loadCustomReaderThemes() async {
+    final database = await _database.database;
+    final rows = await database.query(
+      'app_settings',
+      columns: ['setting_value'],
+      where: 'setting_key = ?',
+      whereArgs: ['reader_custom_themes'],
+      limit: 1,
+    );
+    if (rows.isEmpty) return const [];
+    try {
+      final source = jsonDecode(rows.single['setting_value']! as String);
+      if (source is! List) return const [];
+      return source
+          .map(CustomReaderTheme.tryParse)
+          .whereType<CustomReaderTheme>()
+          .toList(growable: false);
+    } on FormatException {
+      // A broken optional custom palette must never prevent the library from
+      // opening. The reader falls back to its built-in theme instead.
+      return const [];
+    }
+  }
+
+  Future<void> saveCustomReaderThemes(List<CustomReaderTheme> themes) => _put(
+    'reader_custom_themes',
+    jsonEncode(themes.map((theme) => theme.toJson()).toList()),
+  );
+
   Future<BookReadingOverride?> loadBookOverride(String bookId) async {
     final database = await _database.database;
     final rows = await database.query(
@@ -78,7 +108,7 @@ class SettingsRepository {
     final database = await _database.database;
     await database.insert('book_reading_overrides', {
       'book_id': override.bookId,
-      ..._readingToMap(override.settings),
+      ..._readingOverrideToMap(override.settings),
       'updated_at': DateTime.now().millisecondsSinceEpoch,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -149,6 +179,9 @@ class SettingsRepository {
       ),
       tapToTurnPages:
           value['tap_to_turn_pages'] == true || value['tap_to_turn_pages'] == 1,
+      theme: ReaderThemeSelection.fromJson(
+        value['reader_theme'] ?? _decodeReaderTheme(value['reader_theme_json']),
+      ),
     );
   }
 
@@ -161,5 +194,27 @@ class SettingsRepository {
     'layout_mode': settings.layoutMode.name,
     'page_transition': settings.pageTransition.name,
     'tap_to_turn_pages': settings.tapToTurnPages ? 1 : 0,
+    'reader_theme': settings.theme.toJson(),
   };
+
+  Map<String, Object> _readingOverrideToMap(ReadingSettings settings) => {
+    'font': settings.font.storageValue,
+    'font_size': settings.fontSize,
+    'line_height': settings.lineHeight,
+    'page_margin': settings.pageMargin,
+    'double_column': settings.doubleColumn ? 1 : 0,
+    'layout_mode': settings.layoutMode.name,
+    'page_transition': settings.pageTransition.name,
+    'tap_to_turn_pages': settings.tapToTurnPages ? 1 : 0,
+    'reader_theme_json': jsonEncode(settings.theme.toJson()),
+  };
+
+  Object? _decodeReaderTheme(Object? source) {
+    if (source is! String || source.isEmpty) return null;
+    try {
+      return jsonDecode(source);
+    } on FormatException {
+      return null;
+    }
+  }
 }

@@ -16,10 +16,10 @@ import '../../domain/models/epub_manifest.dart';
 import '../../domain/models/epub_location.dart';
 import '../../domain/models/epub_section_progress.dart';
 import '../../domain/models/reader_text_selection.dart';
+import '../../domain/models/reader_theme.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_annotation.dart';
 import '../../domain/models/reading_context.dart';
-import '../../domain/models/reading_position_metrics.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/reader_commands.dart';
 import '../../domain/models/text_coloring.dart';
@@ -41,6 +41,8 @@ import 'reader_toc_drawer.dart';
 import 'reader_toc_panel.dart';
 import 'reader_navigation_command.dart';
 import 'reader_runtime_controller.dart';
+import 'reader_theme_controller.dart';
+import 'reader_theme_data.dart';
 import 'content_search_dialog.dart';
 import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
@@ -54,7 +56,7 @@ import '../visualization/reader_visualization_dialog.dart';
 
 void _noopReaderAction() {}
 
-class ReaderWorkspace extends HookConsumerWidget {
+class ReaderWorkspace extends ConsumerWidget {
   const ReaderWorkspace({
     super.key,
     required this.bookId,
@@ -63,6 +65,44 @@ class ReaderWorkspace extends HookConsumerWidget {
     this.onExitReader = _noopReaderAction,
     this.onOpenChat = _noopReaderAction,
     this.initialControlsVisible = false,
+  });
+
+  final String bookId;
+  final String title;
+  final ReadingSettings readingSettings;
+  final VoidCallback onExitReader;
+  final VoidCallback onOpenChat;
+  final bool initialControlsVisible;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final override = ref.watch(bookReadingOverrideProvider(bookId)).value;
+    final customThemes =
+        ref.watch(customReaderThemesProvider).value ??
+        const <CustomReaderTheme>[];
+    final settings = override?.settings ?? readingSettings;
+    return Theme(
+      data: ReaderThemeData.build(Theme.of(context), settings, customThemes),
+      child: _ReaderWorkspaceContent(
+        bookId: bookId,
+        title: title,
+        readingSettings: readingSettings,
+        onExitReader: onExitReader,
+        onOpenChat: onOpenChat,
+        initialControlsVisible: initialControlsVisible,
+      ),
+    );
+  }
+}
+
+class _ReaderWorkspaceContent extends HookConsumerWidget {
+  const _ReaderWorkspaceContent({
+    required this.bookId,
+    required this.title,
+    required this.readingSettings,
+    required this.onExitReader,
+    required this.onOpenChat,
+    required this.initialControlsVisible,
   });
 
   final String bookId;
@@ -118,7 +158,6 @@ class ReaderWorkspace extends HookConsumerWidget {
     final showBookmarks = useState(false);
     final chapterIndex = useState(0);
     final scrollRatio = useState(0.0);
-    final chapterCharacterOffset = useState<int?>(null);
     final activeAnchor = useState<String?>(null);
     final activeCfi = useState<String?>(null);
     final restoreRevision = useState(0);
@@ -158,26 +197,10 @@ class ReaderWorkspace extends HookConsumerWidget {
       cfi: activeCfi.value,
     );
     final currentLocator = currentLocation.toLocator();
-    final overallProgress = sectionProgress.overallProgress(
-      activeChapterIndex,
-      scrollRatio.value,
-      chapterCharacterOffset: chapterCharacterOffset.value,
-    );
-    final characterPosition = sectionProgress.characterPosition(
-      activeChapterIndex,
-      scrollRatio.value,
-      chapterCharacterOffset: chapterCharacterOffset.value,
-    );
-    final positionMetrics = characterPosition == null
-        ? ReadingPositionMetrics.progressOnly(overallProgress)
-        : ReadingPositionMetrics.characterPosition(
-            current: characterPosition,
-            total: sectionProgress.totalCharacters,
-            // A relocation ratio is based on the rendered viewport. The
-            // runtime reports a text offset when the visible range is known;
-            // otherwise the current chapter ratio is an honest estimate.
-            isApproximate: chapterCharacterOffset.value == null,
-          );
+    // Foliate reports this value for every relocate event on both desktop and
+    // Android. Use it as the reader-facing progress source, just as ReadAny
+    // does, instead of coupling visible progress to optional text offsets.
+    final chapterProgress = scrollRatio.value.clamp(0, 1).toDouble();
     final chapterTitle =
         chapter.value?.title ?? '第 ${activeChapterIndex + 1} 章';
     final isLoading =
@@ -397,15 +420,10 @@ class ReaderWorkspace extends HookConsumerWidget {
       required double chapterRatio,
       String? anchor,
       String? cfi,
-      int? characterOffset,
     }) {
       final pending = PendingReaderProgress(
         chapterIndex: index,
-        progress: sectionProgress.overallProgress(
-          index,
-          chapterRatio,
-          chapterCharacterOffset: characterOffset,
-        ),
+        progress: sectionProgress.overallProgress(index, chapterRatio),
         locator: EpubLocation(
           chapterIndex: index,
           scrollRatio: chapterRatio,
@@ -722,102 +740,94 @@ class ReaderWorkspace extends HookConsumerWidget {
           Offset(menu.x, menu.y);
       final x = localPosition.dx.clamp(8, size.width - 8).toDouble();
       final y = localPosition.dy.clamp(8, size.height - 8).toDouble();
+      final menuPosition = RelativeRect.fromLTRB(
+        x,
+        y,
+        size.width - x,
+        size.height - y,
+      );
       try {
         final action = await showMenu<ReaderSelectionContextAction>(
           context: context,
-          position: RelativeRect.fromLTRB(
-            x,
-            y,
-            size.width - x,
-            size.height - y,
-          ),
+          position: menuPosition,
           items: const [
             PopupMenuItem(
-              value: ReaderSelectionContextAction.yellow,
-              child: ReaderSelectionContextMenuItem(
-                color: AnnotationColor.yellow,
+              value: ReaderSelectionContextAction.highlight,
+              child: ReaderSelectionActionMenuItem(
+                icon: Icons.highlight_outlined,
+                label: '高亮',
+                hasSubmenu: true,
               ),
             ),
-            PopupMenuItem(
-              value: ReaderSelectionContextAction.green,
-              child: ReaderSelectionContextMenuItem(
-                color: AnnotationColor.green,
-              ),
-            ),
-            PopupMenuItem(
-              value: ReaderSelectionContextAction.blue,
-              child: ReaderSelectionContextMenuItem(
-                color: AnnotationColor.blue,
-              ),
-            ),
-            PopupMenuItem(
-              value: ReaderSelectionContextAction.pink,
-              child: ReaderSelectionContextMenuItem(
-                color: AnnotationColor.pink,
-              ),
-            ),
-            PopupMenuDivider(),
             PopupMenuItem(
               value: ReaderSelectionContextAction.underline,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.format_underlined),
-                title: Text('划线'),
+              child: ReaderSelectionActionMenuItem(
+                icon: Icons.format_underlined,
+                label: '划线',
+                hasSubmenu: true,
               ),
             ),
             PopupMenuItem(
               value: ReaderSelectionContextAction.note,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.sticky_note_2_outlined),
-                title: Text('添加笔记'),
+              child: ReaderSelectionActionMenuItem(
+                icon: Icons.sticky_note_2_outlined,
+                label: '笔记',
               ),
             ),
             PopupMenuItem(
               value: ReaderSelectionContextAction.textColor,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.format_color_text_outlined),
-                title: Text('添加文字颜色'),
+              child: ReaderSelectionActionMenuItem(
+                icon: Icons.format_color_text_outlined,
+                label: '文字颜色',
               ),
             ),
             PopupMenuDivider(),
             PopupMenuItem(
-              value: ReaderSelectionContextAction.askAi,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.auto_awesome_outlined),
-                title: Text('询问 AI'),
-              ),
-            ),
-            PopupMenuItem(
-              value: ReaderSelectionContextAction.explainAi,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.lightbulb_outline),
-                title: Text('解释这段'),
-              ),
-            ),
-            PopupMenuItem(
-              value: ReaderSelectionContextAction.summarizeAi,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.summarize_outlined),
-                title: Text('总结这段'),
+              value: ReaderSelectionContextAction.ai,
+              child: ReaderSelectionActionMenuItem(
+                icon: Icons.auto_awesome_outlined,
+                label: 'AI 助手',
+                hasSubmenu: true,
               ),
             ),
           ],
         );
         if (action == null || !context.mounted) return;
         switch (action) {
-          case ReaderSelectionContextAction.yellow:
-            await saveAnnotation(menu.selection, AnnotationColor.yellow);
-          case ReaderSelectionContextAction.green:
-            await saveAnnotation(menu.selection, AnnotationColor.green);
-          case ReaderSelectionContextAction.blue:
-            await saveAnnotation(menu.selection, AnnotationColor.blue);
-          case ReaderSelectionContextAction.pink:
-            await saveAnnotation(menu.selection, AnnotationColor.pink);
+          case ReaderSelectionContextAction.highlight:
+            final highlightColor = await showMenu<AnnotationColor>(
+              context: context,
+              position: menuPosition,
+              items: const [
+                PopupMenuItem(
+                  value: AnnotationColor.yellow,
+                  child: ReaderSelectionContextMenuItem(
+                    color: AnnotationColor.yellow,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: AnnotationColor.green,
+                  child: ReaderSelectionContextMenuItem(
+                    color: AnnotationColor.green,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: AnnotationColor.blue,
+                  child: ReaderSelectionContextMenuItem(
+                    color: AnnotationColor.blue,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: AnnotationColor.pink,
+                  child: ReaderSelectionContextMenuItem(
+                    color: AnnotationColor.pink,
+                  ),
+                ),
+              ],
+            );
+            if (highlightColor != null && context.mounted) {
+              await saveAnnotation(menu.selection, highlightColor);
+            }
           case ReaderSelectionContextAction.underline:
             final color = await showDialog<AnnotationColor>(
               context: context,
@@ -834,12 +844,43 @@ class ReaderWorkspace extends HookConsumerWidget {
             await createAnnotation(menu.selection);
           case ReaderSelectionContextAction.textColor:
             await addTextColorTerm(menu.selection);
-          case ReaderSelectionContextAction.askAi:
-            openAiWithSelection(menu.selection, '关于这段文字，我想问：');
-          case ReaderSelectionContextAction.explainAi:
-            openAiWithSelection(menu.selection, '请解释这段文字的含义和关键概念。');
-          case ReaderSelectionContextAction.summarizeAi:
-            openAiWithSelection(menu.selection, '请简洁总结这段文字的核心观点。');
+          case ReaderSelectionContextAction.ai:
+            final aiAction = await showMenu<ReaderSelectionAiAction>(
+              context: context,
+              position: menuPosition,
+              items: const [
+                PopupMenuItem(
+                  value: ReaderSelectionAiAction.ask,
+                  child: ReaderSelectionActionMenuItem(
+                    icon: Icons.auto_awesome_outlined,
+                    label: '询问 AI',
+                  ),
+                ),
+                PopupMenuItem(
+                  value: ReaderSelectionAiAction.explain,
+                  child: ReaderSelectionActionMenuItem(
+                    icon: Icons.lightbulb_outline,
+                    label: '解释这段',
+                  ),
+                ),
+                PopupMenuItem(
+                  value: ReaderSelectionAiAction.summarize,
+                  child: ReaderSelectionActionMenuItem(
+                    icon: Icons.summarize_outlined,
+                    label: '总结这段',
+                  ),
+                ),
+              ],
+            );
+            if (aiAction == null || !context.mounted) return;
+            switch (aiAction) {
+              case ReaderSelectionAiAction.ask:
+                openAiWithSelection(menu.selection, '关于这段文字，我想问：');
+              case ReaderSelectionAiAction.explain:
+                openAiWithSelection(menu.selection, '请解释这段文字的含义和关键概念。');
+              case ReaderSelectionAiAction.summarize:
+                openAiWithSelection(menu.selection, '请简洁总结这段文字的核心观点。');
+            }
         }
       } finally {
         selectionMenuVisible.value = false;
@@ -960,22 +1001,15 @@ class ReaderWorkspace extends HookConsumerWidget {
       );
     }
 
-    void seekToOverallProgress(double value) {
+    void seekToChapterProgress(double value) {
       autoScrollActive.value = false;
       if (totalChapters == 0) return;
-      final targetLocation = sectionProgress.locationForProgress(value);
-      final targetChapter = targetLocation.chapterIndex
-          .clamp(0, totalChapters - 1)
-          .toInt();
-      final targetRatio = targetLocation.chapterRatio;
-
-      final targetItem = manifest.value?.spine[targetChapter];
+      final targetItem = manifest.value?.spine[activeChapterIndex];
       if (targetItem == null) return;
       // Keep the slider at the requested position until the runtime reports
       // its measured location after layout and scrolling complete.
-      chapterIndex.value = targetChapter;
+      final targetRatio = value.clamp(0, 1).toDouble();
       scrollRatio.value = targetRatio;
-      chapterCharacterOffset.value = null;
       activeAnchor.value = null;
       activeCfi.value = null;
       navigationCommand.value = ReaderNavigationCommand.goToLocation(
@@ -1188,16 +1222,16 @@ class ReaderWorkspace extends HookConsumerWidget {
 
         void openProgressSheet() {
           final positionLabel = totalChapters == 0
-              ? positionMetrics.label
-              : '${positionMetrics.label} · 第 ${activeChapterIndex + 1} / '
-                    '$totalChapters 章';
+              ? '正在读取目录'
+              : '第 ${activeChapterIndex + 1} / $totalChapters 章 · '
+                    '本章 ${(chapterProgress * 100).round()}%';
           unawaited(
             showReaderProgressSheet(
               context,
               title: '阅读进度',
               positionLabel: positionLabel,
-              progress: overallProgress,
-              onChangeEnd: seekToOverallProgress,
+              progress: chapterProgress,
+              onChangeEnd: seekToChapterProgress,
             ),
           );
         }
@@ -1249,14 +1283,7 @@ class ReaderWorkspace extends HookConsumerWidget {
                               restoreRevision: restoreRevision.value,
                               onNavigateToHref: navigateToHref,
                               onScrollPositionChanged:
-                                  (
-                                    href,
-                                    ratio,
-                                    anchor,
-                                    cfi,
-                                    reportedCharacterOffset,
-                                    reportedCharacterCount,
-                                  ) {
+                                  (href, ratio, anchor, cfi, _, _) {
                                     runtimeController.reportRelocation();
                                     final currentManifest = manifest.value;
                                     final relocatedIndex =
@@ -1274,28 +1301,6 @@ class ReaderWorkspace extends HookConsumerWidget {
                                         .toDouble();
                                     chapterIndex.value = relocatedIndex;
                                     scrollRatio.value = clampedRatio;
-                                    final expectedCharacterCount =
-                                        sectionProgress
-                                            .characterCountForChapter(
-                                              relocatedIndex,
-                                            );
-                                    final normalizedCharacterOffset =
-                                        expectedCharacterCount == null ||
-                                            reportedCharacterOffset == null
-                                        ? null
-                                        : reportedCharacterCount == null ||
-                                              reportedCharacterCount <= 0
-                                        ? reportedCharacterOffset
-                                              .clamp(0, expectedCharacterCount)
-                                              .toInt()
-                                        : (reportedCharacterOffset /
-                                                  reportedCharacterCount *
-                                                  expectedCharacterCount)
-                                              .round()
-                                              .clamp(0, expectedCharacterCount)
-                                              .toInt();
-                                    chapterCharacterOffset.value =
-                                        normalizedCharacterOffset;
                                     activeAnchor.value = anchor;
                                     activeCfi.value = cfi;
                                     scheduleProgressWrite(
@@ -1303,8 +1308,6 @@ class ReaderWorkspace extends HookConsumerWidget {
                                       chapterRatio: clampedRatio,
                                       anchor: anchor,
                                       cfi: cfi,
-                                      characterOffset:
-                                          normalizedCharacterOffset,
                                     );
                                     activityTracker.recordInteraction(
                                       ReaderPosition(
@@ -1312,8 +1315,6 @@ class ReaderWorkspace extends HookConsumerWidget {
                                             .overallProgress(
                                               relocatedIndex,
                                               clampedRatio,
-                                              chapterCharacterOffset:
-                                                  normalizedCharacterOffset,
                                             ),
                                         locator: EpubLocation(
                                           chapterIndex: relocatedIndex,
@@ -1348,8 +1349,6 @@ class ReaderWorkspace extends HookConsumerWidget {
                                     progress: sectionProgress.overallProgress(
                                       activeChapterIndex,
                                       scrollRatio.value,
-                                      chapterCharacterOffset:
-                                          chapterCharacterOffset.value,
                                     ),
                                     locator: currentLocator,
                                   ),
@@ -1518,9 +1517,8 @@ class ReaderWorkspace extends HookConsumerWidget {
                   chapterCount: totalChapters,
                   layoutMode: settings.layoutMode,
                   chromeLayout: chromeLayout,
-                  overallProgress: overallProgress,
-                  positionMetrics: positionMetrics,
-                  onSeekProgress: seekToOverallProgress,
+                  chapterProgress: chapterProgress,
+                  onSeekProgress: seekToChapterProgress,
                   onOpenToc: usesModalPanels
                       ? () => unawaited(openMobileToc())
                       : toggleToc,

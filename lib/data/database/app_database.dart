@@ -23,7 +23,7 @@ class AppDatabase {
   final bool _singleInstance;
   Future<Database>? _database;
 
-  static const schemaVersion = 23;
+  static const schemaVersion = 24;
 
   Future<Database> get database => _database ??= _open();
 
@@ -70,10 +70,7 @@ class AppDatabase {
         throw const FormatException('数据库缺少书库表。');
       }
       final bookRows = await snapshot.query('books', columns: ['id']);
-      final fontRows = await snapshot.query(
-        'imported_fonts',
-        columns: ['id'],
-      );
+      final fontRows = await snapshot.query('imported_fonts', columns: ['id']);
       return DatabaseSnapshotInfo(
         schemaVersion: version,
         bookIds: bookRows.map((row) => row['id']! as String).toSet(),
@@ -269,6 +266,9 @@ class AppDatabase {
           if (oldVersion < 23) {
             await _upgradeToVersion23(database);
           }
+          if (oldVersion < 24) {
+            await _upgradeToVersion24(database);
+          }
         },
       ),
     );
@@ -327,6 +327,7 @@ class AppDatabase {
               layout_mode TEXT NOT NULL DEFAULT 'scroll',
               page_transition TEXT NOT NULL DEFAULT 'slide',
               tap_to_turn_pages INTEGER NOT NULL DEFAULT 0,
+              reader_theme_json TEXT NOT NULL DEFAULT '{"preset":"followApp"}',
               updated_at INTEGER NOT NULL,
               sync_revision INTEGER NOT NULL DEFAULT 1
             )
@@ -662,6 +663,10 @@ class AppDatabase {
 
   Future<void> _upgradeToVersion23(Database database) =>
       _createEmbeddingTables(database);
+
+  Future<void> _upgradeToVersion24(Database database) => database.execute(
+    "ALTER TABLE book_reading_overrides ADD COLUMN reader_theme_json TEXT NOT NULL DEFAULT '{\"preset\":\"followApp\"}'",
+  );
 
   Future<void> _createEmbeddingTables(Database database) async {
     await database.execute('''

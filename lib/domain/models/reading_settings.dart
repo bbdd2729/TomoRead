@@ -1,4 +1,5 @@
 import 'reading_font.dart';
+import 'reader_theme.dart';
 
 enum ReaderLayoutMode { scroll, paginated }
 
@@ -30,6 +31,7 @@ class ReadingSettings {
     this.layoutMode = ReaderLayoutMode.scroll,
     this.pageTransition = ReaderPageTransition.slide,
     this.tapToTurnPages = false,
+    this.theme = const ReaderThemeSelection(),
   });
 
   final ReadingFontRef font;
@@ -40,6 +42,7 @@ class ReadingSettings {
   final ReaderLayoutMode layoutMode;
   final ReaderPageTransition pageTransition;
   final bool tapToTurnPages;
+  final ReaderThemeSelection theme;
 
   ReadingSettings copyWith({
     ReadingFontRef? font,
@@ -50,6 +53,7 @@ class ReadingSettings {
     ReaderLayoutMode? layoutMode,
     ReaderPageTransition? pageTransition,
     bool? tapToTurnPages,
+    ReaderThemeSelection? theme,
   }) {
     return ReadingSettings(
       font: font ?? this.font,
@@ -60,6 +64,7 @@ class ReadingSettings {
       layoutMode: layoutMode ?? this.layoutMode,
       pageTransition: pageTransition ?? this.pageTransition,
       tapToTurnPages: tapToTurnPages ?? this.tapToTurnPages,
+      theme: theme ?? this.theme,
     );
   }
 }

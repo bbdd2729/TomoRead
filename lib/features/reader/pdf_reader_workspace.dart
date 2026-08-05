@@ -13,6 +13,8 @@ import '../../domain/models/chat_models.dart';
 import '../../domain/models/document_locator.dart';
 import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_annotation.dart';
+import '../../domain/models/reading_settings.dart';
+import '../../domain/models/reader_theme.dart';
 import '../chat/chat_controller.dart';
 import '../notes/notes_providers.dart';
 import 'pdf_annotation_widgets.dart';
@@ -20,6 +22,8 @@ import 'pdf_bookmarks_dialog.dart';
 import 'pdf_navigation_dialog.dart';
 import 'pdf_search_dialog.dart';
 import 'reader_chrome.dart';
+import 'reader_theme_controller.dart';
+import 'reader_theme_data.dart';
 
 void _noopPdfReaderAction() {}
 
@@ -32,13 +36,47 @@ enum _PdfSelectionAction {
   summarizeAi,
 }
 
-class PdfReaderWorkspace extends HookConsumerWidget {
+class PdfReaderWorkspace extends ConsumerWidget {
   const PdfReaderWorkspace({
     super.key,
     required this.bookId,
     required this.title,
+    required this.readingSettings,
     this.onExitReader = _noopPdfReaderAction,
     this.onOpenChat = _noopPdfReaderAction,
+  });
+
+  final String bookId;
+  final String title;
+  final ReadingSettings readingSettings;
+  final VoidCallback onExitReader;
+  final VoidCallback onOpenChat;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final override = ref.watch(bookReadingOverrideProvider(bookId)).value;
+    final customThemes =
+        ref.watch(customReaderThemesProvider).value ??
+        const <CustomReaderTheme>[];
+    final settings = override?.settings ?? readingSettings;
+    return Theme(
+      data: ReaderThemeData.build(Theme.of(context), settings, customThemes),
+      child: _PdfReaderWorkspaceContent(
+        bookId: bookId,
+        title: title,
+        onExitReader: onExitReader,
+        onOpenChat: onOpenChat,
+      ),
+    );
+  }
+}
+
+class _PdfReaderWorkspaceContent extends HookConsumerWidget {
+  const _PdfReaderWorkspaceContent({
+    required this.bookId,
+    required this.title,
+    required this.onExitReader,
+    required this.onOpenChat,
   });
 
   final String bookId;

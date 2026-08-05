@@ -19,6 +19,7 @@ import '../../domain/models/reading_activity.dart';
 import '../../domain/models/reading_position_metrics.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/reader_commands.dart';
+import '../../domain/models/reader_theme.dart';
 import '../../domain/models/text_chapter.dart';
 import '../../domain/models/text_coloring.dart';
 import '../../domain/models/text_coloring_layout.dart';
@@ -30,6 +31,8 @@ import 'reader_auto_scroll.dart';
 import 'reader_chrome.dart';
 import 'reader_command_controller.dart';
 import 'reader_command_shortcuts.dart';
+import 'reader_theme_controller.dart';
+import 'reader_theme_data.dart';
 import 'content_search_dialog.dart';
 import 'text_coloring_controller.dart';
 import 'text_coloring_book_dialog.dart';
@@ -47,9 +50,44 @@ import '../visualization/reader_visualization_dialog.dart';
 
 enum _TextChapterAction { rename, split, mergeNext }
 
-class TextReaderWorkspace extends HookConsumerWidget {
+class TextReaderWorkspace extends ConsumerWidget {
   const TextReaderWorkspace({
     super.key,
+    required this.bookId,
+    required this.title,
+    required this.readingSettings,
+    required this.onExitReader,
+    required this.onOpenChat,
+  });
+
+  final String bookId;
+  final String title;
+  final ReadingSettings readingSettings;
+  final VoidCallback onExitReader;
+  final VoidCallback onOpenChat;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final override = ref.watch(bookReadingOverrideProvider(bookId)).value;
+    final customThemes =
+        ref.watch(customReaderThemesProvider).value ??
+        const <CustomReaderTheme>[];
+    final settings = override?.settings ?? readingSettings;
+    return Theme(
+      data: ReaderThemeData.build(Theme.of(context), settings, customThemes),
+      child: _TextReaderWorkspaceContent(
+        bookId: bookId,
+        title: title,
+        readingSettings: readingSettings,
+        onExitReader: onExitReader,
+        onOpenChat: onOpenChat,
+      ),
+    );
+  }
+}
+
+class _TextReaderWorkspaceContent extends HookConsumerWidget {
+  const _TextReaderWorkspaceContent({
     required this.bookId,
     required this.title,
     required this.readingSettings,
@@ -609,7 +647,8 @@ class TextReaderWorkspace extends HookConsumerWidget {
             chapter.rawStart,
             chapter.rawEnd,
           );
-          final splitOffset = chapter.rawStart + safeTextChapterSplitOffset(chapterText);
+          final splitOffset =
+              chapter.rawStart + safeTextChapterSplitOffset(chapterText);
           final nextTitleController = TextEditingController(
             text: '${chapter.title}（下）',
           );

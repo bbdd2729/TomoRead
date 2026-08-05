@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../domain/models/reading_position_metrics.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/reader_chapter.dart';
 import 'reader_chrome.dart';
@@ -92,8 +91,7 @@ class ReaderFooter extends StatelessWidget {
     required this.chapterCount,
     required this.layoutMode,
     required this.chromeLayout,
-    required this.overallProgress,
-    required this.positionMetrics,
+    required this.chapterProgress,
     required this.onSeekProgress,
     required this.onOpenToc,
     required this.onOpenStyle,
@@ -106,8 +104,7 @@ class ReaderFooter extends StatelessWidget {
   final int chapterCount;
   final ReaderLayoutMode layoutMode;
   final ReaderChromeLayout chromeLayout;
-  final double overallProgress;
-  final ReadingPositionMetrics positionMetrics;
+  final double chapterProgress;
   final ValueChanged<double> onSeekProgress;
   final VoidCallback onOpenToc;
   final VoidCallback onOpenStyle;
@@ -117,10 +114,11 @@ class ReaderFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress = overallProgress.clamp(0, 1).toDouble();
+    final progress = chapterProgress.clamp(0, 1).toDouble();
     final positionLabel = chapterCount == 0
         ? '正在读取目录'
-        : '${positionMetrics.label} · 第 ${chapterIndex + 1} / $chapterCount 章';
+        : '第 ${chapterIndex + 1} / $chapterCount 章 · '
+              '本章 ${(progress * 100).round()}%';
     if (!chromeLayout.isExpanded) {
       return ReaderCompactNavigationBar(
         key: const Key('reader-footer'),

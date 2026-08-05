@@ -699,6 +699,20 @@ const applySelectionListener = (doc, index) => {
     }, 120)
   }
 
+  const openReaderSelectionMenu = selection => {
+    const range = doc.getSelection()?.rangeCount
+      ? doc.getSelection().getRangeAt(0)
+      : null
+    const rect = range?.getBoundingClientRect?.()
+    const frameRect = doc.defaultView?.frameElement?.getBoundingClientRect?.()
+    postMessage({
+      type: 'selectionContextMenu',
+      ...selection,
+      x: (frameRect?.left ?? 0) + (rect?.left ?? 0) + (rect?.width ?? 0) / 2,
+      y: (frameRect?.top ?? 0) + (rect?.top ?? 0),
+    })
+  }
+
   const reportSelection = () => {
     if (pending) return
     pending = true
@@ -746,8 +760,12 @@ const applySelectionListener = (doc, index) => {
   const finishTouchSelection = () => {
     clearLongPress()
     window.setTimeout(() => {
-      if (readSelection(doc, index)) {
+      const selection = readSelection(doc, index)
+      if (selection) {
         setSelectionGestureLocked(true)
+        // Android disables WebView's native ActionMode so the reader's own
+        // menu can appear as soon as a long-press selection is completed.
+        if (canUseFlutterBridge()) openReaderSelectionMenu(selection)
       } else {
         releaseSelectionGestureWhenCollapsed()
       }
@@ -1374,15 +1392,13 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     const selection = readSelection(doc, index)
     if (!selection) return
     setSelectionGestureLocked(true)
-    // Android WebView owns the selection handles and its native ActionMode.
-    // Preventing this event and opening Flutter's modal popup immediately
-    // blocks the WebView below it; clearing the DOM Selection made the
-    // handles disappear altogether. Keep the platform selection alive and
-    // expose TomoRead actions through the native menu registered by the host.
-    if (canUseFlutterBridge()) return
+    // Always keep the selection inside the reader. In particular, Android
+    // must not open its ActionMode first and make readers choose an extra
+    // "TomoRead action" entry before reaching highlights or notes.
     event.preventDefault()
-    // Desktop WebView can emit duplicate context-menu events for one
-    // interaction. A single Flutter popup is sufficient there.
+    event.stopPropagation()
+    // WebViews can emit duplicate context-menu events for one interaction.
+    // A single Flutter popup is sufficient on both Android and desktop.
     const selectionKey = [
       selection.href,
       selection.startOffset,
@@ -1402,7 +1418,7 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
       x: event.clientX + (frameRect?.left ?? 0),
       y: event.clientY + (frameRect?.top ?? 0),
     })
-  })
+  }, true)
 }
 
 const createPaginator = () => {

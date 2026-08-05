@@ -12,6 +12,7 @@ import 'package:tomoread/domain/models/library_book.dart';
 import 'package:tomoread/domain/models/reading_font.dart';
 import 'package:tomoread/domain/models/reading_settings.dart';
 import 'package:tomoread/domain/models/reading_annotation.dart';
+import 'package:tomoread/domain/models/reader_theme.dart';
 
 void main() {
   late AppDatabase database;
@@ -55,6 +56,7 @@ void main() {
         doubleColumn: false,
         layoutMode: ReaderLayoutMode.paginated,
         tapToTurnPages: true,
+        theme: ReaderThemeSelection(preset: ReaderThemePreset.paper),
       ),
     );
     await settings.saveBookOverride(
@@ -67,6 +69,10 @@ void main() {
           doubleColumn: false,
           layoutMode: ReaderLayoutMode.paginated,
           tapToTurnPages: true,
+          theme: ReaderThemeSelection(
+            preset: ReaderThemePreset.custom,
+            customThemeId: 'night-ink',
+          ),
         ),
       ),
     );
@@ -88,16 +94,62 @@ void main() {
     expect(stored.readingSettings.doubleColumn, isFalse);
     expect(stored.readingSettings.layoutMode, ReaderLayoutMode.paginated);
     expect(stored.readingSettings.tapToTurnPages, isTrue);
+    expect(stored.readingSettings.theme.preset, ReaderThemePreset.paper);
     expect(override?.settings.font, ReadingFontRef.monospace);
     expect(override?.settings.fontSize, 18);
     expect(override?.settings.pageMargin, 48);
     expect(override?.settings.doubleColumn, isFalse);
     expect(override?.settings.layoutMode, ReaderLayoutMode.paginated);
     expect(override?.settings.tapToTurnPages, isTrue);
+    expect(override?.settings.theme.preset, ReaderThemePreset.custom);
+    expect(override?.settings.theme.customThemeId, 'night-ink');
 
     await settings.clearBookOverride('book-a');
     expect(await settings.loadBookOverride('book-a'), isNull);
   });
+
+  test(
+    'persists custom reader themes and ignores invalid stored entries',
+    () async {
+      const customTheme = CustomReaderTheme(
+        id: 'night-ink',
+        name: '夜墨',
+        backgroundArgb: 0xFF101418,
+        foregroundArgb: 0xFFE4E7EA,
+        accentArgb: 0xFF74B9A8,
+      );
+
+      await settings.saveCustomReaderThemes([customTheme]);
+      final saved = await settings.loadCustomReaderThemes();
+      expect(saved, hasLength(1));
+      expect(saved.single.id, customTheme.id);
+      expect(saved.single.name, customTheme.name);
+      expect(saved.single.backgroundArgb, customTheme.backgroundArgb);
+
+      final rawDatabase = await database.database;
+      await rawDatabase.update(
+        'app_settings',
+        {
+          'setting_value':
+              '[{"id":"valid","name":"有效","backgroundArgb":1,"foregroundArgb":2,"accentArgb":3},{}]',
+        },
+        where: 'setting_key = ?',
+        whereArgs: ['reader_custom_themes'],
+      );
+
+      final loaded = await settings.loadCustomReaderThemes();
+      expect(loaded, hasLength(1));
+      expect(loaded.single.name, '有效');
+
+      await rawDatabase.update(
+        'app_settings',
+        {'setting_value': '{not-json'},
+        where: 'setting_key = ?',
+        whereArgs: ['reader_custom_themes'],
+      );
+      expect(await settings.loadCustomReaderThemes(), isEmpty);
+    },
+  );
 
   test('stores and removes bookmarks per book', () async {
     final first = await bookmarks.add(

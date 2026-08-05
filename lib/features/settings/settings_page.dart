@@ -11,6 +11,8 @@ import '../../shared/widgets/page_header.dart';
 import '../reader/text_coloring_controller.dart';
 import '../reader/text_coloring_widgets.dart';
 import '../reader/reader_shortcut_settings.dart';
+import '../reader/reader_theme_controller.dart';
+import '../reader/reader_theme_settings.dart';
 import 'backup_restore_page.dart';
 import 'embedding_settings_page.dart';
 import 'font_catalog_controller.dart';
@@ -543,7 +545,7 @@ class _ThemeStyleCard extends StatelessWidget {
   }
 }
 
-class _ReadingDefaultsSettings extends StatelessWidget {
+class _ReadingDefaultsSettings extends ConsumerWidget {
   const _ReadingDefaultsSettings({
     required this.settings,
     required this.onChanged,
@@ -567,136 +569,172 @@ class _ReadingDefaultsSettings extends StatelessWidget {
   final ValueChanged<TextColoringSettings> onTextColoringChanged;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const _SettingsHeading('默认书本字体'),
-      DropdownButtonFormField<ReadingFontRef>(
-        initialValue: settings.font,
-        decoration: const InputDecoration(border: OutlineInputBorder()),
-        items: [
-          for (final font in fonts)
-            DropdownMenuItem(value: font, child: Text(font.label)),
-        ],
-        onChanged: (font) {
-          if (font != null) onChanged(settings.copyWith(font: font));
-        },
-      ),
-      const SizedBox(height: 32),
-      _SettingsHeading('默认书本字号 ${settings.fontSize.round()}'),
-      Slider(
-        value: settings.fontSize,
-        min: 14,
-        max: 28,
-        divisions: 14,
-        label: settings.fontSize.round().toString(),
-        onChanged: (value) => onChanged(settings.copyWith(fontSize: value)),
-      ),
-      const SizedBox(height: 24),
-      _SettingsHeading('默认书本行高 ${settings.lineHeight.toStringAsFixed(1)}'),
-      Slider(
-        value: settings.lineHeight,
-        min: 1.4,
-        max: 2.2,
-        divisions: 8,
-        label: settings.lineHeight.toStringAsFixed(1),
-        onChanged: (value) => onChanged(settings.copyWith(lineHeight: value)),
-      ),
-      const SizedBox(height: 32),
-      const _SettingsHeading('阅读布局'),
-      SegmentedButton<ReaderLayoutMode>(
-        segments: [
-          for (final mode in ReaderLayoutMode.values)
-            ButtonSegment(
-              value: mode,
-              icon: Icon(
-                mode == ReaderLayoutMode.scroll
-                    ? Icons.swap_vert
-                    : Icons.auto_stories_outlined,
-              ),
-              label: Text(mode.label),
-            ),
-        ],
-        selected: {settings.layoutMode},
-        onSelectionChanged: (selection) =>
-            onChanged(settings.copyWith(layoutMode: selection.first)),
-      ),
-      const SizedBox(height: 24),
-      const _SettingsHeading('分页动画'),
-      SegmentedButton<ReaderPageTransition>(
-        segments: [
-          for (final transition in ReaderPageTransition.values)
-            ButtonSegment(
-              value: transition,
-              icon: Icon(switch (transition) {
-                ReaderPageTransition.slide => Icons.swipe,
-                ReaderPageTransition.cover => Icons.layers_outlined,
-                ReaderPageTransition.fade => Icons.opacity,
-                ReaderPageTransition.none => Icons.do_not_disturb_alt_outlined,
-              }),
-              label: Text(transition.label),
-            ),
-        ],
-        selected: {settings.pageTransition},
-        onSelectionChanged: (selection) =>
-            onChanged(settings.copyWith(pageTransition: selection.first)),
-      ),
-      const SizedBox(height: 16),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        value: settings.doubleColumn,
-        onChanged: (value) => onChanged(settings.copyWith(doubleColumn: value)),
-        title: const Text('宽屏双栏'),
-        subtitle: const Text('分页阅读在宽屏显示双栏，窄屏自动使用单栏。'),
-      ),
-      const SizedBox(height: 8),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        value: settings.tapToTurnPages,
-        onChanged: (value) =>
-            onChanged(settings.copyWith(tapToTurnPages: value)),
-        title: const Text('点击区域翻页（实验性）'),
-        subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
-      ),
-      const SizedBox(height: 8),
-      Row(
-        children: [
-          TextButton.icon(
-            onPressed: fontsLoading ? null : onImportFont,
-            icon: const Icon(Icons.font_download_outlined),
-            label: const Text('导入字体'),
-          ),
-          if (onDeleteFont != null)
-            TextButton.icon(
-              onPressed: onDeleteFont,
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('删除当前字体'),
-            ),
-          if (fontsLoading) ...[
-            const SizedBox(width: 12),
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final customThemes = ref.watch(customReaderThemesProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SettingsHeading('默认书本字体'),
+        DropdownButtonFormField<ReadingFontRef>(
+          initialValue: settings.font,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+          items: [
+            for (final font in fonts)
+              DropdownMenuItem(value: font, child: Text(font.label)),
           ],
-        ],
-      ),
-      const SizedBox(height: 32),
-      const Divider(),
-      const SizedBox(height: 24),
-      const _SettingsHeading('文本前景色'),
-      TextColoringSettingsPanel(
-        settings: textColoring,
-        loading: textColoringLoading,
-        onChanged: onTextColoringChanged,
-      ),
-      const SizedBox(height: 32),
-      const Divider(),
-      const SizedBox(height: 24),
-      const ReaderShortcutSettingsPanel(),
-    ],
-  );
+          onChanged: (font) {
+            if (font != null) onChanged(settings.copyWith(font: font));
+          },
+        ),
+        const SizedBox(height: 32),
+        const _SettingsHeading('默认阅读主题'),
+        Text(
+          '阅读主题独立于应用界面，可在单本书的阅读设置中覆盖。',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        ReaderThemePicker(
+          selection: settings.theme,
+          customThemes: customThemes.value ?? const [],
+          onChanged: (theme) => onChanged(settings.copyWith(theme: theme)),
+          onManageCustomThemes: () {
+            showDialog<void>(
+              context: context,
+              builder: (_) => const CustomReaderThemesDialog(),
+            );
+          },
+        ),
+        if (customThemes.isLoading)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: LinearProgressIndicator(),
+          )
+        else if (customThemes.hasError)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              '无法读取自定义主题：${customThemes.error}',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        const SizedBox(height: 32),
+        _SettingsHeading('默认书本字号 ${settings.fontSize.round()}'),
+        Slider(
+          value: settings.fontSize,
+          min: 14,
+          max: 28,
+          divisions: 14,
+          label: settings.fontSize.round().toString(),
+          onChanged: (value) => onChanged(settings.copyWith(fontSize: value)),
+        ),
+        const SizedBox(height: 24),
+        _SettingsHeading('默认书本行高 ${settings.lineHeight.toStringAsFixed(1)}'),
+        Slider(
+          value: settings.lineHeight,
+          min: 1.4,
+          max: 2.2,
+          divisions: 8,
+          label: settings.lineHeight.toStringAsFixed(1),
+          onChanged: (value) => onChanged(settings.copyWith(lineHeight: value)),
+        ),
+        const SizedBox(height: 32),
+        const _SettingsHeading('阅读布局'),
+        SegmentedButton<ReaderLayoutMode>(
+          segments: [
+            for (final mode in ReaderLayoutMode.values)
+              ButtonSegment(
+                value: mode,
+                icon: Icon(
+                  mode == ReaderLayoutMode.scroll
+                      ? Icons.swap_vert
+                      : Icons.auto_stories_outlined,
+                ),
+                label: Text(mode.label),
+              ),
+          ],
+          selected: {settings.layoutMode},
+          onSelectionChanged: (selection) =>
+              onChanged(settings.copyWith(layoutMode: selection.first)),
+        ),
+        const SizedBox(height: 24),
+        const _SettingsHeading('分页动画'),
+        SegmentedButton<ReaderPageTransition>(
+          segments: [
+            for (final transition in ReaderPageTransition.values)
+              ButtonSegment(
+                value: transition,
+                icon: Icon(switch (transition) {
+                  ReaderPageTransition.slide => Icons.swipe,
+                  ReaderPageTransition.cover => Icons.layers_outlined,
+                  ReaderPageTransition.fade => Icons.opacity,
+                  ReaderPageTransition.none =>
+                    Icons.do_not_disturb_alt_outlined,
+                }),
+                label: Text(transition.label),
+              ),
+          ],
+          selected: {settings.pageTransition},
+          onSelectionChanged: (selection) =>
+              onChanged(settings.copyWith(pageTransition: selection.first)),
+        ),
+        const SizedBox(height: 16),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: settings.doubleColumn,
+          onChanged: (value) =>
+              onChanged(settings.copyWith(doubleColumn: value)),
+          title: const Text('宽屏双栏'),
+          subtitle: const Text('分页阅读在宽屏显示双栏，窄屏自动使用单栏。'),
+        ),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: settings.tapToTurnPages,
+          onChanged: (value) =>
+              onChanged(settings.copyWith(tapToTurnPages: value)),
+          title: const Text('点击区域翻页（实验性）'),
+          subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            TextButton.icon(
+              onPressed: fontsLoading ? null : onImportFont,
+              icon: const Icon(Icons.font_download_outlined),
+              label: const Text('导入字体'),
+            ),
+            if (onDeleteFont != null)
+              TextButton.icon(
+                onPressed: onDeleteFont,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('删除当前字体'),
+              ),
+            if (fontsLoading) ...[
+              const SizedBox(width: 12),
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 32),
+        const Divider(),
+        const SizedBox(height: 24),
+        const _SettingsHeading('文本前景色'),
+        TextColoringSettingsPanel(
+          settings: textColoring,
+          loading: textColoringLoading,
+          onChanged: onTextColoringChanged,
+        ),
+        const SizedBox(height: 32),
+        const Divider(),
+        const SizedBox(height: 24),
+        const ReaderShortcutSettingsPanel(),
+      ],
+    );
+  }
 }
 
 class _SettingsHeading extends StatelessWidget {

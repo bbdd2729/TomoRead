@@ -57,6 +57,7 @@ class WorkspaceContent extends StatelessWidget {
                 key: ValueKey(readerBookId),
                 bookId: readerBookId ?? '',
                 title: readerTitle,
+                readingSettings: readingSettings,
                 onExitReader: onExitReader,
                 onOpenChat: onOpenChat,
               )

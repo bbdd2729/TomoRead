@@ -9,6 +9,8 @@ import '../../domain/models/reading_settings.dart';
 import '../../domain/models/text_coloring.dart';
 import '../settings/font_catalog_controller.dart';
 import 'text_coloring_widgets.dart';
+import 'reader_theme_controller.dart';
+import 'reader_theme_settings.dart';
 
 class BookSettingsResult {
   const BookSettingsResult({
@@ -78,6 +80,7 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
     final useOverride = useState(readingOverride != null);
     final settings = useState(readingOverride?.settings ?? defaults);
     final catalog = ref.watch(fontCatalogControllerProvider).value;
+    final customThemes = ref.watch(customReaderThemesProvider);
     final fonts = <ReadingFontRef>{
       ReadingFontRef.system,
       ReadingFontRef.serif,
@@ -127,6 +130,32 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
                   }
                 },
               ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '阅读主题',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 10),
+              ReaderThemePicker(
+                selection: settings.value.theme,
+                customThemes: customThemes.value ?? const [],
+                onChanged: (theme) =>
+                    settings.value = settings.value.copyWith(theme: theme),
+                onManageCustomThemes: () {
+                  showDialog<void>(
+                    context: context,
+                    builder: (_) => const CustomReaderThemesDialog(),
+                  );
+                },
+              ),
+              if (customThemes.isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 10),
+                  child: LinearProgressIndicator(),
+                ),
               const SizedBox(height: 16),
               SegmentedButton<ReaderLayoutMode>(
                 segments: [

@@ -33,6 +33,20 @@ void main() {
             )
           ''');
           await database.execute('''
+            CREATE TABLE book_reading_overrides (
+              book_id TEXT PRIMARY KEY,
+              font TEXT NOT NULL,
+              font_size REAL NOT NULL,
+              line_height REAL NOT NULL,
+              page_margin REAL NOT NULL,
+              double_column INTEGER NOT NULL,
+              layout_mode TEXT NOT NULL DEFAULT 'scroll',
+              page_transition TEXT NOT NULL DEFAULT 'slide',
+              tap_to_turn_pages INTEGER NOT NULL DEFAULT 0,
+              updated_at INTEGER NOT NULL
+            )
+          ''');
+          await database.execute('''
             CREATE TABLE ai_provider_profiles (
               id TEXT PRIMARY KEY,
               name TEXT NOT NULL,
@@ -98,7 +112,7 @@ void main() {
     addTearDown(appDatabase.close);
     final database = await appDatabase.database;
 
-    expect(await database.getVersion(), 23);
+    expect(await database.getVersion(), 24);
     final parts = await database.query('chat_message_parts');
     expect(parts.single['type'], 'text');
     expect(parts.single['text_content'], 'Legacy answer');
@@ -194,5 +208,12 @@ void main() {
         )
     ''');
     expect(embeddingTables, hasLength(3));
+    final readingOverrideColumns = await database.rawQuery(
+      'PRAGMA table_info(book_reading_overrides)',
+    );
+    expect(
+      readingOverrideColumns.map((column) => column['name']),
+      contains('reader_theme_json'),
+    );
   });
 }
