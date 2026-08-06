@@ -122,9 +122,15 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
     final readerCommandState = ref.watch(readerCommandSettingsProvider);
     final defaultReaderCommands = useMemoized(ReaderCommandSettings.defaults);
     final readerCommands = readerCommandState.value ?? defaultReaderCommands;
+    // Keep the auto-dispose runtime controller alive for the lifetime of the
+    // reader. WebView callbacks can arrive after a navigation frame, so a
+    // notifier obtained only with ref.read may otherwise be disposed between
+    // relocate events.
+    final runtimeState = ref.watch(readerRuntimeControllerProvider);
     final runtimeController = ref.read(
       readerRuntimeControllerProvider.notifier,
     );
+    final readerMounted = useIsMounted();
     final activityTracker = ref.read(readingActivityTrackerProvider);
     final lifecycleState = useAppLifecycleState();
     final pomodoro = ref.watch(pomodoroControllerProvider).value;
@@ -158,6 +164,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
     final showBookmarks = useState(false);
     final chapterIndex = useState(0);
     final scrollRatio = useState(0.0);
+    final chapterProgressMeasured = useState(false);
     final activeAnchor = useState<String?>(null);
     final activeCfi = useState<String?>(null);
     final restoreRevision = useState(0);
@@ -204,7 +211,10 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
     final chapterTitle =
         chapter.value?.title ?? '第 ${activeChapterIndex + 1} 章';
     final isLoading =
-        readingOverride.isLoading || bookmarks.isLoading || chapter.isLoading;
+        readingOverride.isLoading ||
+        bookmarks.isLoading ||
+        chapter.isLoading ||
+        runtimeState.phase == ReaderRuntimePhase.navigating;
     final isBookmarked = bookmarkItems.any(
       (bookmark) => EpubLocation.matchesLocator(
         bookmark.locator,
@@ -303,6 +313,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
         }
         chapterIndex.value = location.chapterIndex;
         scrollRatio.value = location.scrollRatio;
+        chapterProgressMeasured.value = false;
         activeAnchor.value = location.anchor;
         activeCfi.value = location.cfi;
         restoreRevision.value += 1;
@@ -368,6 +379,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
       // A new book or reader-mode switch has no valid runtime page position.
       pageIndex.value = 0;
       pageCount.value = 1;
+      chapterProgressMeasured.value = false;
       if (isPaginated && autoScrollActive.value) {
         autoScrollActive.value = false;
         navigationCommand.value = ReaderNavigationCommand.stopAutoScroll(
@@ -375,7 +387,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
         );
       }
       return null;
-    }, [bookId, isPaginated]);
+    }, [bookId, activeChapterIndex, isPaginated]);
 
     Future<void> persistProgress(PendingReaderProgress pending) async {
       await ref
@@ -1223,6 +1235,8 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
         void openProgressSheet() {
           final positionLabel = totalChapters == 0
               ? '正在读取目录'
+              : !chapterProgressMeasured.value
+              ? '第 ${activeChapterIndex + 1} / $totalChapters 章 · 正在定位'
               : '第 ${activeChapterIndex + 1} / $totalChapters 章 · '
                     '本章 ${(chapterProgress * 100).round()}%';
           unawaited(
@@ -1284,6 +1298,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                               onNavigateToHref: navigateToHref,
                               onScrollPositionChanged:
                                   (href, ratio, anchor, cfi, _, _) {
+                                    if (!readerMounted()) return;
                                     runtimeController.reportRelocation();
                                     final currentManifest = manifest.value;
                                     final relocatedIndex =
@@ -1301,6 +1316,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                                         .toDouble();
                                     chapterIndex.value = relocatedIndex;
                                     scrollRatio.value = clampedRatio;
+                                    chapterProgressMeasured.value = true;
                                     activeAnchor.value = anchor;
                                     activeCfi.value = cfi;
                                     scheduleProgressWrite(
@@ -1343,6 +1359,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                                 autoScrollActive.value = active;
                               },
                               onTextSelectionChanged: (selection) {
+                                if (!readerMounted()) return;
                                 selectedText.value = selection;
                                 activityTracker.recordInteraction(
                                   ReaderPosition(
@@ -1356,6 +1373,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                                 );
                               },
                               onSelectionContextMenu: (menu) {
+                                if (!readerMounted()) return;
                                 unawaited(openSelectionContextMenu(menu));
                               },
                               onToggleControls: toggleControls,
@@ -1518,6 +1536,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                   layoutMode: settings.layoutMode,
                   chromeLayout: chromeLayout,
                   chapterProgress: chapterProgress,
+                  chapterProgressMeasured: chapterProgressMeasured.value,
                   onSeekProgress: seekToChapterProgress,
                   onOpenToc: usesModalPanels
                       ? () => unawaited(openMobileToc())

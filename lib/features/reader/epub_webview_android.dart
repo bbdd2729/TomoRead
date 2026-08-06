@@ -186,16 +186,19 @@ class AndroidEpubWebView extends HookConsumerWidget {
     }
 
     final messageHandlerRef = useRef<void Function(String)?>(null);
-    messageHandlerRef.value = (rawMessage) => _handleRuntimeMessage(
-      context,
-      rawMessage,
-      epubManifest.value,
-      reportRuntimeReady,
-      markOpened,
-      reportFailure,
-      onAutoScrollChanged,
-      onTextSelectionChanged,
-    );
+    messageHandlerRef.value = (rawMessage) {
+      if (!active.value) return;
+      _handleRuntimeMessage(
+        context,
+        rawMessage,
+        epubManifest.value,
+        reportRuntimeReady,
+        markOpened,
+        reportFailure,
+        onAutoScrollChanged,
+        onTextSelectionChanged,
+      );
+    };
     final resourceHandler = useMemoized<AndroidEpubResourceHandler?>(() {
       final directory = readerSession.value?.directoryPath;
       return directory == null

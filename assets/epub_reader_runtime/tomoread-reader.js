@@ -678,6 +678,30 @@ const readSelection = (doc, index) => {
   }
 }
 
+// Android can report one selection through touchend, contextmenu, and a
+// delayed selectionchange from the native handles. Keep deduplication at the
+// document boundary so all three paths share the same state.
+const postSelectionContextMenu = (doc, selection, { x, y }) => {
+  const state = doc.__tomoReadSelectionMenuState ??= {
+    key: undefined,
+    resetTimer: undefined,
+  }
+  const key = [
+    selection.href,
+    selection.startOffset,
+    selection.endOffset,
+    selection.cfi ?? '',
+  ].join('|')
+  if (state.key === key) return false
+  state.key = key
+  window.clearTimeout(state.resetTimer)
+  state.resetTimer = window.setTimeout(() => {
+    state.key = undefined
+  }, 800)
+  postMessage({ type: 'selectionContextMenu', ...selection, x, y })
+  return true
+}
+
 const applySelectionListener = (doc, index) => {
   if (doc.__tomoReadSelectionBridge) return
   doc.__tomoReadSelectionBridge = true
@@ -705,12 +729,19 @@ const applySelectionListener = (doc, index) => {
       : null
     const rect = range?.getBoundingClientRect?.()
     const frameRect = doc.defaultView?.frameElement?.getBoundingClientRect?.()
-    postMessage({
-      type: 'selectionContextMenu',
-      ...selection,
+    postSelectionContextMenu(doc, selection, {
       x: (frameRect?.left ?? 0) + (rect?.left ?? 0) + (rect?.width ?? 0) / 2,
       y: (frameRect?.top ?? 0) + (rect?.top ?? 0),
     })
+  }
+
+  let selectionMenuTimer
+  const scheduleReaderSelectionMenu = () => {
+    window.clearTimeout(selectionMenuTimer)
+    selectionMenuTimer = window.setTimeout(() => {
+      const selection = readSelection(doc, index)
+      if (selection && canUseFlutterBridge()) openReaderSelectionMenu(selection)
+    }, 180)
   }
 
   const reportSelection = () => {
@@ -722,7 +753,9 @@ const applySelectionListener = (doc, index) => {
       if (selection) {
         setSelectionGestureLocked(true)
         postMessage({ type: 'textSelection', ...selection })
+        scheduleReaderSelectionMenu()
       } else {
+        window.clearTimeout(selectionMenuTimer)
         releaseSelectionGestureWhenCollapsed()
       }
     }, 80)
@@ -1278,8 +1311,6 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
   let wheelDelta = 0
   let wheelResetTimer
   let wheelNavigationPending = false
-  let lastSelectionContextMenuKey
-  let selectionContextMenuResetTimer
   doc.addEventListener('pointerdown', () => stopAutoScroll('pointer'))
   doc.addEventListener('selectionchange', () => {
     if (!doc.getSelection()?.isCollapsed) stopAutoScroll('selection')
@@ -1399,22 +1430,8 @@ const attachDocumentInteractions = ({ detail: { doc, index } }) => {
     event.stopPropagation()
     // WebViews can emit duplicate context-menu events for one interaction.
     // A single Flutter popup is sufficient on both Android and desktop.
-    const selectionKey = [
-      selection.href,
-      selection.startOffset,
-      selection.endOffset,
-      selection.cfi ?? '',
-    ].join('|')
-    if (lastSelectionContextMenuKey === selectionKey) return
-    lastSelectionContextMenuKey = selectionKey
-    window.clearTimeout(selectionContextMenuResetTimer)
-    selectionContextMenuResetTimer = window.setTimeout(() => {
-      lastSelectionContextMenuKey = undefined
-    }, 800)
     const frameRect = doc.defaultView?.frameElement?.getBoundingClientRect?.()
-    postMessage({
-      type: 'selectionContextMenu',
-      ...selection,
+    postSelectionContextMenu(doc, selection, {
       x: event.clientX + (frameRect?.left ?? 0),
       y: event.clientY + (frameRect?.top ?? 0),
     })

@@ -92,6 +92,7 @@ class ReaderFooter extends StatelessWidget {
     required this.layoutMode,
     required this.chromeLayout,
     required this.chapterProgress,
+    required this.chapterProgressMeasured,
     required this.onSeekProgress,
     required this.onOpenToc,
     required this.onOpenStyle,
@@ -105,6 +106,7 @@ class ReaderFooter extends StatelessWidget {
   final ReaderLayoutMode layoutMode;
   final ReaderChromeLayout chromeLayout;
   final double chapterProgress;
+  final bool chapterProgressMeasured;
   final ValueChanged<double> onSeekProgress;
   final VoidCallback onOpenToc;
   final VoidCallback onOpenStyle;
@@ -117,6 +119,8 @@ class ReaderFooter extends StatelessWidget {
     final progress = chapterProgress.clamp(0, 1).toDouble();
     final positionLabel = chapterCount == 0
         ? '正在读取目录'
+        : !chapterProgressMeasured
+        ? '第 ${chapterIndex + 1} / $chapterCount 章 · 正在定位'
         : '第 ${chapterIndex + 1} / $chapterCount 章 · '
               '本章 ${(progress * 100).round()}%';
     if (!chromeLayout.isExpanded) {

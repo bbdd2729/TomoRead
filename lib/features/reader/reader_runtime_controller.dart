@@ -24,6 +24,7 @@ class ReaderRuntimeController extends Notifier<ReaderRuntimeState> {
   ReaderRuntimeState build() => const ReaderRuntimeState();
 
   int beginNavigation() {
+    if (!ref.mounted) return 0;
     final revision = state.revision + 1;
     state = ReaderRuntimeState(
       phase: ReaderRuntimePhase.navigating,
@@ -32,9 +33,10 @@ class ReaderRuntimeController extends Notifier<ReaderRuntimeState> {
     return revision;
   }
 
-  bool isCurrent(int revision) => state.revision == revision;
+  bool isCurrent(int revision) => ref.mounted && state.revision == revision;
 
   void completeNavigation(int revision) {
+    if (!ref.mounted) return;
     if (!isCurrent(revision)) return;
     state = ReaderRuntimeState(
       phase: ReaderRuntimePhase.ready,
@@ -43,6 +45,7 @@ class ReaderRuntimeController extends Notifier<ReaderRuntimeState> {
   }
 
   void reportFailure(int revision, Object error) {
+    if (!ref.mounted) return;
     if (!isCurrent(revision)) return;
     state = ReaderRuntimeState(
       phase: ReaderRuntimePhase.failed,
@@ -52,6 +55,7 @@ class ReaderRuntimeController extends Notifier<ReaderRuntimeState> {
   }
 
   void reportRelocation() {
+    if (!ref.mounted) return;
     if (state.phase == ReaderRuntimePhase.navigating) {
       state = ReaderRuntimeState(
         phase: ReaderRuntimePhase.ready,
