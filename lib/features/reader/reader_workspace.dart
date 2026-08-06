@@ -130,7 +130,6 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
     final runtimeController = ref.read(
       readerRuntimeControllerProvider.notifier,
     );
-    final readerMounted = useIsMounted();
     final activityTracker = ref.read(readingActivityTrackerProvider);
     final lifecycleState = useAppLifecycleState();
     final pomodoro = ref.watch(pomodoroControllerProvider).value;
@@ -1298,7 +1297,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                               onNavigateToHref: navigateToHref,
                               onScrollPositionChanged:
                                   (href, ratio, anchor, cfi, _, _) {
-                                    if (!readerMounted()) return;
+                                    if (!context.mounted) return;
                                     runtimeController.reportRelocation();
                                     final currentManifest = manifest.value;
                                     final relocatedIndex =
@@ -1359,7 +1358,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                                 autoScrollActive.value = active;
                               },
                               onTextSelectionChanged: (selection) {
-                                if (!readerMounted()) return;
+                                if (!context.mounted) return;
                                 selectedText.value = selection;
                                 activityTracker.recordInteraction(
                                   ReaderPosition(
@@ -1373,7 +1372,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                                 );
                               },
                               onSelectionContextMenu: (menu) {
-                                if (!readerMounted()) return;
+                                if (!context.mounted) return;
                                 unawaited(openSelectionContextMenu(menu));
                               },
                               onToggleControls: toggleControls,
