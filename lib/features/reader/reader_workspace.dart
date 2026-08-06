@@ -131,6 +131,9 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
       readerRuntimeControllerProvider.notifier,
     );
     final activityTracker = ref.read(readingActivityTrackerProvider);
+    // Keep an app-scoped notifier reference for delayed writes. During effect
+    // cleanup the widget's `ref` is already unsafe to read.
+    final libraryBooksController = ref.read(libraryBooksProvider.notifier);
     final lifecycleState = useAppLifecycleState();
     final pomodoro = ref.watch(pomodoroControllerProvider).value;
     final pomodoroBreakActive =
@@ -389,17 +392,16 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
     }, [bookId, activeChapterIndex, isPaginated]);
 
     Future<void> persistProgress(PendingReaderProgress pending) async {
-      await ref
-          .read(libraryBooksProvider.notifier)
-          .updateReadingPosition(
-            bookId: bookId,
-            chapterIndex: pending.chapterIndex,
-            progress: pending.progress,
-            locator: pending.locator,
-          );
+      await libraryBooksController.updateReadingPosition(
+        bookId: bookId,
+        chapterIndex: pending.chapterIndex,
+        progress: pending.progress,
+        locator: pending.locator,
+      );
     }
 
     Future<void> flushPendingProgress() async {
+      if (!context.mounted) return;
       progressWriteTimer.value?.cancel();
       progressWriteTimer.value = null;
       final pending = pendingProgressWrite.value;
@@ -453,6 +455,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
           );
       progressWriteTimer.value?.cancel();
       progressWriteTimer.value = Timer(const Duration(milliseconds: 600), () {
+        if (!context.mounted) return;
         progressWriteTimer.value = null;
         final pending = pendingProgressWrite.value;
         pendingProgressWrite.value = null;
@@ -460,11 +463,15 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
       });
     }
 
-    useEffect(
-      () =>
-          () => unawaited(flushPendingProgress()),
-      [bookId],
-    );
+    useEffect(() {
+      return () {
+        // Do not read ref or mutate hook state while the widget is unmounting.
+        // Persist the last captured snapshot through the app-scoped notifier.
+        progressWriteTimer.value?.cancel();
+        final pending = pendingProgressWrite.value;
+        if (pending != null) unawaited(persistProgress(pending));
+      };
+    }, [bookId]);
 
     Future<void> selectChapter(
       int index, {
