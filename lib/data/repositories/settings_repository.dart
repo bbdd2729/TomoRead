@@ -5,6 +5,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../app/appearance.dart';
 import '../../domain/models/font_choice.dart';
+import '../../domain/models/library_workspace_state.dart';
 import '../../domain/models/reading_font.dart';
 import '../../domain/models/reading_settings.dart';
 import '../../domain/models/reader_theme.dart';
@@ -60,6 +61,28 @@ class SettingsRepository {
   Future<void> saveReadingSettings(ReadingSettings settings) {
     return _put('reading_defaults', jsonEncode(_readingToMap(settings)));
   }
+
+  Future<LibraryWorkspaceState> loadLibraryWorkspaceState() async {
+    final database = await _database.database;
+    final rows = await database.query(
+      'app_settings',
+      columns: ['setting_value'],
+      where: 'setting_key = ?',
+      whereArgs: const ['library_workspace'],
+      limit: 1,
+    );
+    if (rows.isEmpty) return const LibraryWorkspaceState();
+    try {
+      return LibraryWorkspaceState.fromJson(
+        jsonDecode(rows.single['setting_value']! as String),
+      );
+    } on FormatException {
+      return const LibraryWorkspaceState();
+    }
+  }
+
+  Future<void> saveLibraryWorkspaceState(LibraryWorkspaceState state) =>
+      _put('library_workspace', jsonEncode(state.toJson()));
 
   Future<List<CustomReaderTheme>> loadCustomReaderThemes() async {
     final database = await _database.database;

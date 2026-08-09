@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/models/library_book.dart';
-
-enum LibraryFormatFilter { all, epub, pdf, text }
+import '../../domain/models/library_workspace_state.dart';
 
 extension on LibraryFormatFilter {
   String get label => switch (this) {
@@ -12,10 +11,6 @@ extension on LibraryFormatFilter {
     LibraryFormatFilter.text => 'TXT/Markdown',
   };
 }
-
-enum LibrarySort { recent, title, progress }
-
-enum LibraryViewMode { grid, list }
 
 extension on LibrarySort {
   String get label => switch (this) {
@@ -84,9 +79,6 @@ LibraryBook? continueReadingBook(List<LibraryBook> books) {
         );
   return startedBooks.isEmpty ? books.first : startedBooks.first;
 }
-
-const allCategoriesFilter = '__all_categories__';
-const uncategorizedCategoryFilter = '_uncategorizedCategoryFilter__';
 
 List<String> categoriesFor(List<LibraryBook> books) {
   final categories =

@@ -13,6 +13,7 @@ import 'package:tomoread/domain/models/reading_font.dart';
 import 'package:tomoread/domain/models/reading_settings.dart';
 import 'package:tomoread/domain/models/reading_annotation.dart';
 import 'package:tomoread/domain/models/reader_theme.dart';
+import 'package:tomoread/domain/models/library_workspace_state.dart';
 
 void main() {
   late AppDatabase database;
@@ -107,6 +108,24 @@ void main() {
     await settings.clearBookOverride('book-a');
     expect(await settings.loadBookOverride('book-a'), isNull);
   });
+
+  test(
+    'persists library workspace state independently from app settings',
+    () async {
+      const workspace = LibraryWorkspaceState(
+        formatFilter: LibraryFormatFilter.text,
+        sort: LibrarySort.progress,
+        viewMode: LibraryViewMode.list,
+        category: 'Markdown',
+        tag: 'reference',
+        favoritesOnly: true,
+      );
+
+      await settings.saveLibraryWorkspaceState(workspace);
+
+      expect(await settings.loadLibraryWorkspaceState(), workspace);
+    },
+  );
 
   test(
     'persists custom reader themes and ignores invalid stored entries',

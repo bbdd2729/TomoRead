@@ -8,6 +8,7 @@ import '../../app/providers.dart';
 import '../../data/services/book_import_service.dart';
 import '../../domain/models/book_import.dart';
 import '../../domain/models/library_book.dart';
+import '../../domain/models/library_workspace_state.dart';
 import '../../shared/widgets/page_header.dart';
 import 'book_import_preview_dialog.dart';
 import 'import_result_handler.dart';
