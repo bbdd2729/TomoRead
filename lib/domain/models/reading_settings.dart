@@ -31,6 +31,7 @@ class ReadingSettings {
     this.layoutMode = ReaderLayoutMode.scroll,
     this.pageTransition = ReaderPageTransition.slide,
     this.tapToTurnPages = false,
+    this.volumeKeyTurnsPage = false,
     this.theme = const ReaderThemeSelection(),
   });
 
@@ -42,6 +43,7 @@ class ReadingSettings {
   final ReaderLayoutMode layoutMode;
   final ReaderPageTransition pageTransition;
   final bool tapToTurnPages;
+  final bool volumeKeyTurnsPage;
   final ReaderThemeSelection theme;
 
   ReadingSettings copyWith({
@@ -53,6 +55,7 @@ class ReadingSettings {
     ReaderLayoutMode? layoutMode,
     ReaderPageTransition? pageTransition,
     bool? tapToTurnPages,
+    bool? volumeKeyTurnsPage,
     ReaderThemeSelection? theme,
   }) {
     return ReadingSettings(
@@ -64,6 +67,7 @@ class ReadingSettings {
       layoutMode: layoutMode ?? this.layoutMode,
       pageTransition: pageTransition ?? this.pageTransition,
       tapToTurnPages: tapToTurnPages ?? this.tapToTurnPages,
+      volumeKeyTurnsPage: volumeKeyTurnsPage ?? this.volumeKeyTurnsPage,
       theme: theme ?? this.theme,
     );
   }

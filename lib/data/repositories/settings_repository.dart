@@ -202,6 +202,9 @@ class SettingsRepository {
       ),
       tapToTurnPages:
           value['tap_to_turn_pages'] == true || value['tap_to_turn_pages'] == 1,
+      volumeKeyTurnsPage:
+          value['volume_key_turns_page'] == true ||
+          value['volume_key_turns_page'] == 1,
       theme: ReaderThemeSelection.fromJson(
         value['reader_theme'] ?? _decodeReaderTheme(value['reader_theme_json']),
       ),
@@ -217,6 +220,7 @@ class SettingsRepository {
     'layout_mode': settings.layoutMode.name,
     'page_transition': settings.pageTransition.name,
     'tap_to_turn_pages': settings.tapToTurnPages ? 1 : 0,
+    'volume_key_turns_page': settings.volumeKeyTurnsPage ? 1 : 0,
     'reader_theme': settings.theme.toJson(),
   };
 

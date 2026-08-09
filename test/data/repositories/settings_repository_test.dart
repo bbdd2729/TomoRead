@@ -57,6 +57,7 @@ void main() {
         doubleColumn: false,
         layoutMode: ReaderLayoutMode.paginated,
         tapToTurnPages: true,
+        volumeKeyTurnsPage: true,
         theme: ReaderThemeSelection(preset: ReaderThemePreset.paper),
       ),
     );
@@ -95,6 +96,7 @@ void main() {
     expect(stored.readingSettings.doubleColumn, isFalse);
     expect(stored.readingSettings.layoutMode, ReaderLayoutMode.paginated);
     expect(stored.readingSettings.tapToTurnPages, isTrue);
+    expect(stored.readingSettings.volumeKeyTurnsPage, isTrue);
     expect(stored.readingSettings.theme.preset, ReaderThemePreset.paper);
     expect(override?.settings.font, ReadingFontRef.monospace);
     expect(override?.settings.fontSize, 18);
