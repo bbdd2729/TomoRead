@@ -7,6 +7,20 @@ enum ReaderNavigationKind {
   stopAutoScroll,
 }
 
+class ReaderNavigationGate {
+  int? _activeCommandId;
+
+  bool tryStart(int commandId) {
+    if (_activeCommandId != null) return false;
+    _activeCommandId = commandId;
+    return true;
+  }
+
+  void complete(int commandId) {
+    if (_activeCommandId == commandId) _activeCommandId = null;
+  }
+}
+
 class ReaderNavigationCommand {
   const ReaderNavigationCommand._({
     required this.id,
@@ -44,11 +58,7 @@ class ReaderNavigationCommand {
   const ReaderNavigationCommand.scrollBy({
     required int id,
     required double amount,
-  }) : this._(
-         id: id,
-         kind: ReaderNavigationKind.scrollBy,
-         amount: amount,
-       );
+  }) : this._(id: id, kind: ReaderNavigationKind.scrollBy, amount: amount);
 
   const ReaderNavigationCommand.startAutoScroll({
     required int id,

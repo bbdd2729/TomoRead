@@ -66,6 +66,7 @@ import '../domain/models/embedding_models.dart';
 import '../domain/models/epub_manifest.dart';
 import '../domain/models/epub_section_progress.dart';
 import '../domain/models/library_book.dart';
+import '../domain/models/library_workspace_state.dart';
 import '../domain/models/reader_chapter.dart';
 import '../domain/models/text_chapter.dart';
 import '../domain/models/text_content_profile.dart';
@@ -520,6 +521,11 @@ final appSettingsProvider =
       AppSettingsNotifier.new,
     );
 
+final libraryWorkspaceStateProvider =
+    AsyncNotifierProvider<LibraryWorkspaceStateNotifier, LibraryWorkspaceState>(
+      LibraryWorkspaceStateNotifier.new,
+    );
+
 class AppSettingsNotifier extends AsyncNotifier<StoredSettings> {
   @override
   Future<StoredSettings> build() =>
@@ -557,6 +563,18 @@ class AppSettingsNotifier extends AsyncNotifier<StoredSettings> {
     await ref
         .read(settingsRepositoryProvider)
         .saveReadingSettings(readingSettings);
+  }
+}
+
+class LibraryWorkspaceStateNotifier
+    extends AsyncNotifier<LibraryWorkspaceState> {
+  @override
+  Future<LibraryWorkspaceState> build() =>
+      ref.watch(settingsRepositoryProvider).loadLibraryWorkspaceState();
+
+  Future<void> save(LibraryWorkspaceState next) async {
+    state = AsyncData(next);
+    await ref.read(settingsRepositoryProvider).saveLibraryWorkspaceState(next);
   }
 }
 
