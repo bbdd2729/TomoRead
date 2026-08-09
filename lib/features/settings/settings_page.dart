@@ -151,35 +151,36 @@ class SettingsPage extends HookConsumerWidget {
             children: [
               const PageHeader(title: '设置', subtitle: '调整应用外观和默认阅读偏好。'),
               const SizedBox(height: 24),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SegmentedButton<_SettingsSection>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _SettingsSection.appearance,
-                      icon: Icon(Icons.palette_outlined),
-                      label: Text('外观'),
-                    ),
-                    ButtonSegment(
-                      value: _SettingsSection.reading,
-                      icon: Icon(Icons.menu_book_outlined),
-                      label: Text('阅读'),
-                    ),
-                    ButtonSegment(
-                      value: _SettingsSection.aiVector,
-                      icon: Icon(Icons.hub_outlined),
-                      label: Text('AI 与向量'),
-                    ),
-                    ButtonSegment(
-                      value: _SettingsSection.dataPrivacy,
-                      icon: Icon(Icons.shield_outlined),
-                      label: Text('数据'),
-                    ),
-                  ],
-                  selected: {section.value},
-                  onSelectionChanged: (selection) =>
-                      section.value = selection.first,
+              DropdownButtonFormField<_SettingsSection>(
+                key: const Key('settings-section-selector'),
+                initialValue: section.value,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: '设置分类',
+                  border: OutlineInputBorder(),
                 ),
+                items: [
+                  for (final value in _SettingsSection.values)
+                    DropdownMenuItem(
+                      value: value,
+                      child: Row(
+                        children: [
+                          Icon(_settingsSectionIcon(value), size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _sectionTitle(value),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) section.value = value;
+                },
               ),
               const SizedBox(height: 28),
               sectionContent,
@@ -770,6 +771,13 @@ String _sectionTitle(_SettingsSection section) => switch (section) {
   _SettingsSection.reading => '默认阅读',
   _SettingsSection.aiVector => 'AI 与向量模型',
   _SettingsSection.dataPrivacy => '数据与隐私',
+};
+
+IconData _settingsSectionIcon(_SettingsSection section) => switch (section) {
+  _SettingsSection.appearance => Icons.palette_outlined,
+  _SettingsSection.reading => Icons.menu_book_outlined,
+  _SettingsSection.aiVector => Icons.hub_outlined,
+  _SettingsSection.dataPrivacy => Icons.shield_outlined,
 };
 
 List<ReadingFontRef> _availableReadingFonts(

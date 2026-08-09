@@ -138,6 +138,7 @@ class LibraryControls extends StatelessWidget {
       final searchWidth = constraints.maxWidth < 520
           ? constraints.maxWidth
           : 320.0;
+      final compact = constraints.maxWidth < 600;
       final colors = Theme.of(context).colorScheme;
       return Material(
         color: colors.surface,
@@ -167,15 +168,49 @@ class LibraryControls extends StatelessWidget {
                       ),
                     ),
                   ),
-                  SegmentedButton<LibraryFormatFilter>(
-                    segments: [
-                      for (final filter in LibraryFormatFilter.values)
-                        ButtonSegment(value: filter, label: Text(filter.label)),
-                    ],
-                    selected: {formatFilter},
-                    onSelectionChanged: (selection) =>
-                        onFormatChanged(selection.first),
-                  ),
+                  compact
+                      ? SizedBox(
+                          width: constraints.maxWidth,
+                          child: DropdownButtonFormField<LibraryFormatFilter>(
+                            key: const Key('library-format-selector'),
+                            initialValue: formatFilter,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: '格式',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: [
+                              for (final filter in LibraryFormatFilter.values)
+                                DropdownMenuItem(
+                                  value: filter,
+                                  child: Text(
+                                    filter.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) onFormatChanged(value);
+                            },
+                          ),
+                        )
+                      : SegmentedButton<LibraryFormatFilter>(
+                          segments: [
+                            for (final filter in LibraryFormatFilter.values)
+                              ButtonSegment(
+                                value: filter,
+                                label: Text(
+                                  filter.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                          selected: {formatFilter},
+                          onSelectionChanged: (selection) =>
+                              onFormatChanged(selection.first),
+                        ),
                   SizedBox(
                     width: 152,
                     child: DropdownButtonFormField<LibrarySort>(
