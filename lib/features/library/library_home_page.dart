@@ -40,12 +40,22 @@ class LibraryHomePage extends HookConsumerWidget {
     );
     useEffect(() => importController.dispose, [importController]);
     final searchQuery = useState('');
-    final formatFilter = useState(LibraryFormatFilter.all);
-    final sort = useState(LibrarySort.recent);
-    final viewMode = useState(LibraryViewMode.grid);
-    final categoryFilter = useState(allCategoriesFilter);
-    final tagFilter = useState<String?>(null);
-    final favoritesOnly = useState(false);
+    final workspaceAsync = ref.watch(libraryWorkspaceStateProvider);
+    final workspaceNotifier = ref.read(libraryWorkspaceStateProvider.notifier);
+    final workspace = workspaceAsync.value ?? const LibraryWorkspaceState();
+    final availableBooks = books.value;
+    final effectiveWorkspace = availableBooks == null
+        ? workspace
+        : workspace.normalizedForOptions(
+            categories: categoriesFor(availableBooks),
+            tags: tagsFor(availableBooks),
+          );
+    useEffect(() {
+      if (effectiveWorkspace != workspace) {
+        unawaited(workspaceNotifier.save(effectiveWorkspace));
+      }
+      return null;
+    }, [workspace, effectiveWorkspace]);
     final selectionMode = useState(false);
     final selectedBookIds = useState(<String>{});
     final removingBookId = useState<String?>(null);
@@ -243,11 +253,11 @@ class LibraryHomePage extends HookConsumerWidget {
         final visibleBooks = filterAndSortBooks(
           items,
           query: searchQuery.value,
-          formatFilter: formatFilter.value,
-          sort: sort.value,
-          category: categoryFilter.value,
-          tag: tagFilter.value,
-          favoritesOnly: favoritesOnly.value,
+          formatFilter: effectiveWorkspace.formatFilter,
+          sort: effectiveWorkspace.sort,
+          category: effectiveWorkspace.category,
+          tag: effectiveWorkspace.tag,
+          favoritesOnly: effectiveWorkspace.favoritesOnly,
         );
         final nextReadingBook = continueReadingBook(visibleBooks);
         return LayoutBuilder(
@@ -303,21 +313,47 @@ class LibraryHomePage extends HookConsumerWidget {
                 EmptyLibrary(onImport: isImporting.value ? null : importBooks)
               else ...[
                 LibraryControls(
-                  formatFilter: formatFilter.value,
-                  sort: sort.value,
-                  viewMode: viewMode.value,
+                  formatFilter: effectiveWorkspace.formatFilter,
+                  sort: effectiveWorkspace.sort,
+                  viewMode: effectiveWorkspace.viewMode,
                   onQueryChanged: (value) => searchQuery.value = value,
-                  onFormatChanged: (value) => formatFilter.value = value,
-                  onSortChanged: (value) => sort.value = value,
-                  onViewModeChanged: (value) => viewMode.value = value,
+                  onFormatChanged: (value) => unawaited(
+                    workspaceNotifier.save(
+                      effectiveWorkspace.copyWith(formatFilter: value),
+                    ),
+                  ),
+                  onSortChanged: (value) => unawaited(
+                    workspaceNotifier.save(
+                      effectiveWorkspace.copyWith(sort: value),
+                    ),
+                  ),
+                  onViewModeChanged: (value) => unawaited(
+                    workspaceNotifier.save(
+                      effectiveWorkspace.copyWith(viewMode: value),
+                    ),
+                  ),
                   categories: categoriesFor(items),
                   tags: tagsFor(items),
-                  category: categoryFilter.value,
-                  tag: tagFilter.value,
-                  favoritesOnly: favoritesOnly.value,
-                  onCategoryChanged: (value) => categoryFilter.value = value,
-                  onTagChanged: (value) => tagFilter.value = value,
-                  onFavoritesChanged: (value) => favoritesOnly.value = value,
+                  category: effectiveWorkspace.category,
+                  tag: effectiveWorkspace.tag,
+                  favoritesOnly: effectiveWorkspace.favoritesOnly,
+                  onCategoryChanged: (value) => unawaited(
+                    workspaceNotifier.save(
+                      effectiveWorkspace.copyWith(category: value),
+                    ),
+                  ),
+                  onTagChanged: (value) => unawaited(
+                    workspaceNotifier.save(
+                      value == null
+                          ? effectiveWorkspace.copyWith(clearTag: true)
+                          : effectiveWorkspace.copyWith(tag: value),
+                    ),
+                  ),
+                  onFavoritesChanged: (value) => unawaited(
+                    workspaceNotifier.save(
+                      effectiveWorkspace.copyWith(favoritesOnly: value),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 20),
                 if (selectionMode.value)
@@ -377,7 +413,8 @@ class LibraryHomePage extends HookConsumerWidget {
               return CustomScrollView(slivers: [headerSliver]);
             }
 
-            final booksSliver = viewMode.value == LibraryViewMode.grid
+            final booksSliver =
+                effectiveWorkspace.viewMode == LibraryViewMode.grid
                 ? SliverGrid(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) => buildBookCard(index),
