@@ -33,6 +33,7 @@ import 'reader_chrome_widgets.dart';
 import 'reader_article.dart';
 import 'reader_annotation_dialogs.dart';
 import 'reader_drafts.dart';
+import 'reader_progress_coordinator.dart';
 import 'reader_reading_settings_dialog.dart';
 import 'reader_selection_menu.dart';
 import 'reader_side_panel.dart';
@@ -134,6 +135,24 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
     // Keep an app-scoped notifier reference for delayed writes. During effect
     // cleanup the widget's `ref` is already unsafe to read.
     final libraryBooksController = ref.read(libraryBooksProvider.notifier);
+    final progressCoordinator = useMemoized(
+      () => ReaderProgressCoordinator(
+        report: (pending) => libraryBooksController.reportReadingPosition(
+          bookId: bookId,
+          chapterIndex: pending.chapterIndex,
+          progress: pending.progress,
+          locator: pending.locator,
+        ),
+        persist: (pending) => libraryBooksController.updateReadingPosition(
+          bookId: bookId,
+          chapterIndex: pending.chapterIndex,
+          progress: pending.progress,
+          locator: pending.locator,
+        ),
+      ),
+      [bookId],
+    );
+    useEffect(() => progressCoordinator.dispose, [progressCoordinator]);
     final lifecycleState = useAppLifecycleState();
     final pomodoro = ref.watch(pomodoroControllerProvider).value;
     final pomodoroBreakActive =
@@ -175,10 +194,9 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
     final navigationCommand = useState<ReaderNavigationCommand?>(null);
     final autoScrollActive = useState(false);
     final navigationSequence = useRef(0);
+    final navigationGate = useRef(ReaderNavigationGate());
     final focusedAnnotationId = useState<String?>(null);
     final annotationFocusRevision = useState(0);
-    final progressWriteTimer = useRef<Timer?>(null);
-    final pendingProgressWrite = useRef<PendingReaderProgress?>(null);
     final selectedText = useState<ReaderTextSelection?>(null);
     final selectionMenuVisible = useRef(false);
     final searchQuery = useState<String?>(null);
@@ -391,31 +409,13 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
       return null;
     }, [bookId, activeChapterIndex, isPaginated]);
 
-    Future<void> persistProgress(PendingReaderProgress pending) async {
-      await libraryBooksController.updateReadingPosition(
-        bookId: bookId,
-        chapterIndex: pending.chapterIndex,
-        progress: pending.progress,
-        locator: pending.locator,
-      );
-    }
-
-    Future<void> flushPendingProgress() async {
-      if (!context.mounted) return;
-      progressWriteTimer.value?.cancel();
-      progressWriteTimer.value = null;
-      final pending = pendingProgressWrite.value;
-      pendingProgressWrite.value = null;
-      if (pending != null) await persistProgress(pending);
-    }
-
     useEffect(() {
       // Android can pause or kill the activity without waiting for the reader
       // route to dispose. Flush the latest stable locator when backgrounding,
       // rather than relying on the normal debounce or an eventual exit tap.
       if (lifecycleState != null &&
           lifecycleState != AppLifecycleState.resumed) {
-        unawaited(flushPendingProgress());
+        unawaited(progressCoordinator.flush());
       }
       return null;
     }, [lifecycleState]);
@@ -444,34 +444,8 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
           cfi: cfi,
         ).toLocator(),
       );
-      pendingProgressWrite.value = pending;
-      ref
-          .read(libraryBooksProvider.notifier)
-          .reportReadingPosition(
-            bookId: bookId,
-            chapterIndex: pending.chapterIndex,
-            progress: pending.progress,
-            locator: pending.locator,
-          );
-      progressWriteTimer.value?.cancel();
-      progressWriteTimer.value = Timer(const Duration(milliseconds: 600), () {
-        if (!context.mounted) return;
-        progressWriteTimer.value = null;
-        final pending = pendingProgressWrite.value;
-        pendingProgressWrite.value = null;
-        if (pending != null) unawaited(persistProgress(pending));
-      });
+      progressCoordinator.capture(pending);
     }
-
-    useEffect(() {
-      return () {
-        // Do not read ref or mutate hook state while the widget is unmounting.
-        // Persist the last captured snapshot through the app-scoped notifier.
-        progressWriteTimer.value?.cancel();
-        final pending = pendingProgressWrite.value;
-        if (pending != null) unawaited(persistProgress(pending));
-      };
-    }, [bookId]);
 
     Future<void> selectChapter(
       int index, {
@@ -489,9 +463,11 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
       final target = manifest.value?.spine[index];
       if (target == null) return;
       await ttsController.stop();
-      await flushPendingProgress();
+      unawaited(progressCoordinator.flush());
+      final commandId = ++navigationSequence.value;
+      if (!navigationGate.value.tryStart(commandId)) return;
       navigationCommand.value = ReaderNavigationCommand.goToLocation(
-        id: ++navigationSequence.value,
+        id: commandId,
         href: target.href,
         ratio: scrollPosition,
         anchor: anchor,
@@ -1007,16 +983,18 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
 
     void goToPrevious() {
       autoScrollActive.value = false;
+      final commandId = ++navigationSequence.value;
+      if (!navigationGate.value.tryStart(commandId)) return;
       navigationCommand.value = ReaderNavigationCommand.previousPage(
-        id: ++navigationSequence.value,
+        id: commandId,
       );
     }
 
     void goToNext() {
       autoScrollActive.value = false;
-      navigationCommand.value = ReaderNavigationCommand.nextPage(
-        id: ++navigationSequence.value,
-      );
+      final commandId = ++navigationSequence.value;
+      if (!navigationGate.value.tryStart(commandId)) return;
+      navigationCommand.value = ReaderNavigationCommand.nextPage(id: commandId);
     }
 
     void seekToChapterProgress(double value) {
@@ -1357,6 +1335,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                               onRequestPrevious: goToPrevious,
                               onRequestNext: goToNext,
                               onNavigationCommandFinished: (id) {
+                                navigationGate.value.complete(id);
                                 if (navigationCommand.value?.id == id) {
                                   navigationCommand.value = null;
                                 }
@@ -1496,7 +1475,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                     canAutoScroll:
                         settings.layoutMode == ReaderLayoutMode.scroll,
                     onExitReader: () {
-                      unawaited(flushPendingProgress());
+                      unawaited(progressCoordinator.flush());
                       unawaited(ttsController.stop());
                       onExitReader();
                     },
