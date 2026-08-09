@@ -17,6 +17,7 @@ import 'backup_restore_page.dart';
 import 'embedding_settings_page.dart';
 import 'font_catalog_controller.dart';
 import 'storage_diagnostics_page.dart';
+import 'volume_key_page_turning_setting.dart';
 
 enum _SettingsSection { appearance, reading, aiVector, dataPrivacy }
 
@@ -695,6 +696,10 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
               onChanged(settings.copyWith(tapToTurnPages: value)),
           title: const Text('点击区域翻页（实验性）'),
           subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
+        ),
+        VolumeKeyPageTurningSetting(
+          settings: settings,
+          onChanged: onChanged,
         ),
         const SizedBox(height: 8),
         Row(

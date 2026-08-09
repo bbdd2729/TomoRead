@@ -44,6 +44,8 @@ import 'reader_navigation_command.dart';
 import 'reader_runtime_controller.dart';
 import 'reader_theme_controller.dart';
 import 'reader_theme_data.dart';
+import 'volume_control_service.dart';
+import 'volume_key_page_turner.dart';
 import 'content_search_dialog.dart';
 import 'pomodoro_controller.dart';
 import 'pomodoro_widgets.dart';
@@ -81,7 +83,9 @@ class ReaderWorkspace extends ConsumerWidget {
     final customThemes =
         ref.watch(customReaderThemesProvider).value ??
         const <CustomReaderTheme>[];
-    final settings = override?.settings ?? readingSettings;
+    final settings = (override?.settings ?? readingSettings).copyWith(
+      volumeKeyTurnsPage: readingSettings.volumeKeyTurnsPage,
+    );
     return Theme(
       data: ReaderThemeData.build(Theme.of(context), settings, customThemes),
       child: _ReaderWorkspaceContent(
@@ -123,6 +127,17 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
     final readerCommandState = ref.watch(readerCommandSettingsProvider);
     final defaultReaderCommands = useMemoized(ReaderCommandSettings.defaults);
     final readerCommands = readerCommandState.value ?? defaultReaderCommands;
+    final volumeKeyTurner = useMemoized(
+      () => VolumeKeyPageTurner(control: VolumeControlService()),
+    );
+    final volumeKeyPrevious = useRef<VoidCallback?>(null);
+    final volumeKeyNext = useRef<VoidCallback?>(null);
+    useEffect(
+      () => () {
+        unawaited(volumeKeyTurner.dispose());
+      },
+      [volumeKeyTurner],
+    );
     // Keep the auto-dispose runtime controller alive for the lifetime of the
     // reader. WebView callbacks can arrive after a navigation frame, so a
     // notifier obtained only with ref.read may otherwise be disposed between
@@ -203,7 +218,9 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
     final override = readingOverride.value;
     final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
     final annotations = annotationsState.value ?? const <ReadingAnnotation>[];
-    final settings = override?.settings ?? readingSettings;
+    final settings = (override?.settings ?? readingSettings).copyWith(
+      volumeKeyTurnsPage: readingSettings.volumeKeyTurnsPage,
+    );
     ref.watch(readingFontReadyProvider(settings.font));
     final textColoring =
         textColoringState.value ?? ResolvedTextColoring.disabled();
@@ -996,6 +1013,19 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
       if (!navigationGate.value.tryStart(commandId)) return;
       navigationCommand.value = ReaderNavigationCommand.nextPage(id: commandId);
     }
+
+    volumeKeyPrevious.value = goToPrevious;
+    volumeKeyNext.value = goToNext;
+    useEffect(() {
+      unawaited(
+        volumeKeyTurner.configure(
+          enabled: settings.volumeKeyTurnsPage,
+          onPrevious: () => volumeKeyPrevious.value?.call(),
+          onNext: () => volumeKeyNext.value?.call(),
+        ),
+      );
+      return null;
+    }, [volumeKeyTurner, settings.volumeKeyTurnsPage]);
 
     void seekToChapterProgress(double value) {
       autoScrollActive.value = false;

@@ -41,6 +41,8 @@ import 'text_coloring_widgets.dart';
 import 'text_reader_drafts.dart';
 import 'tts_controller.dart';
 import 'tts_controls.dart';
+import 'volume_control_service.dart';
+import 'volume_key_page_turner.dart';
 import '../text_import/text_content_controller.dart';
 import '../text_import/text_projection_controller.dart';
 import '../text_import/text_projection_dialog.dart';
@@ -120,7 +122,9 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
     final readingOverride = ref
         .watch(bookReadingOverrideProvider(bookId))
         .value;
-    final settings = readingOverride?.settings ?? readingSettings;
+    final settings = (readingOverride?.settings ?? readingSettings).copyWith(
+      volumeKeyTurnsPage: readingSettings.volumeKeyTurnsPage,
+    );
     ref.watch(readingFontReadyProvider(settings.font));
     final chapterIndex = useState(0);
     final scrollController = useScrollController();
@@ -138,6 +142,17 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
     final readerCommandState = ref.watch(readerCommandSettingsProvider);
     final defaultReaderCommands = useMemoized(ReaderCommandSettings.defaults);
     final readerCommands = readerCommandState.value ?? defaultReaderCommands;
+    final volumeKeyTurner = useMemoized(
+      () => VolumeKeyPageTurner(control: VolumeControlService()),
+    );
+    final volumeKeyPrevious = useRef<VoidCallback?>(null);
+    final volumeKeyNext = useRef<VoidCallback?>(null);
+    useEffect(
+      () => () {
+        unawaited(volumeKeyTurner.dispose());
+      },
+      [volumeKeyTurner],
+    );
     final autoScrollController = useMemoized(
       () => ReaderAutoScrollController(preference: readerCommands.autoScroll),
     );
@@ -1251,24 +1266,41 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
       );
     }
 
+    void goToPrevious() {
+      if (scrollController.hasClients && scrollController.offset > 1) {
+        scrollByCommand(-1);
+      } else if (chapterIndex.value > 0) {
+        unawaited(selectChapter(chapterIndex.value - 1));
+      }
+    }
+
+    void goToNext() {
+      final chapterCount = document?.chapters.length ?? 0;
+      if (scrollController.hasClients &&
+          scrollController.offset <
+              scrollController.position.maxScrollExtent - 1) {
+        scrollByCommand(1);
+      } else if (chapterIndex.value + 1 < chapterCount) {
+        unawaited(selectChapter(chapterIndex.value + 1));
+      }
+    }
+
+    volumeKeyPrevious.value = goToPrevious;
+    volumeKeyNext.value = goToNext;
+    useEffect(() {
+      unawaited(
+        volumeKeyTurner.configure(
+          enabled: settings.volumeKeyTurnsPage,
+          onPrevious: () => volumeKeyPrevious.value?.call(),
+          onNext: () => volumeKeyNext.value?.call(),
+        ),
+      );
+      return null;
+    }, [volumeKeyTurner, settings.volumeKeyTurnsPage]);
+
     final commandCallbacks = <ReaderCommand, VoidCallback>{
-      ReaderCommand.previousPage: () {
-        if (scrollController.hasClients && scrollController.offset > 1) {
-          scrollByCommand(-1);
-        } else if (chapterIndex.value > 0) {
-          unawaited(selectChapter(chapterIndex.value - 1));
-        }
-      },
-      ReaderCommand.nextPage: () {
-        final chapterCount = document?.chapters.length ?? 0;
-        if (scrollController.hasClients &&
-            scrollController.offset <
-                scrollController.position.maxScrollExtent - 1) {
-          scrollByCommand(1);
-        } else if (chapterIndex.value + 1 < chapterCount) {
-          unawaited(selectChapter(chapterIndex.value + 1));
-        }
-      },
+      ReaderCommand.previousPage: goToPrevious,
+      ReaderCommand.nextPage: goToNext,
       ReaderCommand.scrollUp: () => scrollByCommand(-0.25),
       ReaderCommand.scrollDown: () => scrollByCommand(0.25),
       ReaderCommand.openTableOfContents: () {

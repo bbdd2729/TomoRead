@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
+import android.view.KeyEvent
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -14,12 +15,14 @@ import java.util.UUID
 class MainActivity : FlutterActivity() {
     private val channelName = "dev.tomoread/import_inbox"
     private val wakeLockChannelName = "dev.tomoread/wake_lock"
+    private val volumeControlPlugin = VolumeControlPlugin()
     private val pendingIntents = mutableListOf<Intent>()
     private var importChannel: MethodChannel? = null
     private var dartReady = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        flutterEngine.plugins.add(volumeControlPlugin)
         intent?.let { pendingIntents.add(Intent(it)) }
         importChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).apply {
             setMethodCallHandler { call, result ->
@@ -54,6 +57,11 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         super.onDestroy()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (volumeControlPlugin.processKeyDown(keyCode)) return true
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onNewIntent(intent: Intent) {
