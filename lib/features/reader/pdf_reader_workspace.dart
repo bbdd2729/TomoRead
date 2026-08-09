@@ -24,6 +24,8 @@ import 'pdf_search_dialog.dart';
 import 'reader_chrome.dart';
 import 'reader_theme_controller.dart';
 import 'reader_theme_data.dart';
+import 'volume_control_service.dart';
+import 'volume_key_page_turner.dart';
 
 void _noopPdfReaderAction() {}
 
@@ -58,12 +60,15 @@ class PdfReaderWorkspace extends ConsumerWidget {
     final customThemes =
         ref.watch(customReaderThemesProvider).value ??
         const <CustomReaderTheme>[];
-    final settings = override?.settings ?? readingSettings;
+    final settings = (override?.settings ?? readingSettings).copyWith(
+      volumeKeyTurnsPage: readingSettings.volumeKeyTurnsPage,
+    );
     return Theme(
       data: ReaderThemeData.build(Theme.of(context), settings, customThemes),
       child: _PdfReaderWorkspaceContent(
         bookId: bookId,
         title: title,
+        volumeKeyTurnsPage: settings.volumeKeyTurnsPage,
         onExitReader: onExitReader,
         onOpenChat: onOpenChat,
       ),
@@ -75,12 +80,14 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
   const _PdfReaderWorkspaceContent({
     required this.bookId,
     required this.title,
+    required this.volumeKeyTurnsPage,
     required this.onExitReader,
     required this.onOpenChat,
   });
 
   final String bookId;
   final String title;
+  final bool volumeKeyTurnsPage;
   final VoidCallback onExitReader;
   final VoidCallback onOpenChat;
 
@@ -90,6 +97,11 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
     final bookmarks = ref.watch(bookmarksForBookProvider(bookId));
     final annotations = ref.watch(annotationsForBookProvider(bookId));
     final currentPage = useState<int?>(null);
+    final volumeKeyTurner = useMemoized(
+      () => VolumeKeyPageTurner(control: VolumeControlService()),
+    );
+    final volumeKeyPrevious = useRef<VoidCallback?>(null);
+    final volumeKeyNext = useRef<VoidCallback?>(null);
     final viewerController = useMemoized(PdfViewerController.new);
     final selectionBridge = useMemoized(PdfTextSelectionBridge.new);
     final textSearcher = useState<PdfTextSearcher?>(null);
@@ -102,6 +114,24 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
     final controlsVisible = useState(false);
     final activityTracker = ref.read(readingActivityTrackerProvider);
     final lifecycleState = useAppLifecycleState();
+
+    useEffect(
+      () => () {
+        unawaited(volumeKeyTurner.dispose());
+      },
+      [volumeKeyTurner],
+    );
+
+    useEffect(() {
+      unawaited(
+        volumeKeyTurner.configure(
+          enabled: volumeKeyTurnsPage,
+          onPrevious: () => volumeKeyPrevious.value?.call(),
+          onNext: () => volumeKeyNext.value?.call(),
+        ),
+      );
+      return null;
+    }, [volumeKeyTurner, volumeKeyTurnsPage]);
 
     void toggleControls() => controlsVisible.value = !controlsVisible.value;
 
@@ -601,6 +631,13 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
           await viewerController.goToPage(pageNumber: pageNumber);
           await savePage(pageNumber);
         }
+
+        volumeKeyPrevious.value = displayedPage > 1
+            ? () => unawaited(goToPage(displayedPage - 1))
+            : null;
+        volumeKeyNext.value = pageCount > 0 && displayedPage < pageCount
+            ? () => unawaited(goToPage(displayedPage + 1))
+            : null;
 
         void openPdfProgressSheet() {
           unawaited(

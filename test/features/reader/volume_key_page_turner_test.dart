@@ -57,6 +57,42 @@ void main() {
     expect(parseAndroidVolumeKeyEvent('unknown'), isNull);
     expect(parseAndroidVolumeKeyEvent(1), isNull);
   });
+
+  test(
+    'keeps interception enabled after rapid disable and enable requests',
+    () async {
+      final cancelCompleter = Completer<void>();
+      final events = StreamController<VolumeKeyEvent>.broadcast(
+        onCancel: () => cancelCompleter.future,
+      );
+      final control = _FakeVolumeKeyControl(events.stream);
+      final turner = VolumeKeyPageTurner(control: control);
+      var nextCount = 0;
+
+      await turner.configure(
+        enabled: true,
+        onPrevious: () {},
+        onNext: () => nextCount++,
+      );
+      final disabling = turner.configure(
+        enabled: false,
+        onPrevious: () {},
+        onNext: () => nextCount++,
+      );
+      final enabling = turner.configure(
+        enabled: true,
+        onPrevious: () {},
+        onNext: () => nextCount++,
+      );
+      cancelCompleter.complete();
+      await Future.wait([disabling, enabling]);
+      events.add(VolumeKeyEvent.down);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(control.enabled, isTrue);
+      expect(nextCount, 1);
+    },
+  );
 }
 
 class _FakeVolumeKeyControl implements VolumeKeyControl {
@@ -66,10 +102,17 @@ class _FakeVolumeKeyControl implements VolumeKeyControl {
   final Stream<VolumeKeyEvent> events;
   int enableCalls = 0;
   int disableCalls = 0;
+  bool enabled = false;
 
   @override
-  Future<void> disable() async => disableCalls++;
+  Future<void> disable() async {
+    disableCalls++;
+    enabled = false;
+  }
 
   @override
-  Future<void> enable() async => enableCalls++;
+  Future<void> enable() async {
+    enableCalls++;
+    enabled = true;
+  }
 }

@@ -71,6 +71,7 @@ void main() {
           doubleColumn: false,
           layoutMode: ReaderLayoutMode.paginated,
           tapToTurnPages: true,
+          volumeKeyTurnsPage: true,
           theme: ReaderThemeSelection(
             preset: ReaderThemePreset.custom,
             customThemeId: 'night-ink',
@@ -104,6 +105,7 @@ void main() {
     expect(override?.settings.doubleColumn, isFalse);
     expect(override?.settings.layoutMode, ReaderLayoutMode.paginated);
     expect(override?.settings.tapToTurnPages, isTrue);
+    expect(override?.settings.volumeKeyTurnsPage, isFalse);
     expect(override?.settings.theme.preset, ReaderThemePreset.custom);
     expect(override?.settings.theme.customThemeId, 'night-ink');
 
