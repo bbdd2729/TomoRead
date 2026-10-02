@@ -6,12 +6,12 @@ enum ThemeSeed { blue, teal, green, orange, brown, purple }
 
 extension ThemeSeedX on ThemeSeed {
   String get label => switch (this) {
-    ThemeSeed.blue => '蓝色',
-    ThemeSeed.teal => '青色',
-    ThemeSeed.green => '绿色',
-    ThemeSeed.orange => '橙色',
-    ThemeSeed.brown => '棕色',
-    ThemeSeed.purple => '紫色',
+    ThemeSeed.blue => 'أزرق',
+    ThemeSeed.teal => 'أزرق',
+    ThemeSeed.green => 'أخضر',
+    ThemeSeed.orange => 'برتقالي',
+    ThemeSeed.brown => 'ألوان بُنّية',
+    ThemeSeed.purple => 'أرجوانيات',
   };
 
   Color get color => switch (this) {
@@ -33,15 +33,15 @@ enum AppThemeStyle { mist, white, paper }
 
 extension AppThemeStyleX on AppThemeStyle {
   String get label => switch (this) {
-    AppThemeStyle.mist => '雾绿',
-    AppThemeStyle.white => '纯白',
-    AppThemeStyle.paper => '纸张',
+    AppThemeStyle.mist => 'أخضر ضبابي',
+    AppThemeStyle.white => 'أبيض صلب',
+    AppThemeStyle.paper => 'الورق',
   };
 
   String get description => switch (this) {
-    AppThemeStyle.mist => '柔和的绿灰底色，适合日常使用。',
-    AppThemeStyle.white => '清晰的中性白色界面。',
-    AppThemeStyle.paper => '暖米色纸张底色，减少长时间阅读的刺眼感。',
+    AppThemeStyle.mist => 'خلفية خضراء رمادية ناعمة للاستخدام اليومي.',
+    AppThemeStyle.white => 'واجهة بيضاء محايدة واضحة.',
+    AppThemeStyle.paper => 'خلفية من الورق البيج الدافئ تقلل من وهج القراءات الطويلة.',
   };
 
   Color get previewColor => switch (this) {

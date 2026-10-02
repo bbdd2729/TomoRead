@@ -100,7 +100,7 @@ class ChatPage extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('引用对应的书籍已移除。')));
+          ).showSnackBar(const SnackBar(content: Text('تمت إزالة الكتاب المقابل للمرجع.')));
         }
         return;
       }
@@ -152,7 +152,7 @@ class ChatPage extends HookConsumerWidget {
         child: FilledButton.icon(
           onPressed: () => ref.invalidate(chatControllerProvider),
           icon: const Icon(Icons.refresh),
-          label: Text('重新加载对话：$error'),
+          label: Text('إعادة تحميل المحادثة: $error'),
         ),
       ),
       data: (chat) => LayoutBuilder(
@@ -234,7 +234,7 @@ Future<void> _createBookThread(
   if (books.isEmpty) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('书库中还没有书籍。')));
+    ).showSnackBar(const SnackBar(content: Text('لا توجد كتب في المكتبة حتى الآن.')));
     return;
   }
   String? selectedId = books.first.id;
@@ -242,10 +242,10 @@ Future<void> _createBookThread(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
-        title: const Text('新建书籍对话'),
+        title: const Text('محادثة كتاب جديد'),
         content: DropdownButtonFormField<String>(
           initialValue: selectedId,
-          decoration: const InputDecoration(labelText: '书籍'),
+          decoration: const InputDecoration(labelText: 'الكتب'),
           items: books
               .map(
                 (book) =>
@@ -257,11 +257,11 @@ Future<void> _createBookThread(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            child: const Text('إلغاء'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, selectedId),
-            child: const Text('创建'),
+            child: const Text('أنشئ'),
           ),
         ],
       ),
@@ -283,7 +283,7 @@ Future<void> _renameThread(
   final result = await showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('重命名对话'),
+      title: const Text('إعادة تسمية المحادثة'),
       content: TextField(
         controller: controller,
         autofocus: true,
@@ -292,11 +292,11 @@ Future<void> _renameThread(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, controller.text),
-          child: const Text('保存'),
+          child: const Text('حفظ'),
         ),
       ],
     ),
@@ -317,16 +317,16 @@ Future<void> _deleteThread(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('删除这段对话？'),
-      content: const Text('本地保存的消息和引用将一并删除。'),
+      title: const Text('هل تريد حذف هذه المحادثة ؟'),
+      content: const Text('سيتم حذف الرسائل والمراجع المحفوظة محليًا معًا.'),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('删除'),
+          child: const Text('حذف'),
         ),
       ],
     ),

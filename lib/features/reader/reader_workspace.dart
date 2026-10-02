@@ -246,7 +246,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
     // does, instead of coupling visible progress to optional text offsets.
     final chapterProgress = scrollRatio.value.clamp(0, 1).toDouble();
     final chapterTitle =
-        chapter.value?.title ?? '第 ${activeChapterIndex + 1} 章';
+        chapter.value?.title ?? 'الفقرتان 102${activeChapterIndex + 1}الفصل';
     final isLoading =
         readingOverride.isLoading ||
         bookmarks.isLoading ||
@@ -344,7 +344,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!context.mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('无法恢复到上次的精确位置，已打开保存的章节。')),
+              const SnackBar(content: Text('غير قادر على العودة إلى آخر موقع بالضبط، تم فتح القسم المحفوظ.')),
             );
           });
         }
@@ -624,7 +624,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
       final action = await showDialog<ReadingAssistantAction>(
         context: context,
         builder: (dialogContext) => SimpleDialog(
-          title: const Text('阅读助手'),
+          title: const Text('مساعد قراءة'),
           children: [
             for (final action in actions)
               ListTile(
@@ -658,7 +658,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('当前章节索引尚未就绪，请稍后重试。')));
+          ).showSnackBar(const SnackBar(content: Text('فهرس الفصل الحالي غير جاهز، يرجى المحاولة مرة أخرى لاحقًا.')));
         }
         return;
       }
@@ -682,9 +682,9 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                     .join('\n\n'),
               ),
               prompt:
-                  '${action.prompt}\n\n仅使用当前阅读进度及之前的内容，避免剧透。'
-                  '请使用书内搜索工具核对书内事实并附上可点击引用。'
-                  '\n上下文校验：${bundle.contextHash}',
+                  '${action.prompt}\n\nاستخدم فقط تقدم القراءة الحالي والمحتوى السابق لتجنب المفسدين.'
+                  'يرجى استخدام أداة البحث في الكتاب للتحقق من الحقائق في الكتاب وإرفاق عرض أسعار قابل للنقر.'
+                  '\nالتحقق من السياق:${bundle.contextHash}',
             ),
           );
       onOpenChat();
@@ -766,7 +766,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
               value: ReaderSelectionContextAction.highlight,
               child: ReaderSelectionActionMenuItem(
                 icon: Icons.highlight_outlined,
-                label: '高亮',
+                label: 'Ø¥Ø¨Ø±Ø§Ø²',
                 hasSubmenu: true,
               ),
             ),
@@ -774,7 +774,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
               value: ReaderSelectionContextAction.underline,
               child: ReaderSelectionActionMenuItem(
                 icon: Icons.format_underlined,
-                label: '划线',
+                label: 'DASH',
                 hasSubmenu: true,
               ),
             ),
@@ -782,14 +782,14 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
               value: ReaderSelectionContextAction.note,
               child: ReaderSelectionActionMenuItem(
                 icon: Icons.sticky_note_2_outlined,
-                label: '笔记',
+                label: 'ملاحظة',
               ),
             ),
             PopupMenuItem(
               value: ReaderSelectionContextAction.textColor,
               child: ReaderSelectionActionMenuItem(
                 icon: Icons.format_color_text_outlined,
-                label: '文字颜色',
+                label: 'لون النص',
               ),
             ),
             PopupMenuDivider(),
@@ -797,7 +797,7 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
               value: ReaderSelectionContextAction.ai,
               child: ReaderSelectionActionMenuItem(
                 icon: Icons.auto_awesome_outlined,
-                label: 'AI 助手',
+                label: 'مساعد الذكاء الاصطناعي',
                 hasSubmenu: true,
               ),
             ),
@@ -864,21 +864,21 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
                   value: ReaderSelectionAiAction.ask,
                   child: ReaderSelectionActionMenuItem(
                     icon: Icons.auto_awesome_outlined,
-                    label: '询问 AI',
+                    label: 'اسأل الذكاء الاصطناعي',
                   ),
                 ),
                 PopupMenuItem(
                   value: ReaderSelectionAiAction.explain,
                   child: ReaderSelectionActionMenuItem(
                     icon: Icons.lightbulb_outline,
-                    label: '解释这段',
+                    label: 'اشرح هذه الفقرة',
                   ),
                 ),
                 PopupMenuItem(
                   value: ReaderSelectionAiAction.summarize,
                   child: ReaderSelectionActionMenuItem(
                     icon: Icons.summarize_outlined,
-                    label: '总结这段',
+                    label: 'لخص هذه الفقرة',
                   ),
                 ),
               ],
@@ -886,11 +886,11 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
             if (aiAction == null || !context.mounted) return;
             switch (aiAction) {
               case ReaderSelectionAiAction.ask:
-                openAiWithSelection(menu.selection, '关于这段文字，我想问：');
+                openAiWithSelection(menu.selection, 'فيما يتعلق بهذا المقطع، أود أن أسأل:');
               case ReaderSelectionAiAction.explain:
-                openAiWithSelection(menu.selection, '请解释这段文字的含义和关键概念。');
+                openAiWithSelection(menu.selection, 'يرجى توضيح المعنى والمفاهيم الأساسية لهذا النص.');
               case ReaderSelectionAiAction.summarize:
-                openAiWithSelection(menu.selection, '请简洁总结这段文字的核心观点。');
+                openAiWithSelection(menu.selection, 'يرجى تلخيص النقاط الأساسية لهذا المقطع بإيجاز.');
             }
         }
       } finally {
@@ -1248,15 +1248,15 @@ class _ReaderWorkspaceContent extends HookConsumerWidget {
 
         void openProgressSheet() {
           final positionLabel = totalChapters == 0
-              ? '正在读取目录'
+              ? 'دليل القراءة'
               : !chapterProgressMeasured.value
-              ? '第 ${activeChapterIndex + 1} / $totalChapters 章 · 正在定位'
-              : '第 ${activeChapterIndex + 1} / $totalChapters 章 · '
-                    '本章 ${(chapterProgress * 100).round()}%';
+              ? 'الفصل ${activeChapterIndex + 1} / $totalChapters · تحديد الموقع'
+              : 'الفصل ${activeChapterIndex + 1} / $totalChapters · '
+                    'هذا الفصل ${(chapterProgress * 100).round()}%';
           unawaited(
             showReaderProgressSheet(
               context,
-              title: '阅读进度',
+              title: 'تقدم القراءة',
               positionLabel: positionLabel,
               progress: chapterProgress,
               onChangeEnd: seekToChapterProgress,

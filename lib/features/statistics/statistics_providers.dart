@@ -57,23 +57,23 @@ final statsViewModelProvider = Provider<AsyncValue<StatsPageViewModel>>((ref) {
       report: report,
       metrics: [
         StatsMetricViewModel(
-          label: '阅读时长',
+          label: 'مدة القراءة',
           value: formatReadingDuration(summary.activeMillis),
           icon: 'time',
         ),
         StatsMetricViewModel(
-          label: '活动天数',
-          value: '${summary.activeDays} 天',
+          label: 'أيام النشاط',
+          value: '${summary.activeDays}يوم',
           icon: 'calendar',
         ),
         StatsMetricViewModel(
-          label: '当前连续',
-          value: '${summary.currentStreak} 天',
+          label: 'تيار مستمر',
+          value: '${summary.currentStreak}يوم',
           icon: 'streak',
         ),
         StatsMetricViewModel(
-          label: '阅读书籍',
-          value: '${summary.booksTouched} 本',
+          label: 'قراءة كتاب',
+          value: '${summary.booksTouched}حجز',
           icon: 'books',
         ),
       ],
@@ -83,8 +83,8 @@ final statsViewModelProvider = Provider<AsyncValue<StatsPageViewModel>>((ref) {
 
 String formatReadingDuration(int milliseconds) {
   final minutes = (milliseconds / 60000).round();
-  if (minutes < 60) return '$minutes 分钟';
+  if (minutes < 60) return '$minutes دقيقة';
   final hours = minutes ~/ 60;
   final rest = minutes % 60;
-  return rest == 0 ? '$hours 小时' : '$hours 小时 $rest 分';
+  return rest == 0 ? '$hours ساعة' : '$hours ساعة $rest دقيقة';
 }

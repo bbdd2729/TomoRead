@@ -532,7 +532,7 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
       final selected = await showDialog<int>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('章节目录'),
+          title: const Text('جدول محتويات الفصل'),
           content: SizedBox(
             width: 420,
             height: 520,
@@ -549,7 +549,7 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('关闭'),
+              child: const Text('مغلق'),
             ),
           ],
         ),
@@ -564,7 +564,7 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
       final encoding = await showDialog<String>(
         context: context,
         builder: (context) => SimpleDialog(
-          title: const Text('重新选择文本编码'),
+          title: const Text('إعادة تحديد ترميز النص'),
           children: supportedTextEncodings
               .map(
                 (value) => ListTile(
@@ -594,7 +594,7 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('重新解析失败：$error')));
+          ).showSnackBar(SnackBar(content: Text('فشلت إعادة التوزيع: $error')));
         }
       }
     }
@@ -613,17 +613,17 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
         items: [
           const PopupMenuItem(
             value: _TextChapterAction.rename,
-            child: Text('重命名当前章节'),
+            child: Text('إعادة تسمية القسم الحالي'),
           ),
           PopupMenuItem(
             value: _TextChapterAction.split,
             enabled: chapter.rawEnd - chapter.rawStart >= 2,
-            child: const Text('拆分当前章节'),
+            child: const Text('تقسيم المقطع الحالي'),
           ),
           PopupMenuItem(
             value: _TextChapterAction.mergeNext,
             enabled: index + 1 < current.chapters.length,
-            child: const Text('与下一章合并'),
+            child: const Text('الدمج مع الفصل التالي'),
           ),
         ],
       );
@@ -635,7 +635,7 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
           final title = await showDialog<String>(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('重命名章节'),
+              title: const Text('إعادة تسمية القسم'),
               content: TextField(
                 controller: titleController,
                 autofocus: true,
@@ -644,11 +644,11 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
+                  child: const Text('إلغاء'),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.pop(context, titleController.text),
-                  child: const Text('保存'),
+                  child: const Text('حفظ'),
                 ),
               ],
             ),
@@ -665,32 +665,32 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
           final splitOffset =
               chapter.rawStart + safeTextChapterSplitOffset(chapterText);
           final nextTitleController = TextEditingController(
-            text: '${chapter.title}（下）',
+            text: '${chapter.title}تحت',
           );
           final confirmed = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('拆分章节'),
+              title: const Text('قسم مقسم'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('将在接近章节中点的空行处分割；原始文本不会改变。'),
+                  const Text('انقسم في سطر فارغ بالقرب من النقطة في الفصل ؛ لا يتغير النص الأصلي.'),
                   const SizedBox(height: 12),
                   TextField(
                     controller: nextTitleController,
                     maxLength: 120,
-                    decoration: const InputDecoration(labelText: '后半章标题'),
+                    decoration: const InputDecoration(labelText: 'عنوان النصف الثاني من الفصل'),
                   ),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('取消'),
+                  child: const Text('إلغاء'),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('拆分'),
+                  child: const Text('قائمة البرنامج'),
                 ),
               ],
             ),
@@ -716,7 +716,7 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('已复制当前章节原文。')));
+        ).showSnackBar(const SnackBar(content: Text('تم نسخ النص الأصلي للقسم الحالي.')));
       }
     }
 
@@ -804,7 +804,7 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
       final action = await showDialog<ReadingAssistantAction>(
         context: context,
         builder: (dialogContext) => SimpleDialog(
-          title: const Text('阅读助手'),
+          title: const Text('مساعد قراءة'),
           children: [
             for (final action in ReadingAssistantAction.values)
               ListTile(
@@ -849,7 +849,7 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('当前章节索引尚未就绪，请稍后重试。')));
+          ).showSnackBar(const SnackBar(content: Text('فهرس الفصل الحالي غير جاهز، يرجى المحاولة مرة أخرى لاحقًا.')));
         }
         return;
       }
@@ -874,9 +874,9 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                 quote: quote,
               ),
               prompt:
-                  '${action.prompt}\n\n仅使用当前进度及之前的内容，避免剧透。'
-                  '请使用书内搜索工具核对书内事实并附上可点击引用。'
-                  '\n上下文校验：${bundle.contextHash}',
+                  '${action.prompt}\n\nاستخدم فقط التقدم الحالي والمحتوى السابق لتجنب المفسدين.'
+                  'يرجى استخدام أداة البحث في الكتاب للتحقق من الحقائق في الكتاب وإرفاق عرض أسعار قابل للنقر.'
+                  '\nالتحقق من السياق:${bundle.contextHash}',
             ),
           );
       onOpenChat();
@@ -1060,43 +1060,43 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
       unawaited(
         showReaderMoreSheet(
           context,
-          title: '阅读样式',
+          title: 'أسلوب القراءة',
           groups: [
             ReaderChromeActionGroup(
-              title: '排版',
+              title: 'الطباعة',
               actions: [
                 ReaderChromeAction(
                   id: 'font-decrease',
-                  label: '减小字号',
+                  label: 'تقليل حجم الخط',
                   icon: Icons.text_decrease_outlined,
                   onPressed: () => unawaited(adjustFontSize(-1)),
                 ),
                 ReaderChromeAction(
                   id: 'font-increase',
-                  label: '增大字号',
+                  label: 'زيادة حجم الخط',
                   icon: Icons.text_increase_outlined,
                   onPressed: () => unawaited(adjustFontSize(1)),
                 ),
                 ReaderChromeAction(
                   id: 'text-projection',
-                  label: '文本显示投影',
+                  label: 'عرض النص الإسقاط',
                   icon: Icons.translate,
                   onPressed: () => unawaited(openProjectionSettings()),
                 ),
               ],
             ),
             ReaderChromeActionGroup(
-              title: '文字显示',
+              title: 'عرض النص',
               actions: [
                 ReaderChromeAction(
                   id: 'text-color-settings',
-                  label: '本书文字颜色设置',
+                  label: 'إعدادات لون نص الكتاب',
                   icon: Icons.palette_outlined,
                   onPressed: () => unawaited(openTextColoringSettings()),
                 ),
                 ReaderChromeAction(
                   id: 'text-color-toggle',
-                  label: textColoring.enabled ? '关闭文字着色' : '开启文字着色',
+                  label: textColoring.enabled ? 'إغلاق تلوين النص' : 'تشغيل تلوين النص',
                   icon: Icons.format_color_text_outlined,
                   onPressed: () => unawaited(toggleTextColoring()),
                   selected: textColoring.enabled,
@@ -1112,19 +1112,19 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
       unawaited(
         showReaderMoreSheet(
           context,
-          title: '更多阅读操作',
+          title: 'قراءة المزيد من الإجراءات',
           groups: [
             ReaderChromeActionGroup(
-              title: '查阅',
+              title: 'يبحث...',
               actions: [
                 ReaderChromeAction(
                   id: 'text-toc',
-                  label: '章节目录',
+                  label: 'جدول محتويات الفصل',
                   icon: Icons.menu_book_outlined,
                   onPressed: document == null
                       ? null
                       : () => unawaited(openChapters(document.chapters)),
-                  disabledDescription: '正在读取章节目录',
+                  disabledDescription: 'قراءة كتالوج الفصول',
                 ),
                 ReaderChromeAction(
                   id: 'text-bookmark',
@@ -1132,8 +1132,8 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                       (bookmarks.value ?? const <Bookmark>[]).any(
                         (bookmark) => bookmark.locator == currentTextLocator(),
                       )
-                      ? '移除书签'
-                      : '添加书签',
+                      ? 'إزالة الإشارة المرجعية'
+                      : 'أضف علامة',
                   icon:
                       (bookmarks.value ?? const <Bookmark>[]).any(
                         (bookmark) => bookmark.locator == currentTextLocator(),
@@ -1143,22 +1143,22 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                   onPressed: document == null
                       ? null
                       : () => unawaited(toggleBookmark()),
-                  disabledDescription: '正在读取正文',
+                  disabledDescription: 'النص المقروء',
                 ),
                 ReaderChromeAction(
                   id: 'text-search',
-                  label: '搜索本地正文',
+                  label: 'البحث في الجسم المحلي',
                   icon: Icons.search,
                   onPressed: () => unawaited(searchIndexedContent()),
                 ),
               ],
             ),
             ReaderChromeActionGroup(
-              title: '阅读',
+              title: 'القراءة',
               actions: [
                 ReaderChromeAction(
                   id: 'text-tts',
-                  label: '系统朗读',
+                  label: 'النظام يتحدث',
                   icon: Icons.headphones_outlined,
                   onPressed: () {
                     autoScrollController.stop(AutoScrollStopReason.dialog);
@@ -1167,95 +1167,95 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                 ),
                 ReaderChromeAction(
                   id: 'text-auto-scroll',
-                  label: autoScrollController.active ? '停止自动滚动' : '开始自动滚动',
+                  label: autoScrollController.active ? 'إيقاف التمرير التلقائي' : 'ابدأ التمرير التلقائي',
                   icon: autoScrollController.active
                       ? Icons.pause_circle_outline
                       : Icons.slow_motion_video_outlined,
                   onPressed: settings.layoutMode == ReaderLayoutMode.scroll
                       ? toggleAutoScroll
                       : null,
-                  disabledDescription: '自动滚动仅支持滚动布局',
+                  disabledDescription: 'يدعم التمرير التلقائي تخطيط التمرير فقط',
                   selected: autoScrollController.active,
                 ),
                 ReaderChromeAction(
                   id: 'text-pomodoro',
-                  label: '阅读专注计时',
+                  label: 'قراءة توقيت التركيز',
                   icon: Icons.timer_outlined,
                   onPressed: togglePomodoro,
                   selected: pomodoro?.isRunning == true,
                 ),
                 ReaderChromeAction(
                   id: 'text-focus',
-                  label: '隐藏阅读控制',
+                  label: 'إخفاء عناصر التحكم في القراءة',
                   icon: Icons.center_focus_strong_outlined,
                   onPressed: toggleFocusMode,
                 ),
               ],
             ),
             ReaderChromeActionGroup(
-              title: '智能工具',
+              title: 'الأدوات الذكية',
               actions: [
                 ReaderChromeAction(
                   id: 'text-assistant',
-                  label: '阅读助手',
+                  label: 'مساعد قراءة',
                   icon: Icons.auto_awesome_outlined,
                   onPressed: () => unawaited(openReadingAssistant()),
                 ),
                 ReaderChromeAction(
                   id: 'text-visualization',
-                  label: '词云与思维导图',
+                  label: 'سحابة الكلمات والخرائط الذهنية',
                   icon: Icons.account_tree_outlined,
                   onPressed: () => unawaited(openVisualization()),
                 ),
               ],
             ),
             ReaderChromeActionGroup(
-              title: '文本工具',
+              title: 'نص أداة',
               actions: [
                 ReaderChromeAction(
                   id: 'text-encoding',
-                  label: '文本编码',
+                  label: 'نص ترميز:',
                   icon: Icons.text_snippet_outlined,
                   onPressed: document == null
                       ? null
                       : () => unawaited(changeEncoding()),
-                  disabledDescription: '正在读取正文',
+                  disabledDescription: 'النص المقروء',
                 ),
                 ReaderChromeAction(
                   id: 'text-edit-chapter',
-                  label: '编辑章节',
+                  label: 'تعديل القسم',
                   icon: Icons.edit_note,
                   onPressed: document == null
                       ? null
                       : () => unawaited(editCurrentChapter()),
-                  disabledDescription: '正在读取章节',
+                  disabledDescription: 'قراءة الفصول',
                 ),
                 ReaderChromeAction(
                   id: 'text-add-color',
-                  label: '将选中文字设为前景色',
+                  label: 'تعيين النص المحدد كلون أمامي',
                   icon: Icons.format_color_text_outlined,
                   onPressed: selectedColorText.value == null
                       ? null
                       : () => unawaited(addSelectedTextColor()),
-                  disabledDescription: '请先选择文字',
+                  disabledDescription: 'يرجى تحديد النص أولاً',
                 ),
                 ReaderChromeAction(
                   id: 'text-copy-original',
-                  label: '复制当前章节原文',
+                  label: 'نسخ النص الأصلي للقسم الحالي',
                   icon: Icons.content_copy_outlined,
                   onPressed: rawChapterText.isEmpty
                       ? null
                       : () => unawaited(copyOriginalChapter()),
-                  disabledDescription: '当前章节没有可复制原文',
+                  disabledDescription: 'لا توجد نسخة أصلية متاحة للقسم الحالي',
                 ),
               ],
             ),
             ReaderChromeActionGroup(
-              title: '设置',
+              title: 'الإعدادات',
               actions: [
                 ReaderChromeAction(
                   id: 'text-style',
-                  label: '阅读样式',
+                  label: 'أسلوب القراءة',
                   icon: Icons.tune_outlined,
                   onPressed: openTextStyleSheet,
                 ),
@@ -1348,7 +1348,7 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
             )
           : AppBar(
               leading: IconButton(
-                tooltip: '返回书库',
+                tooltip: 'العودة إلى المكتبة',
                 onPressed: () {
                   unawaited(persistPendingScrollProgress());
                   unawaited(ttsController.stop());
@@ -1373,9 +1373,9 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                     key: const Key('text-reader-auto-scroll'),
                     tooltip: settings.layoutMode == ReaderLayoutMode.scroll
                         ? autoScrollController.active
-                              ? '停止自动滚动'
-                              : '开始自动滚动'
-                        : '自动滚动仅支持滚动布局',
+                              ? 'إيقاف التمرير التلقائي'
+                              : 'ابدأ التمرير التلقائي'
+                        : 'يدعم التمرير التلقائي تخطيط التمرير فقط',
                     onPressed: settings.layoutMode == ReaderLayoutMode.scroll
                         ? toggleAutoScroll
                         : null,
@@ -1387,7 +1387,7 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip: '章节目录',
+                    tooltip: 'جدول محتويات الفصل',
                     onPressed: document == null
                         ? null
                         : () => openChapters(document.chapters),
@@ -1400,8 +1400,8 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                           (bookmark) =>
                               bookmark.locator == currentTextLocator(),
                         )
-                        ? '移除书签'
-                        : '添加书签',
+                        ? 'إزالة الإشارة المرجعية'
+                        : 'أضف علامة',
                     onPressed: document == null ? null : toggleBookmark,
                     icon: Icon(
                       (bookmarks.value ?? const <Bookmark>[]).any(
@@ -1413,49 +1413,49 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip: '文本编码',
+                    tooltip: 'نص ترميز:',
                     onPressed: document == null ? null : changeEncoding,
                     icon: const Icon(Icons.text_snippet_outlined),
                   ),
                   IconButton(
-                    tooltip: '搜索本地正文',
+                    tooltip: 'البحث في الجسم المحلي',
                     onPressed: searchIndexedContent,
                     icon: const Icon(Icons.search),
                   ),
                   IconButton(
-                    tooltip: '编辑章节',
+                    tooltip: 'تعديل القسم',
                     onPressed: document == null ? null : editCurrentChapter,
                     icon: const Icon(Icons.edit_note),
                   ),
                   IconButton(
-                    tooltip: '文本显示投影',
+                    tooltip: 'عرض النص الإسقاط',
                     onPressed: openProjectionSettings,
                     icon: const Icon(Icons.translate),
                   ),
                   IconButton(
-                    tooltip: '将选中文字设为前景色',
+                    tooltip: 'تعيين النص المحدد كلون أمامي',
                     onPressed: selectedColorText.value == null
                         ? null
                         : addSelectedTextColor,
                     icon: const Icon(Icons.format_color_text_outlined),
                   ),
                   IconButton(
-                    tooltip: '本书文字前景色设置',
+                    tooltip: 'إعدادات لون مقدمة نص الكتاب',
                     onPressed: openTextColoringSettings,
                     icon: const Icon(Icons.palette_outlined),
                   ),
                   IconButton(
-                    tooltip: '阅读助手',
+                    tooltip: 'مساعد قراءة',
                     onPressed: openReadingAssistant,
                     icon: const Icon(Icons.auto_awesome_outlined),
                   ),
                   IconButton(
-                    tooltip: '词云与思维导图',
+                    tooltip: 'سحابة الكلمات والخرائط الذهنية',
                     onPressed: openVisualization,
                     icon: const Icon(Icons.account_tree_outlined),
                   ),
                   IconButton(
-                    tooltip: '复制当前章节原文',
+                    tooltip: 'نسخ النص الأصلي للقسم الحالي',
                     onPressed: rawChapterText.isEmpty
                         ? null
                         : copyOriginalChapter,
@@ -1469,8 +1469,8 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                           (bookmark) =>
                               bookmark.locator == currentTextLocator(),
                         )
-                        ? '移除书签'
-                        : '添加书签',
+                        ? 'إزالة الإشارة المرجعية'
+                        : 'أضف علامة',
                     icon:
                         (bookmarks.value ?? const <Bookmark>[]).any(
                           (bookmark) =>
@@ -1485,14 +1485,14 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                   const SizedBox(width: ReaderChromeLayout.actionGap),
                   ReaderChromeIconButton(
                     key: const Key('text-reader-search'),
-                    tooltip: '搜索本地正文',
+                    tooltip: 'البحث في الجسم المحلي',
                     icon: Icons.search,
                     onPressed: () => unawaited(searchIndexedContent()),
                   ),
                   const SizedBox(width: ReaderChromeLayout.actionGap),
                   ReaderChromeIconButton(
                     key: const Key('text-reader-more-actions'),
-                    tooltip: '更多阅读操作',
+                    tooltip: 'قراءة المزيد من الإجراءات',
                     icon: Icons.more_vert,
                     onPressed: openTextMoreSheet,
                   ),
@@ -1503,10 +1503,10 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
         children: [
           documentState.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => Center(child: Text('无法打开文本书籍：$error')),
+            error: (error, _) => Center(child: Text('تعذر فتح الكتاب النصي: $error')),
             data: (value) {
               if (value.chapters.isEmpty) {
-                return const Center(child: Text('未识别到可阅读内容。'));
+                return const Center(child: Text('لم يتم التعرف على المحتوى المقروء.'));
               }
               final index = chapterIndex.value
                   .clamp(0, value.chapters.length - 1)
@@ -1567,19 +1567,19 @@ class _TextReaderWorkspaceContent extends HookConsumerWidget {
                         if (projectionSnapshot.hasError)
                           MaterialBanner(
                             content: Text(
-                              '显示转换失败，已回退原文：${projectionSnapshot.error}',
+                              'فشل تحويل العرض، وعاد إلى النص الأصلي:${projectionSnapshot.error}',
                             ),
                             actions: const [SizedBox.shrink()],
                           )
                         else if (projection.hasAmbiguousRanges)
                           const MaterialBanner(
-                            content: Text('本章含无法精确映射的转换区段；这些区段不会创建可回跳标注或文字颜色。'),
+                            content: Text('يحتوي هذا الفصل على مقاطع تحويل لا يمكن تعيينها بدقة ؛ لا تنشئ هذه المقاطع وسائل شرح أو ألوان نصية يمكن الرجوع إليها.'),
                             actions: [SizedBox.shrink()],
                           ),
                         if (coloringLayoutSnapshot.hasError)
                           MaterialBanner(
                             content: Text(
-                              '文字前景色计算失败，已显示无颜色正文：${coloringLayoutSnapshot.error}',
+                              'فشل حساب لون مقدمة النص، لا يتم عرض أي نص ملون:${coloringLayoutSnapshot.error}',
                             ),
                             actions: const [SizedBox.shrink()],
                           ),

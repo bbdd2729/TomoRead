@@ -52,19 +52,19 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('使用整本书内容？'),
+            title: const Text('استخدام الكتاب بأكمله ؟'),
             content: const Text(
-              '整书范围可能包含尚未阅读的章节。生成词云时仅在本地处理；'
-              '生成思维导图时，范围内的受控正文片段会发送给当前 AI 服务商。',
+              'قد يحتوي نطاق الكتاب بأكمله على فصول لم تتم قراءتها بعد. عند إنشاء سحابة كلمات، تتم معالجتها محليًا فقط ؛'
+              'يتم إرسال شظايا الجسم التي يتم التحكم فيها ضمن النطاق إلى مزود خدمة الذكاء الاصطناعي الحالي عند إنشاء خريطة ذهنية.',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
+                child: const Text('إلغاء'),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('确认整书范围'),
+                child: const Text('تأكيد نطاق الكتاب بأكمله'),
               ),
             ],
           ),
@@ -104,7 +104,7 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
           rawResponse.value = error.rawResponse;
         }
       } on MindMapGenerationCancelledException {
-        if (context.mounted) errorMessage.value = '思维导图生成已取消。';
+        if (context.mounted) errorMessage.value = 'تم إلغاء إنشاء الخريطة الذهنية.';
       } on Object catch (error) {
         if (context.mounted) errorMessage.value = error.toString();
       } finally {
@@ -140,16 +140,16 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('删除可视化记录？'),
-          content: Text('“${artifact.title}”将从本地派生数据中删除，不会影响原书。'),
+          title: const Text('هل تريد حذف السجل المرئي ؟'),
+          content: Text('سيتم إزالة "${artifact.title}" من البيانات المشتقة محليًا ولن يؤثر ذلك على الكتاب الأصلي.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
+              child: const Text('إلغاء'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('删除'),
+              child: const Text('حذف'),
             ),
           ],
         ),
@@ -159,7 +159,7 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
         await controller.delete(artifact);
         if (context.mounted) selectedArtifact.value = null;
       } on Object catch (error) {
-        if (context.mounted) errorMessage.value = '删除失败：$error';
+        if (context.mounted) errorMessage.value = 'فشل الحذف: $error';
       }
     }
 
@@ -176,7 +176,7 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
       final format = await showDialog<VisualArtifactExportFormat>(
         context: context,
         builder: (context) => SimpleDialog(
-          title: const Text('选择导出格式'),
+          title: const Text('تحديد تنسيق التصدير'),
           children: [
             for (final format in formats)
               ListTile(
@@ -198,10 +198,10 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
         if (path != null && context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('已导出到 $path')));
+          ).showSnackBar(SnackBar(content: Text('تم التصدير إلى $path')));
         }
       } on Object catch (error) {
-        if (context.mounted) errorMessage.value = '导出失败：$error';
+        if (context.mounted) errorMessage.value = 'فشل التصدير: $error';
       }
     }
 
@@ -227,7 +227,7 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '词云与思维导图',
+                            'سحابة الكلمات والخرائط الذهنية',
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           Text(
@@ -240,7 +240,7 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
                       ),
                     ),
                     IconButton(
-                      tooltip: '关闭',
+                      tooltip: 'مغلق',
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(Icons.close),
                     ),
@@ -278,7 +278,7 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
                           )
                         : null,
                     icon: const Icon(Icons.bubble_chart_outlined),
-                    label: const Text('本地词云'),
+                    label: const Text('سحابة الكلمات المحلية'),
                   ),
                   FilledButton.tonalIcon(
                     onPressed: busyKind.value == null
@@ -287,7 +287,7 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
                           )
                         : null,
                     icon: const Icon(Icons.account_tree_outlined),
-                    label: const Text('AI 思维导图'),
+                    label: const Text('الخريطة الذهنية للذكاء الاصطناعي'),
                   ),
                   if (busyKind.value != null)
                     OutlinedButton.icon(
@@ -295,7 +295,7 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
                           ? null
                           : () => unawaited(cancelGeneration()),
                       icon: const Icon(Icons.stop_circle_outlined),
-                      label: Text(cancelling.value ? '正在取消' : '取消'),
+                      label: Text(cancelling.value ? 'إلغاء' : 'إلغاء'),
                     ),
                 ],
               ),
@@ -303,8 +303,8 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
             if (busyKind.value != null)
               LinearProgressIndicator(
                 semanticsLabel: busyKind.value == VisualArtifactKind.wordCloud
-                    ? '正在本地生成词云'
-                    : '正在生成 AI 思维导图',
+                    ? 'توليد سحابة الكلمات محليًا'
+                    : 'إنشاء خريطة ذهنية للذكاء الاصطناعي',
               ),
             if (errorMessage.value != null)
               _RecoverableError(
@@ -318,7 +318,7 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
             Expanded(
               child: artifactsState.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => Center(child: Text('无法读取可视化记录：$error')),
+                error: (error, _) => Center(child: Text('تعذر قراءة السجل المرئي: $error')),
                 data: (_) => Column(
                   children: [
                     if (activeArtifact != null)
@@ -335,7 +335,7 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
                                     DropdownMenuItem(
                                       value: artifact,
                                       child: Text(
-                                        '${artifact.kind == VisualArtifactKind.wordCloud ? '词云' : '导图'} · '
+                                        '${artifact.kind == VisualArtifactKind.wordCloud ? 'سحابة وورد' : 'الخريطة'} · '
                                         '${artifact.scope.label} · ${artifact.title}',
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -350,19 +350,19 @@ class ReaderVisualizationDialog extends HookConsumerWidget {
                             if (activeArtifact.kind ==
                                 VisualArtifactKind.wordCloud)
                               IconButton(
-                                tooltip: '更换 seed 重新排布（不重新分词）',
+                                tooltip: 'استبدال إعادة ترتيب البذور (بدون إعادة صياغة)',
                                 onPressed: busyKind.value == null
                                     ? () => unawaited(reseed())
                                     : null,
                                 icon: const Icon(Icons.shuffle),
                               ),
                             IconButton(
-                              tooltip: '导出',
+                              tooltip: 'التصدير',
                               onPressed: () => unawaited(exportArtifact()),
                               icon: const Icon(Icons.download_outlined),
                             ),
                             IconButton(
-                              tooltip: '删除记录',
+                              tooltip: 'احذف سجل',
                               onPressed: busyKind.value == null
                                   ? () => unawaited(deleteArtifact())
                                   : null,
@@ -427,7 +427,7 @@ class _RecoverableError extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(child: Text(message)),
               IconButton(
-                tooltip: '关闭错误',
+                tooltip: 'إغلاق الخطأ',
                 onPressed: onDismiss,
                 icon: const Icon(Icons.close),
               ),
@@ -436,7 +436,7 @@ class _RecoverableError extends StatelessWidget {
           if (rawResponse?.isNotEmpty == true)
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: const Text('查看模型原始纯文本响应'),
+              title: const Text('عرض نموذج استجابة نص عادي خام'),
               children: [
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 220),
@@ -475,11 +475,11 @@ class _VisualizationEmptyState extends StatelessWidget {
             color: Theme.of(context).colorScheme.primary,
           ),
           const SizedBox(height: 14),
-          Text('尚无可视化记录', style: Theme.of(context).textTheme.titleMedium),
+          Text('لا توجد تسجيلات مرئية حتى الآن', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 7),
           const Text(
-            '本地词云无需联网；AI 思维导图使用当前激活服务商。'
-            '两者只读取可信正文索引，不修改原书。',
+            'لا تتطلب سحابة الكلمات المحلية الربط الشبكي ؛ تستخدم الخريطة الذهنية للذكاء الاصطناعي مزود خدمة التنشيط الحالي.'
+            'كلاهما يقرأ فقط مؤشر الجسم الموثوق به ولا يعدل الكتاب الأصلي.',
             textAlign: TextAlign.center,
           ),
         ],

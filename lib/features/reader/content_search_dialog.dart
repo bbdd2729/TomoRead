@@ -56,7 +56,7 @@ class ContentSearchDialog extends HookConsumerWidget {
           );
     final screenSize = MediaQuery.sizeOf(context);
     return AlertDialog(
-      title: const Text('搜索本地正文索引'),
+      title: const Text('البحث في فهرس الجسم المحلي'),
       content: SizedBox(
         width: (screenSize.width - 48).clamp(280, 700).toDouble(),
         height: (screenSize.height - 220).clamp(220, 580).toDouble(),
@@ -66,7 +66,7 @@ class ContentSearchDialog extends HookConsumerWidget {
               autofocus: true,
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search),
-                hintText: '输入关键词、短语或自然语言问题',
+                hintText: 'أدخل الكلمات الرئيسية أو العبارات أو أسئلة اللغة الطبيعية',
                 border: OutlineInputBorder(),
               ),
               onChanged: (value) => draft.value = value,
@@ -77,8 +77,8 @@ class ContentSearchDialog extends HookConsumerWidget {
                 contentPadding: EdgeInsets.zero,
                 value: includeFutureChapters.value,
                 onChanged: (value) => includeFutureChapters.value = value,
-                title: const Text('包含尚未读到的章节'),
-                subtitle: const Text('默认关闭以避免搜索结果剧透。'),
+                title: const Text('قم بتضمين الفصول التي لم تقرأها بعد'),
+                subtitle: const Text('قم بإيقاف التشغيل افتراضيًا لتجنب المفسدين في نتائج البحث.'),
               ),
             _SemanticIndexBanner(
               bookId: bookId,
@@ -89,17 +89,17 @@ class ContentSearchDialog extends HookConsumerWidget {
             Expanded(
               child: query.value.isEmpty
                   ? const Center(
-                      child: Text('关键词搜索始终可用；语义搜索需要先配置并建立向量索引。'),
+                      child: Text('عمليات البحث عن الكلمات الرئيسية متاحة دائمًا ؛ يجب تكوين عمليات البحث الدلالية وفهرستها أولاً.'),
                     )
                   : response.when(
                       loading: () => const Center(
                         child: CircularProgressIndicator(),
                       ),
                       error: (error, _) => Center(
-                        child: Text('搜索失败：$error'),
+                        child: Text('فشل البحث: $error'),
                       ),
                       data: (value) => value.results.isEmpty
-                          ? const Center(child: Text('没有找到匹配内容。'))
+                          ? const Center(child: Text('لم يتم العثور على تطابقات.'))
                           : Column(
                               children: [
                                 Align(
@@ -135,7 +135,7 @@ class ContentSearchDialog extends HookConsumerWidget {
                                                   const Chip(
                                                     visualDensity:
                                                         VisualDensity.compact,
-                                                    label: Text('关键词'),
+                                                    label: Text('الكلمات الأساسية'),
                                                   ),
                                                 if (result.sources.contains(
                                                   HybridMatchSource.semantic,
@@ -143,10 +143,10 @@ class ContentSearchDialog extends HookConsumerWidget {
                                                   const Chip(
                                                     visualDensity:
                                                         VisualDensity.compact,
-                                                    label: Text('语义'),
+                                                    label: Text('علم الدلالة'),
                                                   ),
                                                 Text(
-                                                  '相关度 ${(result.score * 100).round()}%',
+                                                  'الملاءمة${(result.score * 100).round()}%',
                                                 ),
                                               ],
                                             ),
@@ -168,7 +168,7 @@ class ContentSearchDialog extends HookConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: const Text('مغلق'),
         ),
       ],
     );
@@ -192,26 +192,26 @@ class _SemanticIndexBanner extends ConsumerWidget {
     if (currentProfile == null) {
       return const _IndexMessage(
         icon: Icons.info_outline,
-        text: '未启用向量配置，当前使用关键词搜索。',
+        text: 'لم يتم تمكين تكوين المتجه، يتم استخدام البحث عن الكلمات الرئيسية حاليًا.',
       );
     }
     if (currentProfile.capabilityStatus != EmbeddingCapabilityStatus.ready) {
       return const _IndexMessage(
         icon: Icons.warning_amber_outlined,
-        text: '当前向量配置尚未通过 Embedding 测试，关键词搜索仍可用。',
+        text: 'لم يجتاز تكوين المتجه الحالي اختبار التضمين، ولا يزال البحث عن الكلمات الرئيسية متاحًا.',
       );
     }
     if (!currentProfile.canSendContent) {
       return const _IndexMessage(
         icon: Icons.privacy_tip_outlined,
-        text: '尚未允许向该远端服务发送正文，当前使用关键词搜索。',
+        text: 'لم يتم السماح بإرسال النص إلى هذه الخدمة البعيدة، حاليًا باستخدام البحث عن الكلمات الرئيسية.',
       );
     }
     return state?.when(
           loading: () => const LinearProgressIndicator(),
           error: (error, _) => _IndexMessage(
             icon: Icons.warning_amber_outlined,
-            text: '无法读取语义索引状态：$error',
+            text: 'تعذر قراءة حالة الفهرس الدلالي: $error',
           ),
           data: (index) {
             final controller = ref.read(semanticIndexControllerProvider);
@@ -229,10 +229,10 @@ class _SemanticIndexBanner extends ConsumerWidget {
                     Expanded(
                       child: Text(
                         ready
-                            ? '语义索引已就绪：${index!.indexedChunks} 个正文片段'
+                            ? 'الفهرسة الدلالية جاهزة:${index!.indexedChunks}شظايا الجسم'
                             : indexing
-                            ? '正在建立语义索引：${(index!.progress * 100).round()}%'
-                            : '语义索引未就绪，当前搜索自动降级为关键词模式。',
+                            ? 'إنشاء فهرس دلالي:${(index!.progress * 100).round()}%'
+                            : 'الفهرس الدلالي غير جاهز، ويتم تخفيض مستوى البحث الحالي تلقائيًا إلى وضع الكلمات الرئيسية.',
                       ),
                     ),
                     if (indexing)
@@ -240,7 +240,7 @@ class _SemanticIndexBanner extends ConsumerWidget {
                         onPressed: () => ref
                             .read(semanticIndexControllerProvider)
                             .cancel(bookId),
-                        child: const Text('取消'),
+                        child: const Text('إلغاء'),
                       )
                     else ...[
                       TextButton(
@@ -249,11 +249,11 @@ class _SemanticIndexBanner extends ConsumerWidget {
                           ref,
                           rebuild: ready,
                         ),
-                        child: Text(ready ? '重建' : '建立索引'),
+                        child: Text(ready ? '`7` إعادة الإعمار' : 'الفهرسة'),
                       ),
                       if (index != null)
                         IconButton(
-                          tooltip: '删除当前书的向量索引',
+                          tooltip: 'حذف فهرس المتجهات للكتاب الحالي',
                           onPressed: () => ref
                               .read(semanticIndexControllerProvider)
                               .deleteIndex(bookId),
@@ -284,7 +284,7 @@ class _SemanticIndexBanner extends ConsumerWidget {
     } on Object catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('无法建立语义索引：$error')),
+          SnackBar(content: Text('تعذر إنشاء فهرس دلالي: $error')),
         );
       }
     }
@@ -317,11 +317,11 @@ class _IndexMessage extends StatelessWidget {
 String _modeDescription(HybridSearchResponse response) {
   if (response.mode == SemanticSearchMode.hybrid) {
     return response.spoilerLimited
-        ? '混合检索 · 已限制到当前阅读进度'
-        : '混合检索 · 包含全书章节';
+        ? 'استرجاع هجين · يقتصر على تقدم القراءة الحالية'
+        : 'استرجاع هجين · يتضمن أقسام الموسوعة';
   }
   final reason = response.semanticStatusCode == null
       ? ''
       : '（${response.semanticStatusCode}）';
-  return '关键词检索 · 语义检索暂不可用$reason';
+  return 'استرجاع الكلمات الرئيسية · الاسترجاع الدلالي غير متاح مؤقتًا $reason';
 }

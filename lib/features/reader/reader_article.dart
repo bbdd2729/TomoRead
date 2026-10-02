@@ -91,7 +91,7 @@ class ReaderArticle extends StatelessWidget {
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text(error == null ? '正在加载章节…' : '无法加载章节：$error'),
+            child: Text(error == null ? 'جارٍ تحميل الفصول...' : 'تعذر تحميل القسم: $error'),
           ),
         ),
       );
@@ -160,7 +160,7 @@ class ReaderArticle extends StatelessWidget {
             ),
             children: [
               Text(
-                '第 ${chapter!.index + 1} 章',
+                'الفقرتان 102${chapter!.index + 1}الفصل',
                 style: Theme.of(context).textTheme.labelLarge,
               ),
               const SizedBox(height: 8),

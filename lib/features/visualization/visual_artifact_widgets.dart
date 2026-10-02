@@ -32,7 +32,7 @@ class VisualArtifactView extends StatelessWidget {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('无法读取可视化数据：$error'),
+          child: Text('تعذر قراءة بيانات التصور: $error'),
         ),
       );
     }
@@ -80,19 +80,19 @@ class _WordCloudViewState extends State<WordCloudView> {
   Widget build(BuildContext context) {
     final payload = widget.payload;
     if (payload.terms.isEmpty) {
-      return const Center(child: Text('词云没有有效词项。'));
+      return const Center(child: Text('لا تحتوي كلمة cloud على عنصر كلمة صالح.'));
     }
     final colors = Theme.of(context).colorScheme;
     return Semantics(
       label: payload.terms
           .take(20)
-          .map((term) => '${term.term} ${term.frequency} 次')
+          .map((term) => '${term.term} ${term.frequency}المرّات')
           .join('，'),
       child: FutureBuilder<List<WordCloudLayoutEntry>>(
         future: layout,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text('词云布局失败：${snapshot.error}'));
+            return Center(child: Text('فشل تخطيط سحابة Word:${snapshot.error}'));
           }
           final entries = snapshot.data;
           if (entries == null) {
@@ -170,7 +170,7 @@ class MindMapView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (payload.nodes.isEmpty) {
-      return const Center(child: Text('思维导图没有节点。'));
+      return const Center(child: Text('لا تحتوي الخرائط الذهنية على عقد.'));
     }
     return InteractiveViewer(
       minScale: .4,
@@ -262,7 +262,7 @@ class _MindMapNodeBranchState extends State<_MindMapNodeBranch> {
                       if (hasChildren)
                         IconButton(
                           visualDensity: VisualDensity.compact,
-                          tooltip: expanded ? '折叠节点' : '展开节点',
+                          tooltip: expanded ? 'طي العقدة' : 'توسيع العقدة',
                           onPressed: () => setState(() => expanded = !expanded),
                           icon: Icon(
                             expanded ? Icons.expand_more : Icons.chevron_right,
@@ -287,7 +287,7 @@ class _MindMapNodeBranchState extends State<_MindMapNodeBranch> {
                                 message: node.citations[index].quote,
                                 child: ActionChip(
                                   visualDensity: VisualDensity.compact,
-                                  label: Text('引用 ${index + 1}'),
+                                  label: Text('المراجع${index + 1}'),
                                   avatar: const Icon(
                                     Icons.menu_book_outlined,
                                     size: 16,

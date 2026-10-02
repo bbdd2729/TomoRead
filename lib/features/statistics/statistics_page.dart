@@ -34,8 +34,8 @@ class StatisticsPage extends ConsumerWidget {
                 padding: EdgeInsets.fromLTRB(padding, 28, padding, 18),
                 sliver: SliverToBoxAdapter(
                   child: PageHeader(
-                    title: '阅读统计',
-                    subtitle: '只统计前台、可见并发生阅读交互的有效时间',
+                    title: 'احصائيات القراءة',
+                    subtitle: 'يتم احتساب الوقت الفعال فقط لتفاعلات الواجهة الأمامية والمرئية والقراءة',
                   ),
                 ),
               ),
@@ -132,11 +132,11 @@ class _PeriodToolbar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: SegmentedButton<StatsDimension>(
           segments: const [
-            ButtonSegment(value: StatsDimension.day, label: Text('日')),
-            ButtonSegment(value: StatsDimension.week, label: Text('周')),
-            ButtonSegment(value: StatsDimension.month, label: Text('月')),
-            ButtonSegment(value: StatsDimension.year, label: Text('年')),
-            ButtonSegment(value: StatsDimension.lifetime, label: Text('全部')),
+            ButtonSegment(value: StatsDimension.day, label: Text('يوم')),
+            ButtonSegment(value: StatsDimension.week, label: Text('الأسبوع')),
+            ButtonSegment(value: StatsDimension.month, label: Text('شهر')),
+            ButtonSegment(value: StatsDimension.year, label: Text('سنة ..............')),
+            ButtonSegment(value: StatsDimension.lifetime, label: Text('جميع')),
           ],
           selected: {selection.dimension},
           onSelectionChanged: (value) => onDimensionChanged(value.first),
@@ -146,7 +146,7 @@ class _PeriodToolbar extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            tooltip: '上一个周期',
+            tooltip: 'الدورة السابقة',
             onPressed: onPrevious,
             icon: const Icon(Icons.chevron_left),
           ),
@@ -155,7 +155,7 @@ class _PeriodToolbar extends StatelessWidget {
             child: Text(report.period.label, textAlign: TextAlign.center),
           ),
           IconButton(
-            tooltip: '下一个周期',
+            tooltip: 'الدورة التالية',
             onPressed: onNext,
             icon: const Icon(Icons.chevron_right),
           ),
@@ -251,10 +251,10 @@ class _ActivitySection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('阅读趋势', style: Theme.of(context).textTheme.titleLarge),
+        Text('اتجاهات القراءة', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
         Text(
-          '$periodLabel 共阅读 $totalMinutes 分钟',
+          '$periodLabel إجمالي قراءة $totalMinutes دقيقة',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 14),
@@ -267,7 +267,7 @@ class _ActivitySection extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
               child: Semantics(
-                label: '$periodLabel 阅读趋势，总计 $totalMinutes 分钟',
+                label: '$periodLabel قراءة الاتجاهات، بإجمالي $totalMinutes دقيقة',
                 child: SizedBox(
                   width: chartWidth,
                   child: CustomPaint(
@@ -360,7 +360,7 @@ class _TopBooksSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('阅读最多', style: Theme.of(context).textTheme.titleLarge),
+        Text('الأكثر قراءة', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
         ...entries.asMap().entries.map((entry) {
           final item = entry.value;
@@ -379,7 +379,7 @@ class _TopBooksSection extends StatelessWidget {
             ),
             title: Text(item.book.title),
             subtitle: Text(
-              item.book.author.isEmpty ? '未知作者' : item.book.author,
+              item.book.author.isEmpty ? 'مؤلف غير معروف' : item.book.author,
             ),
             trailing: Text(formatReadingDuration(item.activeMillis)),
             onTap: onOpenReader == null ? null : () => onOpenReader!(item.book),
@@ -429,11 +429,11 @@ class _EmptyStatistics extends StatelessWidget {
           const Icon(Icons.insights_outlined, size: 48),
           const SizedBox(height: 14),
           Text(
-            '$periodLabel 还没有阅读记录',
+            '$periodLabel لا توجد قراءات حتى الآن',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 6),
-          const Text('打开一本书并开始阅读后，这里会记录有效阅读时间。', textAlign: TextAlign.center),
+          const Text('بمجرد فتح كتاب والبدء في القراءة، يتم تسجيل وقت القراءة الفعال هنا.', textAlign: TextAlign.center),
         ],
       ),
     ),
@@ -451,12 +451,12 @@ class _StatisticsError extends StatelessWidget {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('无法加载阅读统计：$error'),
+        Text('تعذر تحميل إحصائيات القراءة: $error'),
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: onRetry,
           icon: const Icon(Icons.refresh),
-          label: const Text('重试'),
+          label: const Text('أعد المحاولة'),
         ),
       ],
     ),

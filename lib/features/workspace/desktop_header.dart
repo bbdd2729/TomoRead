@@ -36,7 +36,7 @@ class DesktopWorkspaceHeader extends StatelessWidget {
           children: [
             IconButton(
               key: const Key('desktop-navigation-toggle'),
-              tooltip: navigationCollapsed ? '展开侧边栏' : '收起侧边栏',
+              tooltip: navigationCollapsed ? 'توسيع الشريط الجانبي' : 'طي الشريط الجانبي',
               onPressed: onToggleNavigation,
               icon: Icon(
                 navigationCollapsed
@@ -53,7 +53,7 @@ class DesktopWorkspaceHeader extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: '搜索书库',
+              tooltip: 'البحث في المكتبة',
               key: const Key('global-search'),
               onPressed: onSearch,
               icon: const Icon(Icons.search),
@@ -121,7 +121,7 @@ class WorkspaceTabBar extends StatelessWidget {
                             width: 32,
                             height: 32,
                           ),
-                          tooltip: '关闭 ${tab.title}',
+                          tooltip: 'مغلق${tab.title}',
                           onPressed: () => onClosed(tab),
                           icon: const Icon(Icons.close, size: 18),
                         ),

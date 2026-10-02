@@ -28,8 +28,8 @@ class TextColoringSettingsPanel extends StatelessWidget {
           onChanged: loading
               ? null
               : (value) => onChanged(settings.copyWith(enabled: value)),
-          title: const Text('启用文本前景色'),
-          subtitle: const Text('只改变阅读展示，不修改书籍原文、标注或 AI 引用。'),
+          title: const Text('تمكين لون مقدمة النص'),
+          subtitle: const Text('قم فقط بتغيير شاشة القراءة، ولا تقم بتعديل النص الأصلي للكتاب أو التعليقات التوضيحية أو اقتباسات الذكاء الاصطناعي.'),
         ),
         const SizedBox(height: 8),
         for (final token in TextColorSemanticToken.values)
@@ -45,8 +45,8 @@ class TextColoringSettingsPanel extends StatelessWidget {
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
           childrenPadding: const EdgeInsets.only(bottom: 8),
-          title: const Text('自定义词条色板'),
-          subtitle: const Text('选中正文添加词条时使用的亮色/暗色前景色。'),
+          title: const Text('عينات الإدخال المخصصة'),
+          subtitle: const Text('يحدد لون المقدمة الفاتح/الداكن المستخدم عند إضافة إدخال إلى الجسم.'),
           children: [
             for (final tone in TextColorTermTone.values)
               _PaletteColorRow(
@@ -71,18 +71,18 @@ class TextColoringSettingsPanel extends StatelessWidget {
                       context: context,
                       builder: (context) => TextColorTermsManagerDialog(
                         settings: settings,
-                        title: '全局文字词条',
+                        title: 'إدخالات النص العالمية',
                       ),
                     ),
               icon: const Icon(Icons.format_color_text_outlined),
-              label: const Text('管理全局词条'),
+              label: const Text('إدارة الإدخالات العامة'),
             ),
             TextButton.icon(
               onPressed: loading
                   ? null
                   : () => onChanged(TextColoringSettings.defaults()),
               icon: const Icon(Icons.restart_alt),
-              label: const Text('恢复默认文本颜色'),
+              label: const Text('استعادة لون النص الافتراضي'),
             ),
           ],
         ),
@@ -175,14 +175,14 @@ class _ColorPairButtons extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       _ColorButton(
-        tooltip: '亮色主题：${colors.light}',
+        tooltip: 'سمة خفيفة:${colors.light}',
         value: colors.light,
         enabled: enabled,
         onChanged: (value) => onChanged(colors.copyWith(light: value)),
       ),
       const SizedBox(width: 6),
       _ColorButton(
-        tooltip: '暗色主题：${colors.dark}',
+        tooltip: 'السمة الداكنة:${colors.dark}',
         value: colors.dark,
         enabled: enabled,
         dark: true,
@@ -265,7 +265,7 @@ class _HexColorDialogState extends State<_HexColorDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('设置文字颜色'),
+    title: const Text('تعيين لون النص'),
     content: Form(
       key: _formKey,
       child: TextFormField(
@@ -273,7 +273,7 @@ class _HexColorDialogState extends State<_HexColorDialog> {
         autofocus: true,
         textCapitalization: TextCapitalization.characters,
         decoration: const InputDecoration(
-          labelText: 'HEX 颜色',
+          labelText: 'لون سداسي',
           hintText: '#2E6B8A',
           border: OutlineInputBorder(),
         ),
@@ -281,20 +281,20 @@ class _HexColorDialogState extends State<_HexColorDialog> {
           r'^#[0-9a-fA-F]{6}$',
         ).hasMatch(value?.trim() ?? '')
             ? null
-            : '请输入 #RRGGBB 格式的颜色。',
+            : 'يرجى إدخال لون بتنسيق # RRGGBB.',
       ),
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
+        child: const Text('إلغاء'),
       ),
       FilledButton(
         onPressed: () {
           if (!(_formKey.currentState?.validate() ?? false)) return;
           Navigator.pop(context, _controller.text.trim().toUpperCase());
         },
-        child: const Text('确定'),
+        child: const Text('تأكيد'),
       ),
     ],
   );
@@ -329,7 +329,7 @@ class _TextColorTermChoiceDialogState
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('添加文字颜色'),
+    title: const Text('إضافة لون النص'),
     content: SizedBox(
       width: 420,
       child: Column(
@@ -345,8 +345,8 @@ class _TextColorTermChoiceDialogState
           const SizedBox(height: 20),
           SegmentedButton<bool>(
             segments: const [
-              ButtonSegment(value: false, label: Text('仅本书')),
-              ButtonSegment(value: true, label: Text('全部书籍')),
+              ButtonSegment(value: false, label: Text('الكتب فقط')),
+              ButtonSegment(value: true, label: Text('جميع الكتب')),
             ],
             selected: {_global},
             onSelectionChanged: (value) => setState(
@@ -376,7 +376,7 @@ class _TextColorTermChoiceDialogState
           if (!widget.settings.enabled) ...[
             const SizedBox(height: 16),
             Text(
-              '词条会保存，但需在“设置 → 阅读”中启用文本前景色后显示。',
+              'يتم حفظ الإدخالات، ولكن يتم عرضها بعد تمكين لون مقدمة النص في إعدادات → القراءة.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -386,14 +386,14 @@ class _TextColorTermChoiceDialogState
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
+        child: const Text('إلغاء'),
       ),
       FilledButton(
         onPressed: () => Navigator.pop(
           context,
           TextColorTermDraft(global: _global, tone: _tone),
         ),
-        child: const Text('保存'),
+        child: const Text('حفظ'),
       ),
     ],
   );
@@ -423,9 +423,9 @@ class TextColorTermsManagerDialog extends ConsumerWidget {
         height: 420,
         child: terms.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Center(child: Text('无法加载文字词条：$error')),
+          error: (error, _) => Center(child: Text('تعذر تحميل إدخال النص: $error')),
           data: (items) => items.isEmpty
-              ? const Center(child: Text('还没有文字词条。请在阅读器中选中文字添加。'))
+              ? const Center(child: Text('لا توجد إدخالات نصية حتى الآن. يرجى تحديد نص لإضافته في القارئ.'))
               : ListView.separated(
                   itemCount: items.length,
                   separatorBuilder: (_, _) => const Divider(height: 1),
@@ -447,7 +447,7 @@ class TextColorTermsManagerDialog extends ConsumerWidget {
                       ),
                       subtitle: Text(term.tone.label),
                       trailing: IconButton(
-                        tooltip: '删除',
+                        tooltip: 'حذف',
                         icon: const Icon(Icons.delete_outline),
                         onPressed: () => ref
                             .read(textColoringControllerProvider)
@@ -461,7 +461,7 @@ class TextColorTermsManagerDialog extends ConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: const Text('مغلق'),
         ),
       ],
     );

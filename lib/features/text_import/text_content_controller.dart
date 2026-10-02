@@ -21,7 +21,7 @@ class TextContentController {
   Future<void> rebuildWithEncoding(String bookId, String encoding) async {
     final book = await ref.read(bookRepositoryProvider).findById(bookId);
     if (book == null || (book.format != 'txt' && book.format != 'markdown')) {
-      throw const TextDecodeException('文本书籍不存在。');
+      throw const TextDecodeException('الكتاب المدرسي غير موجود.');
     }
     final decoded = await ref
         .read(textDecoderServiceProvider)
@@ -69,7 +69,7 @@ class TextContentController {
   ) async {
     final normalized = title.trim();
     if (normalized.isEmpty || normalized.length > 120) {
-      throw const FormatException('章节标题应为 1 到 120 个字符。');
+      throw const FormatException('يجب أن يكون عنوان القسم بين 1 و 120 حرفًا.');
     }
     final chapters = await ref
         .read(textContentRepositoryProvider)
@@ -87,7 +87,7 @@ class TextContentController {
   Future<void> mergeWithNext(String bookId, int ordinal) async {
     final document = await ref.read(textBookDocumentProvider(bookId).future);
     if (ordinal < 0 || ordinal + 1 >= document.chapters.length) {
-      throw const FormatException('当前章节后没有可合并章节。');
+      throw const FormatException('لا توجد أقسام للدمج بعد القسم الحالي.');
     }
     final current = document.chapters[ordinal];
     final following = document.chapters[ordinal + 1];
@@ -117,15 +117,15 @@ class TextContentController {
   }) async {
     final document = await ref.read(textBookDocumentProvider(bookId).future);
     if (ordinal < 0 || ordinal >= document.chapters.length) {
-      throw const FormatException('章节不存在。');
+      throw const FormatException('القسم غير موجود.');
     }
     final chapter = document.chapters[ordinal];
     if (rawOffset <= chapter.rawStart || rawOffset >= chapter.rawEnd) {
-      throw const FormatException('拆分位置必须位于当前章节正文中。');
+      throw const FormatException('يجب أن يكون موضع الانقسام في جسم القسم الحالي.');
     }
     final normalizedTitle = nextTitle.trim();
     if (normalizedTitle.isEmpty || normalizedTitle.length > 120) {
-      throw const FormatException('新章节标题应为 1 到 120 个字符。');
+      throw const FormatException('يجب أن يكون عنوان القسم الجديد بين 1 و 120 حرفًا.');
     }
     final first = _copyChapter(
       chapter,

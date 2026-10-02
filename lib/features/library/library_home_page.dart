@@ -113,16 +113,16 @@ class LibraryHomePage extends HookConsumerWidget {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('删除书籍'),
-          content: Text('“${book.title}”将从 TomoRead 书库和本地托管文件中移除。'),
+          title: const Text('حذف الكتاب'),
+          content: Text('سيتم إزالة "${book.title}" من مكتبة TomoRead والملفات المستضافة محليًا.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
+              child: const Text('إلغاء'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('删除'),
+              child: const Text('حذف'),
             ),
           ],
         ),
@@ -139,8 +139,8 @@ class LibraryHomePage extends HookConsumerWidget {
           SnackBar(
             content: Text(
               result.hasCleanupErrors
-                  ? '书籍已移除，但部分本地缓存未能清理。'
-                  : '已删除《${book.title}》。',
+                  ? 'تمت إزالة الكتب، لكن بعض ذاكرة التخزين المؤقت المحلية فشلت في التنظيف.'
+                  : 'محذوف${book.title}》。',
             ),
           ),
         );
@@ -148,7 +148,7 @@ class LibraryHomePage extends HookConsumerWidget {
         if (!context.mounted) return;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('删除失败：$error')));
+        ).showSnackBar(SnackBar(content: Text('فشل الحذف: $error')));
       } finally {
         if (context.mounted) removingBookId.value = null;
       }
@@ -216,16 +216,16 @@ class LibraryHomePage extends HookConsumerWidget {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('删除书籍'),
-          content: Text('将删除选中的 ${selectedBooks.length} 本书及其本地文件。'),
+          title: const Text('حذف الكتاب'),
+          content: Text('سيتم حذف المحدد${selectedBooks.length}هذا الكتاب وملفاته المحلية.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
+              child: const Text('إلغاء'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('删除'),
+              child: const Text('حذف'),
             ),
           ],
         ),
@@ -246,7 +246,7 @@ class LibraryHomePage extends HookConsumerWidget {
     return books.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => LibraryFailure(
-        message: '无法读取书库：$error',
+        message: 'غير قادر على قراءة المكتبة: $error',
         onRetry: () => ref.invalidate(libraryBooksProvider),
       ),
       data: (items) {
@@ -302,9 +302,9 @@ class LibraryHomePage extends HookConsumerWidget {
 
             final headerChildren = <Widget>[
               PageHeader(
-                title: '书库',
-                subtitle: '管理并继续阅读你的 EPUB 与 PDF 书籍。',
-                actionLabel: isImporting.value ? '正在导入' : '导入书籍',
+                title: 'المكتبة',
+                subtitle: 'إدارة كتب EPUB و PDF ومواصلة قراءتها.',
+                actionLabel: isImporting.value ? 'تحويل...' : 'استيراد الدفاتر',
                 actionIcon: Icons.add,
                 onAction: isImporting.value ? null : importBooks,
               ),
@@ -382,12 +382,12 @@ class LibraryHomePage extends HookConsumerWidget {
                   Row(
                     children: [
                       Text(
-                        '全部书籍',
+                        'جميع الكتب',
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '${visibleBooks.length} 本',
+                        '${visibleBooks.length}حجز',
                         style: Theme.of(context).textTheme.labelLarge,
                       ),
                     ],

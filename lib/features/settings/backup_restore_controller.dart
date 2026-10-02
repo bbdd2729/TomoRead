@@ -45,7 +45,7 @@ class BackupRestoreController extends Notifier<BackupRestoreState> {
 
   Future<void> createWithPicker() async {
     final destination = await FilePicker.saveFile(
-      dialogTitle: '导出 TomoRead 备份',
+      dialogTitle: 'تصدير نسخة احتياطية من TomoRead',
       fileName: 'tomoread-backup-${_dateStamp()}.tomoread.zip',
       type: FileType.custom,
       allowedExtensions: const ['zip'],
@@ -61,7 +61,7 @@ class BackupRestoreController extends Notifier<BackupRestoreState> {
     _backupCancellation = cancellation;
     state = const BackupRestoreState(
       status: BackupRestoreStatus.backingUp,
-      message: '正在准备备份…',
+      message: 'جارٍ تحضير النسخة الاحتياطية...',
     );
     try {
       final service = await ref.read(backupServiceProvider.future);
@@ -81,7 +81,7 @@ class BackupRestoreController extends Notifier<BackupRestoreState> {
       );
       state = BackupRestoreState(
         status: BackupRestoreStatus.succeeded,
-        message: '备份已创建并完成校验。',
+        message: 'تم إنشاء النسخة الاحتياطية والتحقق منها.',
         outputPath: destinationPath,
       );
     } on Object catch (error) {
@@ -96,7 +96,7 @@ class BackupRestoreController extends Notifier<BackupRestoreState> {
 
   Future<void> restoreWithPicker() async {
     final selection = await FilePicker.pickFiles(
-      dialogTitle: '选择 TomoRead 备份',
+      dialogTitle: 'تحديد نسخة احتياطية من TomoRead',
       type: FileType.custom,
       allowedExtensions: const ['zip'],
       allowMultiple: false,
@@ -114,7 +114,7 @@ class BackupRestoreController extends Notifier<BackupRestoreState> {
     _restoreCancellation = cancellation;
     state = const BackupRestoreState(
       status: BackupRestoreStatus.restoring,
-      message: '正在验证备份…',
+      message: 'جارٍ التحقق من النسخ الاحتياطي...',
     );
     try {
       final service = await ref.read(restoreServiceProvider.future);
@@ -140,7 +140,7 @@ class BackupRestoreController extends Notifier<BackupRestoreState> {
       ref.invalidate(contentIndexRevisionProvider);
       state = BackupRestoreState(
         status: BackupRestoreStatus.succeeded,
-        message: '书库已恢复。重启阅读页即可使用恢复后的内容。',
+        message: 'تمت استعادة المكتبة. أعد تشغيل صفحة القراءة لاستخدام المحتوى المستعاد.',
         rollbackBackupPath: result.rollbackBackupPath,
       );
     } on Object catch (error) {
@@ -173,21 +173,21 @@ class BackupRestoreController extends Notifier<BackupRestoreState> {
   }
 
   String _backupPhaseLabel(BackupPhase phase) => switch (phase) {
-    BackupPhase.preparing => '正在准备备份…',
-    BackupPhase.snapshotting => '正在创建一致性数据库快照…',
-    BackupPhase.collectingFiles => '正在收集托管书籍、封面和字体…',
-    BackupPhase.writingArchive => '正在写入备份包…',
-    BackupPhase.verifying => '正在校验备份包…',
-    BackupPhase.completed => '备份已完成。',
+    BackupPhase.preparing => 'جارٍ تحضير النسخة الاحتياطية...',
+    BackupPhase.snapshotting => 'إنشاء لقطة متسقة لقاعدة البيانات...',
+    BackupPhase.collectingFiles => 'جمع الكتب والأغلفة والخطوط المستضافة...',
+    BackupPhase.writingArchive => 'جارٍ كتابة حزمة النسخ الاحتياطي...',
+    BackupPhase.verifying => 'جارٍ التحقق من حزمة النسخ الاحتياطي...',
+    BackupPhase.completed => 'اكتمل النسخ الاحتياطي.',
   };
 
   String _restorePhaseLabel(RestorePhase phase) => switch (phase) {
-    RestorePhase.validating => '正在验证备份清单和哈希…',
-    RestorePhase.extracting => '正在隔离解压备份…',
-    RestorePhase.validatingDatabase => '正在校验数据库完整性…',
-    RestorePhase.creatingRollback => '正在创建恢复前回滚备份…',
-    RestorePhase.switchingData => '正在安全切换书库数据…',
-    RestorePhase.reopeningDatabase => '正在重新打开并迁移数据库…',
-    RestorePhase.completed => '恢复已完成。',
+    RestorePhase.validating => 'التحقق من بيان النسخ الاحتياطي والتجزئة...',
+    RestorePhase.extracting => 'عزل النسخ الاحتياطي لتخفيف الضغط...',
+    RestorePhase.validatingDatabase => 'التحقق من سلامة قاعدة البيانات...',
+    RestorePhase.creatingRollback => 'جارٍ إنشاء نسخة احتياطية قبل الاستعادة...',
+    RestorePhase.switchingData => 'تبديل بيانات المكتبة بأمان...',
+    RestorePhase.reopeningDatabase => 'إعادة فتح قاعدة البيانات وترحيلها...',
+    RestorePhase.completed => 'اكتمل الاسترداد.',
   };
 }

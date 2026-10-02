@@ -23,15 +23,15 @@ Future<void> presentEpubInteraction(
       if (confirmed != true) return;
       final launched = await launcher(uri);
       if (!launched && context.mounted) {
-        _showMessage(context, '无法使用系统应用打开此链接。');
+        _showMessage(context, 'لا يمكن فتح هذا الرابط باستخدام تطبيق النظام.');
       }
       return;
     case EpubInteractionKind.blockedLink:
-      _showMessage(context, '已拦截不安全或不受支持的链接。');
+      _showMessage(context, 'تم حظر الروابط غير الآمنة أو غير المدعومة.');
       return;
     case EpubInteractionKind.imageFailed:
     case EpubInteractionKind.interactionError:
-      _showMessage(context, interaction.message ?? 'EPUB 资源暂时无法显示。');
+      _showMessage(context, interaction.message ?? 'موارد EPUB غير متاحة مؤقتًا.');
       return;
     case EpubInteractionKind.footnoteOpened:
     case EpubInteractionKind.footnoteClosed:
@@ -44,7 +44,7 @@ Future<void> presentEpubInteraction(
 }
 
 void reportInvalidEpubInteraction(BuildContext context) {
-  _showMessage(context, '已拦截无效的 EPUB 交互消息。');
+  _showMessage(context, 'تم حظر رسالة تفاعل EPUB غير صالحة.');
 }
 
 void _showMessage(BuildContext context, String message) {
@@ -61,12 +61,12 @@ class EpubExternalLinkDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('打开外部链接？'),
+    title: const Text('هل تريد فتح رابط خارجي ؟'),
     content: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('此链接将交给系统浏览器或其他应用打开：'),
+        const Text('سيتم إرسال هذا الرابط إلى متصفح النظام أو تطبيق آخر لفتحه:'),
         const SizedBox(height: 12),
         SelectableText(uri.toString()),
       ],
@@ -74,11 +74,11 @@ class EpubExternalLinkDialog extends StatelessWidget {
     actions: [
       TextButton(
         onPressed: () => Navigator.of(context).pop(false),
-        child: const Text('取消'),
+        child: const Text('إلغاء'),
       ),
       FilledButton(
         onPressed: () => Navigator.of(context).pop(true),
-        child: const Text('继续打开'),
+        child: const Text('متابعة الفتح'),
       ),
     ],
   );

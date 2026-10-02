@@ -257,7 +257,7 @@ class TtsPlaybackController extends ChangeNotifier {
           ),
         );
       case TtsPlaybackEventType.failed:
-        _fail(event.error ?? '系统朗读失败。');
+        _fail(event.error ?? 'فشل النظام في القراءة.');
     }
   }
 

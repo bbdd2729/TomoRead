@@ -17,12 +17,12 @@ class StorageDiagnosticsPage extends ConsumerWidget {
           children: [
             Expanded(
               child: Text(
-                '存储诊断',
+                'تشخيصات التخزين',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
             IconButton(
-              tooltip: '刷新',
+              tooltip: 'تحديث',
               onPressed: state.isLoading
                   ? null
                   : ref
@@ -33,11 +33,11 @@ class StorageDiagnosticsPage extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 8),
-        const Text('清理只处理可重建缓存；数据库、原书、字体、备份和主动导出的文件默认受保护。'),
+        const Text('يعالج التنظيف ذاكرات التخزين المؤقت القابلة لإعادة الإنشاء فقط ؛ قواعد البيانات والنُسخ الأصلية والخطوط والنسخ الاحتياطية والملفات التي يتم تصديرها بشكل نشط محمية افتراضيًا.'),
         const SizedBox(height: 16),
         state.when(
           loading: () => const LinearProgressIndicator(),
-          error: (error, _) => Text('无法读取存储信息：$error'),
+          error: (error, _) => Text('غير قادر على قراءة معلومات التخزين: $error'),
           data: (value) => _DiagnosticsContent(value: value),
         ),
       ],
@@ -66,12 +66,12 @@ class _DiagnosticsContent extends ConsumerWidget {
             leading: Icon(_categoryIcon(report.category)),
             title: Text(_categoryLabel(report.category)),
             subtitle: Text(
-              '${report.fileCount} 项 · ${_formatBytes(report.totalBytes)}'
-              '${report.orphanCount == 0 ? '' : ' · ${report.orphanCount} 个孤儿文件'}',
+              '${report.fileCount}العنصر${_formatBytes(report.totalBytes)}'
+              '${report.orphanCount == 0 ? '' : ' · ${report.orphanCount} ملفات يتيمة'}',
             ),
             trailing: report.regenerable
-                ? const Chip(label: Text('可重建'))
-                : const Chip(label: Text('受保护')),
+                ? const Chip(label: Text('قابلة لإعادة البناء'))
+                : const Chip(label: Text('محمي')),
           ),
         if (value.error != null)
           Padding(
@@ -85,8 +85,8 @@ class _DiagnosticsContent extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              '上次清理：${value.lastCleanup!.itemCount} 项，'
-              '释放约 ${_formatBytes(value.lastCleanup!.bytes)}。',
+              'تاريخ آخر تنظيف:${value.lastCleanup!.itemCount}العنصر'
+              'الإصدار التقريبي.${_formatBytes(value.lastCleanup!.bytes)}。',
             ),
           ),
         const SizedBox(height: 16),
@@ -106,7 +106,7 @@ class _DiagnosticsContent extends ConsumerWidget {
                       }
                     },
               icon: const Icon(Icons.cleaning_services_outlined),
-              label: const Text('清理可重建缓存'),
+              label: const Text('تنظيف ذاكرة التخزين المؤقت القابلة لإعادة البناء'),
             ),
             if (orphanCount > 0)
               OutlinedButton.icon(
@@ -120,7 +120,7 @@ class _DiagnosticsContent extends ConsumerWidget {
                         }
                       },
                 icon: const Icon(Icons.delete_sweep_outlined),
-                label: const Text('检查并删除孤儿文件'),
+                label: const Text('مراجعة وحذف الملفات اليتيمة'),
               ),
           ],
         ),
@@ -140,19 +140,19 @@ class _DiagnosticsContent extends ConsumerWidget {
       await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text(orphans ? '删除已确认的孤儿文件？' : '清理可重建缓存？'),
+          title: Text(orphans ? 'هل تريد حذف الملفات اليتيمة المؤكدة ؟' : 'هل تريد تنظيف ذاكرة التخزين المؤقت القابلة لإعادة البناء ؟'),
           content: Text(
-            '将处理 ${plan.itemCount} 项，预计释放 ${_formatBytes(plan.bytes)}。'
-            '${orphans ? '这些文件未被数据库引用，删除后无法由清理操作撤销。' : '缓存会在下次使用对应功能时自动重建。'}',
+            'ستتم معالجته${plan.itemCount}البند، الإصدار المتوقع${_formatBytes(plan.bytes)}。'
+            '${orphans ? 'لا تتم الإشارة إلى هذه الملفات بواسطة قاعدة البيانات ولا يمكن التراجع عنها بواسطة عملية تنظيف بعد الحذف.' : 'تتم إعادة بناء ذاكرة التخزين المؤقت تلقائيًا في المرة التالية التي يتم فيها استخدام الوظيفة المقابلة.'}',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
+              child: const Text('إلغاء'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('确认清理'),
+              child: const Text('تأكيد التنظيف'),
             ),
           ],
         ),
@@ -161,16 +161,16 @@ class _DiagnosticsContent extends ConsumerWidget {
 }
 
 String _categoryLabel(StorageCategory category) => switch (category) {
-  StorageCategory.database => '数据库',
-  StorageCategory.managedBooks => '托管原书',
-  StorageCategory.covers => '封面',
-  StorageCategory.epubCache => 'EPUB 解压缓存',
-  StorageCategory.textProjectionCache => '正文索引缓存',
-  StorageCategory.wordCloudCache => '词云缓存',
-  StorageCategory.visualExportTemporary => '可视化导出临时文件',
-  StorageCategory.importStaging => '导入临时文件',
-  StorageCategory.importedFonts => '已导入字体',
-  StorageCategory.backups => '自动回滚备份',
+  StorageCategory.database => 'قواعد البيانات',
+  StorageCategory.managedBooks => 'حفظ الكتب الأصلية',
+  StorageCategory.covers => 'الغلاف',
+  StorageCategory.epubCache => 'EPUB Unzip Cache',
+  StorageCategory.textProjectionCache => 'ذاكرة التخزين المؤقت لمؤشر الجسم',
+  StorageCategory.wordCloudCache => 'ذاكرة التخزين المؤقت لـ Word Cloud',
+  StorageCategory.visualExportTemporary => 'تصدير الملفات المؤقتة المرئية',
+  StorageCategory.importStaging => 'استيراد الملفات المؤقتة',
+  StorageCategory.importedFonts => 'الخطوط المستوردة',
+  StorageCategory.backups => 'استرجاع النسخ الاحتياطية تلقائيًا',
 };
 
 IconData _categoryIcon(StorageCategory category) => switch (category) {

@@ -32,48 +32,48 @@ class BookImportPreviewDialog extends StatelessWidget {
         ImportWorkflowPhase.idle || ImportWorkflowPhase.scanning => [
           TextButton(
             onPressed: controller.cancel,
-            child: const Text('取消扫描'),
+            child: const Text('إلغاء المسح الضوئي'),
           ),
         ],
         ImportWorkflowPhase.preview => [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
+            child: const Text('إلغاء'),
           ),
           FilledButton(
             onPressed: state.preview?.requests.isEmpty == false
                 ? () => unawaited(controller.startImport())
                 : null,
-            child: Text('开始导入 ${state.preview?.supportedCount ?? 0} 本'),
+            child: Text('بدء الاستيراد${state.preview?.supportedCount ?? 0}حجز'),
           ),
         ],
         ImportWorkflowPhase.importing => [
           TextButton(
             onPressed: controller.cancel,
-            child: const Text('停止后续导入'),
+            child: const Text('إيقاف الواردات اللاحقة'),
           ),
         ],
         ImportWorkflowPhase.completed || ImportWorkflowPhase.cancelled => [
           FilledButton(
             onPressed: () => Navigator.of(context).pop(state.results),
-            child: const Text('完成'),
+            child: const Text('اكتمال'),
           ),
         ],
         ImportWorkflowPhase.failed => [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('关闭'),
+            child: const Text('مغلق'),
           ),
         ],
       };
 
   String _title(ImportWorkflowPhase phase) => switch (phase) {
-    ImportWorkflowPhase.idle || ImportWorkflowPhase.scanning => '正在扫描导入内容',
-    ImportWorkflowPhase.preview => '确认导入内容',
-    ImportWorkflowPhase.importing => '正在导入书籍',
-    ImportWorkflowPhase.completed => '导入完成',
-    ImportWorkflowPhase.cancelled => '导入已取消',
-    ImportWorkflowPhase.failed => '无法处理导入内容',
+    ImportWorkflowPhase.idle || ImportWorkflowPhase.scanning => 'استيراد المسح الضوئي',
+    ImportWorkflowPhase.preview => 'تأكيد الاستيراد',
+    ImportWorkflowPhase.importing => 'استيراد الكتب',
+    ImportWorkflowPhase.completed => 'فشل أستيراد vCard',
+    ImportWorkflowPhase.cancelled => 'تم إلغاء الاستيراد',
+    ImportWorkflowPhase.failed => 'تعذر معالجة الاستيراد',
   };
 }
 
@@ -93,18 +93,18 @@ class _ImportDialogContent extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             state.total > 0
-                ? '正在校验 ${state.completed}/${state.total} 个候选文件…'
-                : '正在递归扫描目录并过滤不支持的文件…',
+                ? 'جاري التَحقق...${state.completed}/${state.total}ملفات المرشحين...'
+                : 'مسح الدلائل ضوئيًا بشكل متكرر وتصفية الملفات غير المدعومة...',
           ),
         ],
       );
     }
     if (state.phase == ImportWorkflowPhase.failed) {
-      return SelectableText('扫描或导入失败：${state.error}');
+      return SelectableText('فشل المسح الضوئي أو الاستيراد:${state.error}');
     }
     final preview = state.preview;
     if (preview == null) {
-      return const Text('没有可显示的导入结果。');
+      return const Text('لا توجد نتائج استيراد لعرضها.');
     }
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -115,13 +115,13 @@ class _ImportDialogContent extends StatelessWidget {
             value: state.total == 0 ? null : state.completed / state.total,
           ),
           const SizedBox(height: 12),
-          Text('已处理 ${state.completed}/${state.total} 本'),
+          Text('تمت معالجته${state.completed}/${state.total}حجز'),
           const SizedBox(height: 16),
         ],
         _ImportSummary(preview: preview, results: state.results),
         if (preview.limitReached) ...[
           const SizedBox(height: 12),
-          const Text('扫描已达到数量或大小上限，超出部分不会导入。'),
+          const Text('وصل المسح إلى الحد الأقصى للعدد أو الحجم، ولن يتم استيراد الفائض.'),
         ],
         const SizedBox(height: 16),
         ConstrainedBox(
@@ -172,11 +172,11 @@ class _ImportSummary extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        _SummaryChip(label: '可导入', value: preview.supportedCount),
-        _SummaryChip(label: '已跳过', value: preview.skippedCount),
-        _SummaryChip(label: '重复', value: preview.duplicateCount),
-        _SummaryChip(label: '失败', value: preview.failedCount),
-        if (results.isNotEmpty) _SummaryChip(label: '已导入', value: imported),
+        _SummaryChip(label: 'يمكن استيرادها', value: preview.supportedCount),
+        _SummaryChip(label: 'تم التخطي', value: preview.skippedCount),
+        _SummaryChip(label: 'التكرار', value: preview.duplicateCount),
+        _SummaryChip(label: 'فشلت', value: preview.failedCount),
+        if (results.isNotEmpty) _SummaryChip(label: 'مستورد:', value: imported),
       ],
     );
   }

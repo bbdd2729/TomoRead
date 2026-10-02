@@ -45,13 +45,13 @@ const mobileNavigationDestinations = [
 ];
 
 String destinationLabel(AppDestination destination) => switch (destination) {
-  AppDestination.library => '书库',
-  AppDestination.chat => '对话',
-  AppDestination.notes => '笔记',
-  AppDestination.skills => '技能',
-  AppDestination.statistics => '阅读统计',
-  AppDestination.settings => '设置',
-  AppDestination.reader => '阅读器',
+  AppDestination.library => 'المكتبة',
+  AppDestination.chat => 'الحوار',
+  AppDestination.notes => 'ملاحظة',
+  AppDestination.skills => '- المهارات',
+  AppDestination.statistics => 'احصائيات القراءة',
+  AppDestination.settings => 'الإعدادات',
+  AppDestination.reader => 'قارئ',
 };
 
 IconData destinationIcon(AppDestination destination) => switch (destination) {

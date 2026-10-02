@@ -45,7 +45,7 @@ class TextProjectionDialog extends HookConsumerWidget {
     }
 
     return AlertDialog(
-      title: const Text('文本显示投影'),
+      title: const Text('عرض النص الإسقاط'),
       scrollable: true,
       content: SizedBox(
         width: 620,
@@ -54,15 +54,15 @@ class TextProjectionDialog extends HookConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '只改变 TXT/Markdown 的显示内容，不会改写原文件、章节偏移或既有定位。'
-              '无法可靠映射的区段会禁用精确标注。',
+              'قم فقط بتغيير عرض TXT/Markdown، ولا تستبدل الملف الأصلي أو إزاحة الفصل أو تحديد الموقع الحالي.'
+              'تحتوي الشرائح التي لا يمكن تعيينها بشكل موثوق على تعليقات توضيحية دقيقة معطلة.',
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<ChineseConversionMode>(
               key: ValueKey(settings.value.chineseConversion),
               initialValue: settings.value.chineseConversion,
               decoration: const InputDecoration(
-                labelText: '简繁转换',
+                labelText: 'تحويل بسيط',
                 border: OutlineInputBorder(),
               ),
               items: [
@@ -82,7 +82,7 @@ class TextProjectionDialog extends HookConsumerWidget {
               key: ValueKey(settings.value.widthMode),
               initialValue: settings.value.widthMode,
               decoration: const InputDecoration(
-                labelText: '全角/半角',
+                labelText: 'العرض الكامل/نصف العرض',
                 border: OutlineInputBorder(),
               ),
               items: [
@@ -98,7 +98,7 @@ class TextProjectionDialog extends HookConsumerWidget {
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               value: settings.value.convertLetters,
-              title: const Text('转换英文字母宽度'),
+              title: const Text('تحويل عرض الحروف الإنجليزية'),
               onChanged: (value) => settings.value = settings.value.copyWith(
                 convertLetters: value ?? true,
               ),
@@ -106,7 +106,7 @@ class TextProjectionDialog extends HookConsumerWidget {
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               value: settings.value.convertNumbers,
-              title: const Text('转换数字宽度'),
+              title: const Text('تحويل عرض الرقم'),
               onChanged: (value) => settings.value = settings.value.copyWith(
                 convertNumbers: value ?? true,
               ),
@@ -114,8 +114,8 @@ class TextProjectionDialog extends HookConsumerWidget {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: saveForBook.value,
-              title: Text(saveForBook.value ? '保存为本书设置' : '保存为全局默认'),
-              subtitle: const Text('全局默认只影响未设置独立投影的文本书籍。'),
+              title: Text(saveForBook.value ? 'الحفظ كإعدادات الكتاب' : 'حفظ كافتراضي عمومي'),
+              subtitle: const Text('يؤثر الإعداد الافتراضي العالمي فقط على الكتب المدرسية التي لا تحتوي على مجموعة إسقاطات مستقلة.'),
               onChanged: (value) => saveForBook.value = value,
             ),
             const Divider(height: 32),
@@ -123,24 +123,24 @@ class TextProjectionDialog extends HookConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '字面量替换规则',
+                    'قاعدة استبدال الحروف',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
                 TextButton.icon(
                   onPressed: configState.isLoading ? null : addRule,
                   icon: const Icon(Icons.add),
-                  label: const Text('添加'),
+                  label: const Text('إضافة إلى'),
                 ),
               ],
             ),
             configState.when(
               loading: () => const LinearProgressIndicator(),
-              error: (error, _) => Text('规则加载失败：$error'),
+              error: (error, _) => Text('فشل تحميل القاعدة: $error'),
               data: (config) => config.rules.isEmpty
                   ? const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text('暂无规则。仅支持字面量替换，不执行用户正则。'),
+                      child: Text('لا توجد قواعد حتى الآن. يتم دعم الاستبدالات الحرفية فقط ولا يتم فرض انتظام المستخدم.'),
                     )
                   : Column(
                       children: [
@@ -163,14 +163,14 @@ class TextProjectionDialog extends HookConsumerWidget {
                             ),
                             title: Text(rule.name),
                             subtitle: Text(
-                              '${rule.bookId == null ? '全局' : '本书'} · '
-                              '优先级 ${rule.priority} · '
+                              '${rule.bookId == null ? 'شامل' : 'هذا الكتاب'} · '
+                              'الأولوية${rule.priority} · '
                               '“${rule.findText}” → “${rule.replaceText}”',
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                             trailing: IconButton(
-                              tooltip: '删除规则',
+                              tooltip: 'أحذف الشرط',
                               onPressed: () => ref
                                   .read(textProjectionControllerProvider)
                                   .deleteRule(rule.id),
@@ -186,9 +186,9 @@ class TextProjectionDialog extends HookConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
-        FilledButton(onPressed: configState.isLoading ? null : save, child: const Text('保存')),
+        FilledButton(onPressed: configState.isLoading ? null : save, child: const Text('حفظ')),
       ],
     );
   }
@@ -224,7 +224,7 @@ class _RuleEditorDialog extends HookWidget {
     final forBook = useState(true);
     final error = useState<String?>(null);
     return AlertDialog(
-      title: const Text('添加字面量替换'),
+      title: const Text('إضافة حروف لاستبدالها'),
       scrollable: true,
       content: SizedBox(
         width: 440,
@@ -234,27 +234,27 @@ class _RuleEditorDialog extends HookWidget {
             TextField(
               controller: name,
               maxLength: 120,
-              decoration: const InputDecoration(labelText: '规则名称'),
+              decoration: const InputDecoration(labelText: 'اسم القاعدة'),
             ),
             TextField(
               controller: find,
               maxLength: 200,
-              decoration: const InputDecoration(labelText: '查找文本'),
+              decoration: const InputDecoration(labelText: 'البحث عن نص'),
             ),
             TextField(
               controller: replace,
               maxLength: 200,
-              decoration: const InputDecoration(labelText: '替换为（可留空）'),
+              decoration: const InputDecoration(labelText: 'الاستبدال بـ (يمكن تركه فارغًا)'),
             ),
             TextField(
               controller: priority,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: '优先级（-1000 至 1000）'),
+              decoration: const InputDecoration(labelText: 'الأولوية (-1000 إلى 1000)'),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: forBook.value,
-              title: Text(forBook.value ? '仅用于本书' : '用于所有文本书籍'),
+              title: Text(forBook.value ? 'لهذا الكتاب فقط' : 'لجميع الكتب المدرسية'),
               onChanged: (value) => forBook.value = value,
             ),
             if (error.value != null)
@@ -271,7 +271,7 @@ class _RuleEditorDialog extends HookWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: () {
@@ -281,7 +281,7 @@ class _RuleEditorDialog extends HookWidget {
                 parsedPriority == null ||
                 parsedPriority < -1000 ||
                 parsedPriority > 1000) {
-              error.value = '请填写名称、查找文本和有效优先级。';
+              error.value = 'يرجى إدخال الاسم ونص البحث والأولوية الصالحة.';
               return;
             }
             Navigator.pop(
@@ -295,7 +295,7 @@ class _RuleEditorDialog extends HookWidget {
               ),
             );
           },
-          child: const Text('添加'),
+          child: const Text('إضافة إلى'),
         ),
       ],
     );

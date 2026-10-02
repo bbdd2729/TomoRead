@@ -42,7 +42,7 @@ class ContinueReadingCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('继续阅读', style: Theme.of(context).textTheme.labelLarge),
+                  Text('أكمل القراءة', style: Theme.of(context).textTheme.labelLarge),
                   const SizedBox(height: 8),
                   Text(
                     book.title,
@@ -52,7 +52,7 @@ class ContinueReadingCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    book.author.isEmpty ? '未知作者' : book.author,
+                    book.author.isEmpty ? 'مؤلف غير معروف' : book.author,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -65,7 +65,7 @@ class ContinueReadingCard extends StatelessWidget {
                   LinearProgressIndicator(value: book.progress),
                   const SizedBox(height: 8),
                   Text(
-                    '已读 ${(book.progress * 100).round()}%',
+                    'هو قراءة:${(book.progress * 100).round()}%',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -73,7 +73,7 @@ class ContinueReadingCard extends StatelessWidget {
             ),
             const SizedBox(width: 16),
             IconButton.filledTonal(
-              tooltip: '继续阅读',
+              tooltip: 'أكمل القراءة',
               onPressed: onOpenReader,
               icon: const Icon(Icons.play_arrow),
             ),
@@ -172,7 +172,7 @@ class BookCard extends HookWidget {
                               ).colorScheme.surfaceContainer,
                               shape: const CircleBorder(),
                               child: PopupMenuButton<String>(
-                                tooltip: '更多操作',
+                                tooltip: 'المزيد من الإجراءات',
                                 enabled: !isRemoving,
                                 onSelected: (action) => action == 'favorite'
                                     ? onToggleFavorite()
@@ -181,12 +181,12 @@ class BookCard extends HookWidget {
                                   PopupMenuItem(
                                     value: 'favorite',
                                     child: Text(
-                                      book.isFavorite ? '取消收藏' : '收藏书籍',
+                                      book.isFavorite ? 'إلغاء المفضلة' : 'الكتب المفضلة',
                                     ),
                                   ),
                                   PopupMenuItem(
                                     value: 'delete',
-                                    child: Text('删除书籍'),
+                                    child: Text('حذف الكتاب'),
                                   ),
                                 ],
                                 icon: isRemoving
@@ -213,7 +213,7 @@ class BookCard extends HookWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    book.author.isEmpty ? '未知作者' : book.author,
+                    book.author.isEmpty ? 'مؤلف غير معروف' : book.author,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall,
@@ -289,7 +289,7 @@ class BookListItem extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    book.author.isEmpty ? '未知作者' : book.author,
+                    book.author.isEmpty ? 'مؤلف غير معروف' : book.author,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall,
@@ -318,16 +318,16 @@ class BookListItem extends StatelessWidget {
             const SizedBox(width: 8),
             if (!selectionMode)
               PopupMenuButton<String>(
-                tooltip: '更多操作',
+                tooltip: 'المزيد من الإجراءات',
                 enabled: !isRemoving,
                 onSelected: (action) =>
                     action == 'favorite' ? onToggleFavorite() : onDelete(),
                 itemBuilder: (context) => [
                   PopupMenuItem(
                     value: 'favorite',
-                    child: Text(book.isFavorite ? '取消收藏' : '收藏书籍'),
+                    child: Text(book.isFavorite ? 'إلغاء المفضلة' : 'الكتب المفضلة'),
                   ),
-                  PopupMenuItem(value: 'delete', child: Text('删除书籍')),
+                  PopupMenuItem(value: 'delete', child: Text('حذف الكتاب')),
                 ],
                 icon: isRemoving
                     ? const SizedBox(

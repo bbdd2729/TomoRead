@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../domain/models/library_book.dart';
 
 class BookSearchDelegate extends SearchDelegate<LibraryBook?> {
-  BookSearchDelegate(this.books) : super(searchFieldLabel: '搜索书籍');
+  BookSearchDelegate(this.books) : super(searchFieldLabel: 'البحث في الكتب');
 
   final List<LibraryBook> books;
 
@@ -11,7 +11,7 @@ class BookSearchDelegate extends SearchDelegate<LibraryBook?> {
   List<Widget>? buildActions(BuildContext context) => [
     if (query.isNotEmpty)
       IconButton(
-        tooltip: '清除搜索',
+        tooltip: 'مسح البحث',
         onPressed: () => query = '',
         icon: const Icon(Icons.clear),
       ),
@@ -19,7 +19,7 @@ class BookSearchDelegate extends SearchDelegate<LibraryBook?> {
 
   @override
   Widget? buildLeading(BuildContext context) => IconButton(
-    tooltip: '关闭搜索',
+    tooltip: 'إغلاق البحث',
     onPressed: () => close(context, null),
     icon: const Icon(Icons.arrow_back),
   );
@@ -58,7 +58,7 @@ class _BookSearchResults extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (books.isEmpty) {
-      return const Center(child: Text('没有匹配的书籍'));
+      return const Center(child: Text('لا توجد كتب مطابقة'));
     }
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 12),

@@ -45,7 +45,7 @@ class BookDetailsPage extends HookConsumerWidget {
       if (title.isEmpty) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('书名不能为空。')));
+        ).showSnackBar(const SnackBar(content: Text('لا يمكن أن يكون عنوان الكتاب فارغًا.')));
         return;
       }
       final description = descriptionController.text.trim();
@@ -80,7 +80,7 @@ class BookDetailsPage extends HookConsumerWidget {
         if (!context.mounted) return;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('保存书籍信息失败：$error')));
+        ).showSnackBar(SnackBar(content: Text('فشل حفظ معلومات الكتاب: $error')));
       } finally {
         if (context.mounted) isSaving.value = false;
       }
@@ -99,7 +99,7 @@ class BookDetailsPage extends HookConsumerWidget {
         if (!context.mounted) return;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('更新收藏状态失败：$error')));
+        ).showSnackBar(SnackBar(content: Text('فشل تحديث حالة التجميع: $error')));
       }
     }
 
@@ -107,16 +107,16 @@ class BookDetailsPage extends HookConsumerWidget {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('重置阅读进度'),
-          content: const Text('将从第一章重新开始阅读。'),
+          title: const Text('إعادة تعيين تقدم القراءة'),
+          content: const Text('سيتم استئناف القراءة من الفصل الأول.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
+              child: const Text('إلغاء'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('重置'),
+              child: const Text('إعادة تعيين'),
             ),
           ],
         ),
@@ -136,17 +136,17 @@ class BookDetailsPage extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEditing.value ? '编辑书籍' : '书籍详情'),
+        title: Text(isEditing.value ? 'تعديل الكتاب' : 'تفاصيل الحجز'),
         actions: [
           if (isEditing.value) ...[
             IconButton(
-              tooltip: '取消编辑',
+              tooltip: 'إلغاء التحرير',
               onPressed: isSaving.value ? null : () => isEditing.value = false,
               icon: const Icon(Icons.close),
             ),
             IconButton(
               key: const Key('book-detail-save'),
-              tooltip: '保存',
+              tooltip: 'حفظ',
               onPressed: isSaving.value ? null : saveMetadata,
               icon: isSaving.value
                   ? const SizedBox(
@@ -159,7 +159,7 @@ class BookDetailsPage extends HookConsumerWidget {
           ] else ...[
             IconButton(
               key: const Key('book-detail-favorite'),
-              tooltip: displayedBook.isFavorite ? '取消收藏' : '收藏书籍',
+              tooltip: displayedBook.isFavorite ? 'إلغاء المفضلة' : 'الكتب المفضلة',
               onPressed: toggleFavorite,
               icon: Icon(
                 displayedBook.isFavorite
@@ -169,7 +169,7 @@ class BookDetailsPage extends HookConsumerWidget {
             ),
             if (displayedBook.progress > 0)
               PopupMenuButton<_BookDetailAction>(
-                tooltip: '更多操作',
+                tooltip: 'المزيد من الإجراءات',
                 onSelected: (action) {
                   if (action == _BookDetailAction.resetProgress) {
                     resetProgress();
@@ -180,14 +180,14 @@ class BookDetailsPage extends HookConsumerWidget {
                     value: _BookDetailAction.resetProgress,
                     child: ListTile(
                       leading: Icon(Icons.restart_alt),
-                      title: Text('重置阅读进度'),
+                      title: Text('إعادة تعيين تقدم القراءة'),
                     ),
                   ),
                 ],
               ),
             IconButton(
               key: const Key('book-detail-edit'),
-              tooltip: '编辑书籍信息',
+              tooltip: 'تعديل معلومات الكتاب',
               onPressed: beginEditing,
               icon: const Icon(Icons.edit_outlined),
             ),
@@ -306,7 +306,7 @@ class _BookDetailsContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final description = BookDescriptionFormatter.format(book.description);
-    final author = book.author.isEmpty ? '未知作者' : book.author;
+    final author = book.author.isEmpty ? 'مؤلف غير معروف' : book.author;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -341,7 +341,7 @@ class _BookDetailsContent extends StatelessWidget {
             ),
             Chip(
               avatar: const Icon(Icons.format_list_numbered, size: 18),
-              label: Text('${book.chapterCount} 章'),
+              label: Text('${book.chapterCount}الفصل'),
             ),
             if (book.category?.isNotEmpty ?? false)
               Chip(
@@ -358,10 +358,10 @@ class _BookDetailsContent extends StatelessWidget {
         const SizedBox(height: 24),
         const Divider(),
         const SizedBox(height: 20),
-        Text('简介', style: theme.textTheme.titleLarge),
+        Text('المقدمة', style: theme.textTheme.titleLarge),
         const SizedBox(height: 10),
         if (description.isEmpty)
-          Text('暂无可用简介。', style: theme.textTheme.bodyMedium)
+          Text('لا توجد ملفات شخصية متاحة حتى الآن.', style: theme.textTheme.bodyMedium)
         else ...[
           Text(
             description,
@@ -372,22 +372,22 @@ class _BookDetailsContent extends StatelessWidget {
           if (description.length > 300)
             TextButton(
               onPressed: onDescriptionExpansionChanged,
-              child: Text(isDescriptionExpanded ? '收起' : '展开全部'),
+              child: Text(isDescriptionExpanded ? 'التقط' : 'مدِّد الكل'),
             ),
         ],
         const SizedBox(height: 24),
         const Divider(),
         const SizedBox(height: 20),
-        Text('阅读进度', style: theme.textTheme.titleLarge),
+        Text('تقدم القراءة', style: theme.textTheme.titleLarge),
         const SizedBox(height: 12),
         LinearProgressIndicator(value: book.progress),
         const SizedBox(height: 8),
         Row(
           children: [
-            Text('已读 ${(book.progress * 100).round()}%'),
+            Text('هو قراءة:${(book.progress * 100).round()}%'),
             const Spacer(),
             Text(
-              '${book.chapterCount} ${book.format == 'pdf' ? '页' : '章'}',
+              '${book.chapterCount} ${book.format == 'pdf' ? 'الصفحة' : 'الفصل'}',
               style: theme.textTheme.bodySmall,
             ),
           ],
@@ -399,7 +399,7 @@ class _BookDetailsContent extends StatelessWidget {
           icon: Icon(
             book.progress > 0 ? Icons.play_arrow : Icons.menu_book_outlined,
           ),
-          label: Text(book.progress > 0 ? '继续阅读' : '开始阅读'),
+          label: Text(book.progress > 0 ? 'أكمل القراءة' : 'ابدأ القراءة'),
         ),
       ],
     );
@@ -434,7 +434,7 @@ class _BookDetailsEditForm extends StatelessWidget {
         controller: titleController,
         textInputAction: TextInputAction.next,
         decoration: const InputDecoration(
-          labelText: '书名',
+          labelText: 'اسم الكتاب:',
           border: OutlineInputBorder(),
         ),
       ),
@@ -443,7 +443,7 @@ class _BookDetailsEditForm extends StatelessWidget {
         controller: authorController,
         textInputAction: TextInputAction.next,
         decoration: const InputDecoration(
-          labelText: '作者',
+          labelText: 'جهة الإصدار',
           border: OutlineInputBorder(),
         ),
       ),
@@ -452,7 +452,7 @@ class _BookDetailsEditForm extends StatelessWidget {
         controller: categoryController,
         textInputAction: TextInputAction.next,
         decoration: const InputDecoration(
-          labelText: '分类',
+          labelText: 'جيم - التصنيف',
           border: OutlineInputBorder(),
         ),
       ),
@@ -461,8 +461,8 @@ class _BookDetailsEditForm extends StatelessWidget {
         controller: tagsController,
         textInputAction: TextInputAction.next,
         decoration: const InputDecoration(
-          labelText: '标签',
-          hintText: '多个标签用逗号分隔',
+          labelText: 'ملصق',
+          hintText: 'افصل بين الوسوم المتعددة بفاصلة',
           border: OutlineInputBorder(),
         ),
       ),
@@ -472,7 +472,7 @@ class _BookDetailsEditForm extends StatelessWidget {
         minLines: 5,
         maxLines: 10,
         decoration: const InputDecoration(
-          labelText: '简介',
+          labelText: 'المقدمة',
           alignLabelWithHint: true,
           border: OutlineInputBorder(),
         ),
@@ -481,7 +481,7 @@ class _BookDetailsEditForm extends StatelessWidget {
       FilledButton.icon(
         onPressed: isSaving ? null : onSave,
         icon: const Icon(Icons.save_outlined),
-        label: const Text('保存书籍信息'),
+        label: const Text('حفظ معلومات الكتاب'),
       ),
     ],
   );

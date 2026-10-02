@@ -37,13 +37,13 @@ class AppNavigationRail extends StatelessWidget {
                     child: FilledButton.tonalIcon(
                       onPressed: onAddBook,
                       icon: const Icon(Icons.add),
-                      label: const Text('导入书籍'),
+                      label: const Text('استيراد الدفاتر'),
                     ),
                   ),
                 ],
               )
             : Tooltip(
-                message: '导入书籍',
+                message: 'استيراد الدفاتر',
                 child: IconButton.filledTonal(
                   onPressed: onAddBook,
                   icon: const Icon(Icons.add),
@@ -58,7 +58,7 @@ class AppNavigationRail extends StatelessWidget {
                   key: const Key('settings-navigation'),
                   onPressed: () => onSelected(AppDestination.settings),
                   icon: const Icon(Icons.settings_outlined),
-                  label: const Text('设置'),
+                  label: const Text('الإعدادات'),
                 ),
               ),
             )
@@ -69,27 +69,27 @@ class AppNavigationRail extends StatelessWidget {
         NavigationRailDestination(
           icon: Icon(Icons.local_library_outlined),
           selectedIcon: Icon(Icons.local_library),
-          label: Text('书库'),
+          label: Text('المكتبة'),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.forum_outlined),
           selectedIcon: Icon(Icons.forum),
-          label: Text('对话'),
+          label: Text('الحوار'),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.sticky_note_2_outlined),
           selectedIcon: Icon(Icons.sticky_note_2),
-          label: Text('笔记'),
+          label: Text('ملاحظة'),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.extension_outlined),
           selectedIcon: Icon(Icons.extension),
-          label: Text('技能'),
+          label: Text('- المهارات'),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.bar_chart_outlined),
           selectedIcon: Icon(Icons.bar_chart),
-          label: Text('阅读统计'),
+          label: Text('احصائيات القراءة'),
         ),
       ],
     );
@@ -144,7 +144,7 @@ class _TomoReadBrand extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 Text(
-                  '阅读与思考',
+                  'القراءة والتفكير',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall,

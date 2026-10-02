@@ -79,19 +79,19 @@ class ReaderTocPanel extends HookWidget {
       controller: scrollController,
       padding: const EdgeInsets.all(16),
       children: [
-        Text('目录', style: Theme.of(context).textTheme.titleLarge),
+        Text('الكتالوج', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
         TextField(
           key: const Key('reader-toc-search'),
           onChanged: (value) => query.value = value,
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.search),
-            hintText: '搜索目录',
+            hintText: 'البحث في الكتالوج',
             border: const OutlineInputBorder(),
             suffixIcon: query.value.isEmpty
                 ? null
                 : IconButton(
-                    tooltip: '清除搜索',
+                    tooltip: 'مسح البحث',
                     onPressed: () => query.value = '',
                     icon: const Icon(Icons.clear),
                   ),
@@ -99,11 +99,11 @@ class ReaderTocPanel extends HookWidget {
         ),
         const SizedBox(height: 12),
         if (toc.isEmpty)
-          const Text('该书没有可用目录。')
+          const Text('لا يوجد كتالوج متاح لهذا الكتاب.')
         else if (!hasMatches)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
-            child: Center(child: Text('没有匹配的章节。')),
+            child: Center(child: Text('لا توجد أقسام مطابقة.')),
           )
         else
           ..._buildTocItems(
@@ -242,7 +242,7 @@ class _TocListItem extends StatelessWidget {
           onTap: onTap,
           trailing: hasChildren
               ? IconButton(
-                  tooltip: expanded ? '折叠章节' : '展开章节',
+                  tooltip: expanded ? 'طي المقطع' : 'توسيع المقطع',
                   onPressed: onToggle,
                   icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
                 )

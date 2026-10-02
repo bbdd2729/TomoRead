@@ -85,14 +85,14 @@ class MobileReaderTocDrawer extends HookWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        author == null || author.isEmpty ? '未知作者' : author,
+                        author == null || author.isEmpty ? 'مؤلف غير معروف' : author,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '$chapterCount 章',
+                        '$chapterCount فصل',
                         style: Theme.of(context).textTheme.labelMedium,
                       ),
                     ],
@@ -100,7 +100,7 @@ class MobileReaderTocDrawer extends HookWidget {
                 ),
                 IconButton(
                   key: const Key('reader-mobile-toc-close'),
-                  tooltip: '关闭目录',
+                  tooltip: 'إغلاق جدول المحتويات',
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close),
                 ),
@@ -115,13 +115,13 @@ class MobileReaderTocDrawer extends HookWidget {
               onChanged: (value) => query.value = value,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search),
-                hintText: '搜索目录',
+                hintText: 'البحث في الكتالوج',
                 border: const OutlineInputBorder(),
                 isDense: true,
                 suffixIcon: query.value.isEmpty
                     ? null
                     : IconButton(
-                        tooltip: '清除搜索',
+                        tooltip: 'مسح البحث',
                         onPressed: () => query.value = '',
                         icon: const Icon(Icons.clear),
                       ),
@@ -130,7 +130,7 @@ class MobileReaderTocDrawer extends HookWidget {
           ),
           Expanded(
             child: toc.isEmpty
-                ? const Center(child: Text('暂无可用目录。'))
+                ? const Center(child: Text('لا توجد كتالوجات متاحة حتى الآن.'))
                 : ListView(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     children: [
@@ -203,7 +203,7 @@ class _MobileTocEntry extends StatelessWidget {
           title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
           onTap: item.spineIndex < 0 ? null : () => onSelected(item),
           trailing: IconButton(
-            tooltip: expanded ? '折叠章节' : '展开章节',
+            tooltip: expanded ? 'طي المقطع' : 'توسيع المقطع',
             onPressed: () => onToggle(nodeKey),
             icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
           ),

@@ -63,7 +63,7 @@ class ReaderThemePicker extends StatelessWidget {
         ActionChip(
           key: const Key('reader-theme-manage-custom'),
           avatar: const Icon(Icons.add, size: 18),
-          label: const Text('自定义'),
+          label: const Text('فهمك الخاص '),
           onPressed: onManageCustomThemes,
         ),
       ],
@@ -130,7 +130,7 @@ class CustomReaderThemesDialog extends ConsumerWidget {
     }
 
     return AlertDialog(
-      title: const Text('自定义阅读主题'),
+      title: const Text('موضوعات مخصصة للقراءة'),
       content: SizedBox(
         width: 440,
         child: themes.when(
@@ -138,9 +138,9 @@ class CustomReaderThemesDialog extends ConsumerWidget {
             height: 100,
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (error, _) => Text('无法读取自定义主题：$error'),
+          error: (error, _) => Text('تعذر قراءة القالب المخصص: $error'),
           data: (items) => items.isEmpty
-              ? const Text('还没有自定义主题。可创建背景、正文和强调色三色主题。')
+              ? const Text('لا توجد قوالب مخصصة حتى الآن. ينشئ سمة ثلاثية الألوان للخلفية والجسم وألوان التشكيل.')
               : ListView.separated(
                   shrinkWrap: true,
                   itemCount: items.length,
@@ -159,18 +159,18 @@ class CustomReaderThemesDialog extends ConsumerWidget {
                       final confirmed = await showDialog<bool>(
                         context: context,
                         builder: (dialogContext) => AlertDialog(
-                          title: Text('删除“${theme.name}”？'),
-                          content: const Text('使用它的书籍将暂时回退为跟随应用主题。'),
+                          title: Text('حذف "${theme.name}"؟'),
+                          content: const Text('ستعود الكتب التي تستخدمها مؤقتًا إلى اتباع قالب التطبيق.'),
                           actions: [
                             TextButton(
                               onPressed: () =>
                                   Navigator.pop(dialogContext, false),
-                              child: const Text('取消'),
+                              child: const Text('إلغاء'),
                             ),
                             FilledButton(
                               onPressed: () =>
                                   Navigator.pop(dialogContext, true),
-                              child: const Text('删除'),
+                              child: const Text('حذف'),
                             ),
                           ],
                         ),
@@ -186,17 +186,17 @@ class CustomReaderThemesDialog extends ConsumerWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: _ThemePreview(theme: theme),
                       title: Text(theme.name),
-                      subtitle: const Text('背景、正文、强调色'),
+                      subtitle: const Text('الخلفية، الجسم، لون اللكنة'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip: '编辑主题',
+                            tooltip: 'تعديل الموضوع',
                             icon: const Icon(Icons.edit_outlined),
                             onPressed: editTheme,
                           ),
                           IconButton(
-                            tooltip: '删除主题',
+                            tooltip: 'Ø­Ø°Ù Ø§ÙØ³ÙØ©',
                             icon: const Icon(Icons.delete_outline),
                             onPressed: removeTheme,
                           ),
@@ -210,7 +210,7 @@ class CustomReaderThemesDialog extends ConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: const Text('مغلق'),
         ),
         FilledButton.icon(
           onPressed: () async {
@@ -221,7 +221,7 @@ class CustomReaderThemesDialog extends ConsumerWidget {
             await save(theme);
           },
           icon: const Icon(Icons.add),
-          label: const Text('新建主题'),
+          label: const Text('رسالة جديدة'),
         ),
       ],
     );
@@ -265,7 +265,7 @@ class ReaderThemeEditorDialog extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = useTextEditingController(text: theme?.name ?? '自定义阅读主题');
+    final name = useTextEditingController(text: theme?.name ?? 'موضوعات مخصصة للقراءة');
     final background = useTextEditingController(
       text: _hex(theme?.backgroundArgb ?? 0xFFFAF3E6),
     );
@@ -286,7 +286,7 @@ class ReaderThemeEditorDialog extends HookWidget {
         InputDecoration(labelText: label, hintText: hint, prefixText: '#');
 
     return AlertDialog(
-      title: Text(theme == null ? '新建阅读主题' : '编辑阅读主题'),
+      title: Text(theme == null ? 'موضوع جديد للقراءة' : 'تعديل موضوع القراءة'),
       scrollable: true,
       content: SizedBox(
         width: 400,
@@ -301,23 +301,23 @@ class ReaderThemeEditorDialog extends HookWidget {
             const SizedBox(height: 18),
             TextField(
               controller: name,
-              decoration: const InputDecoration(labelText: '名称'),
+              decoration: const InputDecoration(labelText: 'الاسم'),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: background,
               maxLength: 8,
-              decoration: decoration('背景色', 'FAF3E6 或 FFFAF3E6'),
+              decoration: decoration('اللون الخلفي', 'FAF3E6 أو FFFAF3E6'),
             ),
             TextField(
               controller: foreground,
               maxLength: 8,
-              decoration: decoration('正文色', '32302A 或 FF32302A'),
+              decoration: decoration('لون الجسم', '32302A أو FF32302A'),
             ),
             TextField(
               controller: accent,
               maxLength: 8,
-              decoration: decoration('强调色', '76512D 或 FF76512D'),
+              decoration: decoration('لون التشكيل', '76512D أو FF76512D'),
             ),
             if (error.value != null)
               Padding(
@@ -333,7 +333,7 @@ class ReaderThemeEditorDialog extends HookWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: () {
@@ -344,7 +344,7 @@ class ReaderThemeEditorDialog extends HookWidget {
                 parsedBackground == null ||
                 parsedForeground == null ||
                 parsedAccent == null) {
-              error.value = '请输入名称，以及 6 或 8 位十六进制颜色。';
+              error.value = 'يرجى إدخال اسم ولون سداسي عشري مكون من 6 أو 8 أرقام.';
               return;
             }
             Navigator.pop(
@@ -360,7 +360,7 @@ class ReaderThemeEditorDialog extends HookWidget {
               ),
             );
           },
-          child: const Text('保存'),
+          child: const Text('حفظ'),
         ),
       ],
     );
@@ -391,9 +391,9 @@ class _CustomThemeLargePreview extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('阅读预览', style: TextStyle(color: foreground, fontSize: 16)),
+        Text('قراءة المعاينة', style: TextStyle(color: foreground, fontSize: 16)),
         const SizedBox(height: 12),
-        Text('自定义背景、正文与强调色。', style: TextStyle(color: foreground)),
+        Text('تخصيص ألوان الخلفية والجسم واللمسات المميزة.', style: TextStyle(color: foreground)),
         const Spacer(),
         Container(height: 4, width: 96, color: accent),
       ],

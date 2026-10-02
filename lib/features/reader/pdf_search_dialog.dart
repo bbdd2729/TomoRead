@@ -28,7 +28,7 @@ class PdfSearchDialog extends HookWidget {
     }
 
     return AlertDialog(
-      title: const Text('搜索 PDF'),
+      title: const Text('البحث في ملف PDF'),
       content: SizedBox(
         width: 480,
         child: Column(
@@ -41,10 +41,10 @@ class PdfSearchDialog extends HookWidget {
               onChanged: (_) => search(),
               onSubmitted: (_) => search(),
               decoration: InputDecoration(
-                hintText: '输入关键词',
+                hintText: 'أدخل الكلمات الرئيسية',
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
-                  tooltip: '清除搜索',
+                  tooltip: 'مسح البحث',
                   onPressed: query.isEmpty
                       ? null
                       : () {
@@ -57,7 +57,7 @@ class PdfSearchDialog extends HookWidget {
             ),
             const SizedBox(height: 16),
             if (query.isEmpty)
-              const Text('输入关键词后，匹配内容会在文档中高亮显示。')
+              const Text('بعد إدخال الكلمات الرئيسية، يتم تمييز التطابقات في المستند.')
             else if (searcher.isSearching)
               Row(
                 children: [
@@ -70,27 +70,27 @@ class PdfSearchDialog extends HookWidget {
                   Text(
                     searcher.searchingPageNumber == null ||
                             searcher.totalPageCount == null
-                        ? '正在搜索...'
-                        : '正在搜索第 ${searcher.searchingPageNumber} / ${searcher.totalPageCount} 页',
+                        ? 'ابحث'
+                        : 'البحث عن${searcher.searchingPageNumber} / ${searcher.totalPageCount}الصفحة',
                   ),
                 ],
               )
             else if (searcher.matches.isEmpty)
-              const Text('未找到匹配内容。')
+              const Text('لم يتم العثور على تطابقات.')
             else
               Row(
                 children: [
-                  Text('第 $currentMatch / ${searcher.matches.length} 个匹配'),
+                  Text('المباراة $currentMatch / ${searcher.matches.length}'),
                   const Spacer(),
                   IconButton(
-                    tooltip: '上一个匹配',
+                    tooltip: 'المباراة السابقة',
                     onPressed: searcher.matches.isEmpty
                         ? null
                         : searcher.goToPrevMatch,
                     icon: const Icon(Icons.keyboard_arrow_up),
                   ),
                   IconButton(
-                    tooltip: '下一个匹配',
+                    tooltip: 'المباراة التالية',
                     onPressed: searcher.matches.isEmpty
                         ? null
                         : searcher.goToNextMatch,
@@ -104,7 +104,7 @@ class PdfSearchDialog extends HookWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: const Text('مغلق'),
         ),
       ],
     );

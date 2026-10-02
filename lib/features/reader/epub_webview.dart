@@ -572,7 +572,7 @@ class EpubWebView extends HookConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            '无法启动 EPUB 渲染器：${_describeError(cause)}',
+            'تعذر بدء عرض EPUB:${_describeError(cause)}',
           ),
         ),
       );
@@ -596,10 +596,10 @@ class EpubWebView extends HookConsumerWidget {
         // or the D3D11 compositor is unavailable, which commonly happens on
         // virtual display adapters, remote/streaming sessions, or machines
         // with an uninitialized GPU driver.
-        return '当前 Windows 环境不支持 EPUB 渲染所需的图形捕获（Windows.Graphics.Capture）。'
-            '常见原因与解决：请切换到真实显示器/显卡后再试，或检查是否有云游戏、远程桌面或串流软件'
-            '（如 GameViewer）占用了虚拟显示适配器；也可更新显卡驱动后重试。'
-            '（原始错误：$raw）';
+        return 'التقاط الرسومات المطلوب لعرض EPUB (Windows.Graphics.Capture) غير مدعوم في بيئة Windows الحالية.'
+            'الأسباب والقرارات الشائعة: قم بالتبديل إلى شاشة/بطاقة رسومات حقيقية وحاول مرة أخرى، أو تحقق من وجود ألعاب سحابية أو سطح مكتب بعيد أو برنامج بث'
+            '(مثل GameViewer) يشغل محول العرض الظاهري ؛ يمكنك أيضًا تحديث برنامج تشغيل الرسومات والمحاولة مرة أخرى.'
+            '(خطأ أولي: $raw)';
       }
       if (lower.contains('webview2') ||
           lower.contains('webview2runtime') ||
@@ -607,8 +607,8 @@ class EpubWebView extends HookConsumerWidget {
           lower.contains('0x80040154') ||
           lower.contains('class not registered') ||
           lower.contains('failed to create')) {
-        return 'Windows 缺少 WebView2 运行时。请从 Microsoft Edge WebView2 页面下载并安装 Evergreen 运行时后重试。'
-            '（原始错误：$raw）';
+        return 'يفتقد Windows وقت تشغيل WebView2. يرجى تنزيل وتثبيت Evergreen runtime من صفحة Microsoft Edge WebView2 والمحاولة مرة أخرى.'
+            '(خطأ أولي: $raw)';
       }
       return raw.isEmpty ? error.code : raw;
     }

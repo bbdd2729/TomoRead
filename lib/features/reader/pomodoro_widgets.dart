@@ -31,7 +31,7 @@ class PomodoroToolbarButton extends ConsumerWidget {
       icon: Icon(value?.isRunning == true ? Icons.timer : Icons.timer_outlined),
       label: Text(
         value == null || value.isIdle
-            ? '专注'
+            ? 'التركيز'
             : '${value.phase.label} ${formatPomodoroDuration(value.remainingMillis)}',
       ),
     );
@@ -64,7 +64,7 @@ class PomodoroBreakBanner extends ConsumerWidget {
               onPressed: () => ref
                   .read(pomodoroControllerProvider.notifier)
                   .skipBreak(),
-              child: const Text('提前结束'),
+              child: const Text('يرجى تقديم وصف:'),
             ),
           ],
         ),
@@ -82,19 +82,19 @@ class PomodoroDialog extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final timerState = ref.watch(pomodoroControllerProvider);
     return AlertDialog(
-      title: const Text('阅读专注计时'),
+      title: const Text('قراءة توقيت التركيز'),
       content: SizedBox(
         width: 440,
         child: timerState.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Text('无法加载计时器：$error'),
+          error: (error, _) => Text('تعذر تحميل المؤقت: $error'),
           data: (timer) => _PomodoroDialogBody(timer: timer, bookId: bookId),
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: const Text('مغلق'),
         ),
       ],
     );
@@ -122,7 +122,7 @@ class _PomodoroDialogBody extends HookConsumerWidget {
           liveRegion: true,
           child: Text(
             timer.isIdle
-                ? '准备开始一轮专注'
+                ? 'استعد لجولة تركيز'
                 : '${timer.phase.label} · ${formatPomodoroDuration(timer.remainingMillis)}',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall,
@@ -130,7 +130,7 @@ class _PomodoroDialogBody extends HookConsumerWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          '已完成 ${timer.completedFocusCount} 轮专注',
+          'تم الإنتهاء${timer.completedFocusCount}تركيز دائري',
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 20),
@@ -143,40 +143,40 @@ class _PomodoroDialogBody extends HookConsumerWidget {
               FilledButton.icon(
                 onPressed: () => controller.startOrResume(bookId: bookId),
                 icon: const Icon(Icons.play_arrow),
-                label: Text(timer.isIdle ? '开始专注' : '继续${timer.phase.label}'),
+                label: Text(timer.isIdle ? 'ابدأ التركيز' : 'إذا ماذا${timer.phase.label}'),
               )
             else
               FilledButton.tonalIcon(
                 onPressed: controller.pause,
                 icon: const Icon(Icons.pause),
-                label: const Text('暂停'),
+                label: const Text('تعليق الجلسة'),
               ),
             if (!timer.isIdle)
               OutlinedButton.icon(
                 onPressed: controller.stop,
                 icon: const Icon(Icons.stop),
-                label: const Text('停止'),
+                label: const Text('بلدان حافظت على مستوى تبرعاتها'),
               ),
             if (timer.isBreak)
               TextButton(
                 onPressed: controller.skipBreak,
-                child: const Text('提前结束休息'),
+                child: const Text('إنهاء الاستراحة مبكرًا'),
               ),
           ],
         ),
         const SizedBox(height: 20),
         const Divider(),
         const SizedBox(height: 8),
-        Text('计时设置', style: Theme.of(context).textTheme.titleMedium),
+        Text('إعدادات التوقيت', style: Theme.of(context).textTheme.titleMedium),
         _MinuteSlider(
-          label: '专注',
+          label: 'التركيز',
           value: focusMinutes.value,
           minimum: 1,
           maximum: 90,
           onChanged: timer.isIdle ? (value) => focusMinutes.value = value : null,
         ),
         _MinuteSlider(
-          label: '短休息',
+          label: 'استراحة قصيرة',
           value: shortBreakMinutes.value,
           minimum: 1,
           maximum: 30,
@@ -185,7 +185,7 @@ class _PomodoroDialogBody extends HookConsumerWidget {
               : null,
         ),
         _MinuteSlider(
-          label: '长休息',
+          label: 'فترات راحة طويلة',
           value: longBreakMinutes.value,
           minimum: 1,
           maximum: 60,
@@ -195,14 +195,14 @@ class _PomodoroDialogBody extends HookConsumerWidget {
         ),
         Row(
           children: [
-            const Expanded(child: Text('长休息间隔')),
+            const Expanded(child: Text('فترة الاستراحة الطويلة')),
             DropdownButton<int>(
               value: longBreakEvery.value,
               items: [2, 3, 4, 5, 6]
                   .map(
                     (value) => DropdownMenuItem(
                       value: value,
-                      child: Text('$value 轮'),
+                      child: Text('$value جولات'),
                     ),
                   )
                   .toList(),
@@ -227,7 +227,7 @@ class _PomodoroDialogBody extends HookConsumerWidget {
                     ),
                   )
                 : null,
-            child: const Text('保存设置'),
+            child: const Text('حفظ الإعدادات'),
           ),
         ),
       ],
@@ -260,13 +260,13 @@ class _MinuteSlider extends StatelessWidget {
           min: minimum.toDouble(),
           max: maximum.toDouble(),
           divisions: maximum - minimum,
-          label: '$value 分钟',
+          label: '$value دقيقة',
           onChanged: onChanged == null
               ? null
               : (next) => onChanged!(next.round()),
         ),
       ),
-      SizedBox(width: 56, child: Text('$value 分钟')),
+      SizedBox(width: 56, child: Text('$value دقيقة')),
     ],
   );
 }

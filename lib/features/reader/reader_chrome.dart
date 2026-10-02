@@ -253,7 +253,7 @@ class ReaderCompactTopBar extends StatelessWidget {
             children: [
               ReaderChromeIconButton(
                 key: backKey,
-                tooltip: '返回书库',
+                tooltip: 'العودة إلى المكتبة',
                 icon: Icons.arrow_back,
                 onPressed: onBack,
               ),
@@ -273,7 +273,7 @@ class ReaderCompactTopBar extends StatelessWidget {
               const SizedBox(width: 4),
               ReaderChromeIconButton(
                 key: moreKey,
-                tooltip: '更多阅读操作',
+                tooltip: 'قراءة المزيد من الإجراءات',
                 icon: Icons.more_vert,
                 onPressed: onOpenMore,
               ),
@@ -294,8 +294,8 @@ class ReaderCompactNavigationBar extends StatelessWidget {
     required this.onNext,
     required this.onOpenStyle,
     this.onOpenProgress,
-    this.tocTooltip = '章节目录',
-    this.styleTooltip = '阅读样式',
+    this.tocTooltip = 'جدول محتويات الفصل',
+    this.styleTooltip = 'أسلوب القراءة',
     this.tocKey,
     this.previousKey,
     this.positionKey,
@@ -335,7 +335,7 @@ class ReaderCompactNavigationBar extends StatelessWidget {
             const SizedBox(width: ReaderChromeLayout.actionGap),
             ReaderChromeIconButton(
               key: previousKey,
-              tooltip: '上一处',
+              tooltip: 'السابق',
               icon: Icons.chevron_left,
               onPressed: onPrevious,
             ),
@@ -345,7 +345,7 @@ class ReaderCompactNavigationBar extends StatelessWidget {
                 key: positionKey,
                 label: onOpenProgress == null
                     ? positionLabel
-                    : '$positionLabel，打开阅读进度',
+                    : '$positionLabel، تقدم القراءة المفتوحة',
                 button: onOpenProgress != null,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
@@ -370,7 +370,7 @@ class ReaderCompactNavigationBar extends StatelessWidget {
             const SizedBox(width: ReaderChromeLayout.actionGap),
             ReaderChromeIconButton(
               key: nextKey,
-              tooltip: '下一处',
+              tooltip: 'التالي',
               icon: Icons.chevron_right,
               onPressed: onNext,
             ),
@@ -444,7 +444,7 @@ class _ReaderActionSheet extends StatelessWidget {
                     ),
                   ),
                   ReaderChromeIconButton(
-                    tooltip: '关闭',
+                    tooltip: 'مغلق',
                     icon: Icons.close,
                     onPressed: () => Navigator.of(context).pop(),
                   ),

@@ -24,8 +24,8 @@ class VolumeKeyPageTurningSetting extends StatelessWidget {
       value: settings.volumeKeyTurnsPage,
       onChanged: (value) =>
           onChanged(settings.copyWith(volumeKeyTurnsPage: value)),
-      title: const Text('音量键翻页'),
-      subtitle: const Text('开启后，音量上键上一页，音量下键下一页。'),
+      title: const Text('تشغيل صفحة زر مستوى الصوت'),
+      subtitle: const Text('عند تشغيله، اضغط على زر رفع مستوى الصوت للانتقال إلى الصفحة السابقة، وزر خفض مستوى الصوت للانتقال إلى الصفحة التالية.'),
     );
   }
 }

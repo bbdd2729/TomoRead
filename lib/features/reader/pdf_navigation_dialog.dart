@@ -41,7 +41,7 @@ class PdfNavigationDialog extends HookWidget {
     }
 
     return AlertDialog(
-      title: const Text('PDF 导航'),
+      title: const Text('التنقل في ملفات PDF'),
       content: SizedBox(
         width: 760,
         height: 560,
@@ -52,12 +52,12 @@ class PdfNavigationDialog extends HookWidget {
                 ButtonSegment(
                   value: false,
                   icon: Icon(Icons.format_list_bulleted),
-                  label: Text('目录'),
+                  label: Text('الكتالوج'),
                 ),
                 ButtonSegment(
                   value: true,
                   icon: Icon(Icons.grid_view_outlined),
-                  label: Text('缩略图'),
+                  label: Text('أعرض الأظافر'),
                 ),
               ],
               selected: {showThumbnails.value},
@@ -72,9 +72,9 @@ class PdfNavigationDialog extends HookWidget {
                   : isOutlineLoading
                   ? const Center(child: CircularProgressIndicator())
                   : outlineError != null
-                  ? Center(child: Text('无法读取 PDF 目录：$outlineError'))
+                  ? Center(child: Text('تعذر قراءة دليل PDF: $outlineError'))
                   : outline.isEmpty
-                  ? const Center(child: Text('这个 PDF 没有内置目录。'))
+                  ? const Center(child: Text('لا يحتوي ملف PDF هذا على كتالوج مدمج.'))
                   : ListView(
                       children: [
                         for (var index = 0; index < outline.length; index++)
@@ -94,7 +94,7 @@ class PdfNavigationDialog extends HookWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: const Text('مغلق'),
         ),
       ],
     );
@@ -161,7 +161,7 @@ class _PdfOutlineEntry extends StatelessWidget {
           leading: hasChildren
               ? IconButton(
                   key: Key('pdf-outline-toggle-$nodeKey'),
-                  tooltip: expanded ? '折叠章节' : '展开章节',
+                  tooltip: expanded ? 'طي المقطع' : 'توسيع المقطع',
                   onPressed: () => onToggle(nodeKey),
                   icon: Icon(
                     expanded ? Icons.expand_more : Icons.chevron_right,
@@ -170,13 +170,13 @@ class _PdfOutlineEntry extends StatelessWidget {
               : const SizedBox(width: 48, child: Icon(Icons.article_outlined)),
           selected: destination?.pageNumber == currentPage,
           title: Text(
-            node.title.isEmpty ? '未命名章节' : node.title,
+            node.title.isEmpty ? 'فصل بدون عنوان' : node.title,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
           trailing: destination == null
               ? null
-              : Text('第 ${destination.pageNumber} 页'),
+              : Text('الفقرتان 102${destination.pageNumber}الصفحة'),
           enabled: destination != null,
           onTap: destination == null
               ? null
@@ -248,7 +248,7 @@ class _PdfThumbnails extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text('第 $pageNumber 页'),
+                  Text('الصفحة $pageNumber'),
                 ],
               ),
             ),

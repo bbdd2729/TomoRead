@@ -20,7 +20,7 @@ class PdfAnnotationEditorDialog extends StatefulWidget {
   const PdfAnnotationEditorDialog({
     super.key,
     required this.selectedText,
-    this.title = '添加高亮与笔记',
+    this.title = 'إضافة تمييز وملاحظات',
   });
 
   final String selectedText;
@@ -68,7 +68,7 @@ class _PdfAnnotationEditorDialogState extends State<PdfAnnotationEditorDialog> {
             controller: _noteController,
             maxLines: 4,
             decoration: const InputDecoration(
-              labelText: '笔记（可选）',
+              labelText: 'ملاحظات (اختيارية)',
               alignLabelWithHint: true,
               border: OutlineInputBorder(),
             ),
@@ -79,7 +79,7 @@ class _PdfAnnotationEditorDialogState extends State<PdfAnnotationEditorDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
+        child: const Text('إلغاء'),
       ),
       FilledButton(
         key: const Key('pdf-annotation-save'),
@@ -90,7 +90,7 @@ class _PdfAnnotationEditorDialogState extends State<PdfAnnotationEditorDialog> {
             PdfAnnotationDraft(color: _color, note: note.isEmpty ? null : note),
           );
         },
-        child: const Text('保存'),
+        child: const Text('حفظ'),
       ),
     ],
   );
@@ -124,11 +124,11 @@ class _PdfAnnotationColorDialogState extends State<PdfAnnotationColorDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
+        child: const Text('إلغاء'),
       ),
       FilledButton(
         onPressed: () => Navigator.pop(context, _color),
-        child: const Text('确定'),
+        child: const Text('تأكيد'),
       ),
     ],
   );
@@ -205,7 +205,7 @@ class _PdfAnnotationsDialogState extends State<PdfAnnotationsDialog> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('删除标注失败：$error')));
+        ).showSnackBar(SnackBar(content: Text('فشل حذف وسيلة الشرح: $error')));
       }
     } finally {
       if (mounted) setState(() => _deleting.remove(annotation.id));
@@ -214,14 +214,14 @@ class _PdfAnnotationsDialogState extends State<PdfAnnotationsDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('PDF 标注'),
+    title: const Text('وسيلة شرح PDF'),
     content: SizedBox(
       width: 560,
       height: (MediaQuery.sizeOf(context).height * .55)
           .clamp(240.0, 420.0)
           .toDouble(),
       child: _annotations.isEmpty
-          ? const Center(child: Text('还没有 PDF 标注。'))
+          ? const Center(child: Text('لا توجد تعليقات توضيحية بصيغة PDF حتى الآن.'))
           : ListView.separated(
               itemCount: _annotations.length,
               separatorBuilder: (_, _) => const Divider(height: 1),
@@ -243,7 +243,7 @@ class _PdfAnnotationsDialogState extends State<PdfAnnotationsDialog> {
                   ),
                   subtitle: Text(
                     [
-                      annotation.chapterTitle ?? '未知页',
+                      annotation.chapterTitle ?? 'صفحة غير معروفة',
                       if (annotation.note?.isNotEmpty == true) annotation.note!,
                     ].join(' · '),
                     maxLines: 2,
@@ -254,7 +254,7 @@ class _PdfAnnotationsDialogState extends State<PdfAnnotationsDialog> {
                       : () => Navigator.pop(context, annotation),
                   trailing: IconButton(
                     key: Key('pdf-annotation-delete-${annotation.id}'),
-                    tooltip: '删除标注',
+                    tooltip: 'حذف وسيلة الشرح',
                     onPressed: deleting ? null : () => _delete(annotation),
                     icon: deleting
                         ? const SizedBox.square(
@@ -270,7 +270,7 @@ class _PdfAnnotationsDialogState extends State<PdfAnnotationsDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('关闭'),
+        child: const Text('مغلق'),
       ),
     ],
   );

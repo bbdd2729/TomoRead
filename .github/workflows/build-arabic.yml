@@ -1,0 +1,45 @@
+name: Build Arabic APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [arabic]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.44.8
+
+jobs:
+  apk:
+    name: Arabic release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.parallel=true
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v5
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter analyze lib
+      - run: flutter build apk --release
+      - name: Upload Arabic APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: tomoread-arabic-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30

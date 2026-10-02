@@ -42,7 +42,7 @@ class ReaderSelectionContextMenuItem extends StatelessWidget {
     children: [
       Icon(Icons.circle, color: _swatch(color), size: 18),
       const SizedBox(width: 12),
-      Text('${color.label}高亮'),
+      Text('${color.label}Ø¥Ø¨Ø±Ø§Ø²'),
     ],
   );
 

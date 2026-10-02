@@ -5,7 +5,7 @@ import '../../domain/models/library_workspace_state.dart';
 
 extension on LibraryFormatFilter {
   String get label => switch (this) {
-    LibraryFormatFilter.all => '全部',
+    LibraryFormatFilter.all => 'جميع',
     LibraryFormatFilter.epub => 'EPUB',
     LibraryFormatFilter.pdf => 'PDF',
     LibraryFormatFilter.text => 'TXT/Markdown',
@@ -14,9 +14,9 @@ extension on LibraryFormatFilter {
 
 extension on LibrarySort {
   String get label => switch (this) {
-    LibrarySort.recent => '最近阅读',
-    LibrarySort.title => '书名',
-    LibrarySort.progress => '阅读进度',
+    LibrarySort.recent => 'تمت القراءة مؤخرًا',
+    LibrarySort.title => 'اسم الكتاب:',
+    LibrarySort.progress => 'تقدم القراءة',
   };
 }
 
@@ -163,7 +163,7 @@ class LibraryControls extends StatelessWidget {
                       onChanged: onQueryChanged,
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.search),
-                        hintText: '搜索书名或作者',
+                        hintText: 'البحث في عناوين الكتب أو المؤلفين',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -176,7 +176,7 @@ class LibraryControls extends StatelessWidget {
                             initialValue: formatFilter,
                             isExpanded: true,
                             decoration: const InputDecoration(
-                              labelText: '格式',
+                              labelText: 'التنسيق',
                               border: OutlineInputBorder(),
                             ),
                             items: [
@@ -216,7 +216,7 @@ class LibraryControls extends StatelessWidget {
                     child: DropdownButtonFormField<LibrarySort>(
                       initialValue: sort,
                       decoration: const InputDecoration(
-                        labelText: '排序',
+                        labelText: 'فرز',
                         border: OutlineInputBorder(),
                       ),
                       items: [
@@ -237,17 +237,17 @@ class LibraryControls extends StatelessWidget {
                       key: ValueKey(category),
                       initialValue: category,
                       decoration: const InputDecoration(
-                        labelText: '分类',
+                        labelText: 'جيم - التصنيف',
                         border: OutlineInputBorder(),
                       ),
                       items: [
                         const DropdownMenuItem(
                           value: allCategoriesFilter,
-                          child: Text('全部分类'),
+                          child: Text('جميع الفئات'),
                         ),
                         const DropdownMenuItem(
                           value: uncategorizedCategoryFilter,
-                          child: Text('未分类'),
+                          child: Text('عمال غير مصنَّفة'),
                         ),
                         for (final item in categories)
                           DropdownMenuItem(value: item, child: Text(item)),
@@ -264,10 +264,10 @@ class LibraryControls extends StatelessWidget {
                       favoritesOnly ? Icons.favorite : Icons.favorite_border,
                       size: 18,
                     ),
-                    label: const Text('收藏'),
+                    label: const Text('المفضلة'),
                   ),
                   Tooltip(
-                    message: '切换书库视图',
+                    message: 'تبديل عرض المكتبة',
                     child: SegmentedButton<LibraryViewMode>(
                       showSelectedIcon: false,
                       segments: const [

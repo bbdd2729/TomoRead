@@ -86,13 +86,13 @@ class VisualizationController {
   }) async {
     final profile = await providers.loadActive();
     if (profile == null) {
-      throw const VisualizationException('请先在 AI 设置中启用并激活一个服务商配置。');
+      throw const VisualizationException('يرجى تمكين وتفعيل تكوين مزود الخدمة في إعدادات الذكاء الاصطناعي أولاً.');
     }
     final apiKey = profile.authType == AiProviderAuthType.none
         ? ''
         : (await secrets.read(profile.secretKeyId)) ?? '';
     if (profile.authType != AiProviderAuthType.none && apiKey.trim().isEmpty) {
-      throw const VisualizationException('当前 AI 服务商缺少安全存储中的 API Key。');
+      throw const VisualizationException('يفتقد مزود خدمة الذكاء الاصطناعي الحالي مفتاح واجهة برمجة التطبيقات (API) في المتجر الآمن.');
     }
     final result = await mindMaps.generate(
       bookId: bookId,
@@ -108,7 +108,7 @@ class VisualizationController {
 
   Future<VisualArtifact> reseedWordCloud(VisualArtifact artifact) async {
     if (artifact.kind != VisualArtifactKind.wordCloud) {
-      throw const VisualizationException('只有词云可以重新排布。');
+      throw const VisualizationException('يمكن إعادة ترتيب غيوم الكلمات فقط.');
     }
     final payload = WordCloudPayload.fromJson(
       jsonDecode(artifact.payloadJson) as Map<String, Object?>,

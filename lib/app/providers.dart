@@ -725,7 +725,7 @@ final textBookDocumentProvider = FutureProvider.autoDispose
       final profile = results[1] as TextContentProfile?;
       final chapters = results[2]! as List<TextChapter>;
       if (book == null || profile == null) {
-        throw const TextDecodeException('文本书籍或编码配置不存在。');
+        throw const TextDecodeException('تكوين الكتاب المدرسي أو الترميز غير موجود.');
       }
       final decoded = await ref
           .read(textDecoderServiceProvider)
@@ -753,7 +753,7 @@ final readerChapterProvider = FutureProvider.autoDispose
         readerManifestProvider(request.bookId).future,
       );
       if (book == null || manifest == null) {
-        throw const EpubContentException('书籍或阅读清单不存在');
+        throw const EpubContentException('الكتاب أو قائمة القراءة غير موجودة');
       }
       return ref
           .read(epubContentServiceProvider)
@@ -768,7 +768,7 @@ final epubExtractedDirectoryProvider = FutureProvider.autoDispose
     .family<String, String>((ref, bookId) async {
       final book = await ref.watch(readerBookProvider(bookId).future);
       if (book == null) {
-        throw const EpubExtractionException('书籍不存在');
+        throw const EpubExtractionException('الكتاب غير موجود');
       }
       return ref.read(epubExtractionServiceProvider).ensureExtracted(book);
     });

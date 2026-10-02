@@ -27,7 +27,7 @@ class ReaderUnderlineColorDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('选择划线颜色'),
+    title: const Text('تحديد لون لوحة القيادة'),
     content: Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -44,7 +44,7 @@ class ReaderUnderlineColorDialog extends StatelessWidget {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
+        child: const Text('إلغاء'),
       ),
     ],
   );
@@ -98,7 +98,7 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
       null => _BookTextColoringMode.followGlobal,
     });
     return AlertDialog(
-      title: const Text('本书阅读设置'),
+      title: const Text('إعدادات قراءة الكتاب'),
       scrollable: true,
       content: SizedBox(
         width: 420,
@@ -109,13 +109,13 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
               contentPadding: EdgeInsets.zero,
               value: useOverride.value,
               onChanged: (value) => useOverride.value = value,
-              title: const Text('使用本书独立设置'),
-              subtitle: const Text('关闭后，本书将跟随全局阅读设置。'),
+              title: const Text('استخدم إعدادات منفصلة لهذا الكتاب'),
+              subtitle: const Text('عند الإغلاق، سيتبع هذا الكتاب إعدادات القراءة العالمية.'),
             ),
             if (useOverride.value) ...[
               DropdownButtonFormField<ReadingFontRef>(
                 initialValue: settings.value.font,
-                decoration: const InputDecoration(labelText: '书本字体'),
+                decoration: const InputDecoration(labelText: 'خط الحجز'),
                 items: fonts
                     .map(
                       (font) => DropdownMenuItem(
@@ -134,7 +134,7 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '阅读主题',
+                  'قراءة الموضوع',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
@@ -203,7 +203,7 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  const SizedBox(width: 64, child: Text('字号')),
+                  const SizedBox(width: 64, child: Text('حجم الخط:')),
                   Expanded(
                     child: Slider(
                       value: settings.value.fontSize,
@@ -219,7 +219,7 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
               ),
               Row(
                 children: [
-                  const SizedBox(width: 64, child: Text('行高')),
+                  const SizedBox(width: 64, child: Text('ارتفاع الخط')),
                   Expanded(
                     child: Slider(
                       value: settings.value.lineHeight,
@@ -235,7 +235,7 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
               ),
               Row(
                 children: [
-                  const SizedBox(width: 64, child: Text('页边距')),
+                  const SizedBox(width: 64, child: Text('ادمج النقاط')),
                   Expanded(
                     child: Slider(
                       key: const Key('book-reading-margin'),
@@ -257,8 +257,8 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
                 onChanged: (value) => settings.value = settings.value.copyWith(
                   doubleColumn: value,
                 ),
-                title: const Text('宽屏双栏'),
-                subtitle: const Text('分页阅读在宽屏显示双栏，窄屏自动使用单栏。'),
+                title: const Text('شاشة عريضة ذات عمود مزدوج'),
+                subtitle: const Text('تعرض قراءة ترقيم الصفحات عمودين على الشاشة العريضة ويتم استخدام عمود واحد تلقائيًا على الشاشة الضيقة.'),
               ),
               SwitchListTile(
                 key: const Key('book-reading-tap-to-turn-pages'),
@@ -267,8 +267,8 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
                 onChanged: (value) => settings.value = settings.value.copyWith(
                   tapToTurnPages: value,
                 ),
-                title: const Text('点击正文翻页'),
-                subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
+                title: const Text('انقر على النص لقلب الصفحة'),
+                subtitle: const Text('اضغط على منفذ عرض للأمام أو للخلف عند النقر على المناطق اليسرى واليمنى من الجسم.'),
               ),
             ],
             const SizedBox(height: 12),
@@ -277,7 +277,7 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '文本前景色',
+                'لون مقدمة النص',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
@@ -286,15 +286,15 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
               segments: const [
                 ButtonSegment(
                   value: _BookTextColoringMode.followGlobal,
-                  label: Text('跟随全局'),
+                  label: Text('متابعة على المستوى العالمي'),
                 ),
                 ButtonSegment(
                   value: _BookTextColoringMode.enabled,
-                  label: Text('开启'),
+                  label: Text('تشغيل'),
                 ),
                 ButtonSegment(
                   value: _BookTextColoringMode.disabled,
-                  label: Text('关闭'),
+                  label: Text('مغلق'),
                 ),
               ],
               selected: {textColoringMode.value},
@@ -309,12 +309,12 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
                   context: context,
                   builder: (context) => TextColorTermsManagerDialog(
                     settings: textColoringSettings,
-                    title: '本书文字词条',
+                    title: 'إدخالات في نص هذا الكتاب',
                     bookId: bookId,
                   ),
                 ),
                 icon: const Icon(Icons.format_color_text_outlined),
-                label: const Text('管理本书词条'),
+                label: const Text('إدارة إدخالات الكتب'),
               ),
             ),
           ],
@@ -323,7 +323,7 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(
@@ -342,7 +342,7 @@ class BookReadingSettingsDialog extends HookConsumerWidget {
               },
             ),
           ),
-          child: const Text('保存'),
+          child: const Text('حفظ'),
         ),
       ],
     );

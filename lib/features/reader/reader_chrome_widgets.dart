@@ -118,11 +118,11 @@ class ReaderFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress = chapterProgress.clamp(0, 1).toDouble();
     final positionLabel = chapterCount == 0
-        ? '正在读取目录'
+        ? 'دليل القراءة'
         : !chapterProgressMeasured
-        ? '第 ${chapterIndex + 1} / $chapterCount 章 · 正在定位'
-        : '第 ${chapterIndex + 1} / $chapterCount 章 · '
-              '本章 ${(progress * 100).round()}%';
+        ? 'الفصل ${chapterIndex + 1} / $chapterCount · تحديد الموقع'
+        : 'الفصل ${chapterIndex + 1} / $chapterCount · '
+              'هذا الفصل ${(progress * 100).round()}%';
     if (!chromeLayout.isExpanded) {
       return ReaderCompactNavigationBar(
         key: const Key('reader-footer'),
@@ -148,8 +148,8 @@ class ReaderFooter extends StatelessWidget {
             children: [
               ReaderChromeIconButton(
                 tooltip: layoutMode == ReaderLayoutMode.paginated
-                    ? '上一页，或上一章'
-                    : '上一章',
+                    ? 'الصفحة السابقة، أو الفصل السابق'
+                    : 'الفصل السابق',
                 icon: Icons.chevron_left,
                 onPressed: onPrevious,
               ),
@@ -163,7 +163,7 @@ class ReaderFooter extends StatelessWidget {
               const SizedBox(width: 12),
               Semantics(
                 key: const Key('reader-position-label'),
-                label: '$positionLabel，打开阅读进度',
+                label: '$positionLabel، تقدم القراءة المفتوحة',
                 button: true,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
@@ -177,8 +177,8 @@ class ReaderFooter extends StatelessWidget {
               const SizedBox(width: 8),
               ReaderChromeIconButton(
                 tooltip: layoutMode == ReaderLayoutMode.paginated
-                    ? '下一页，或下一章'
-                    : '下一章',
+                    ? 'التالي، أو الفصل التالي'
+                    : 'الفصل التالي',
                 icon: Icons.chevron_right,
                 onPressed: onNext,
               ),

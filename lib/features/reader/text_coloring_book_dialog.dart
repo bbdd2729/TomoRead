@@ -36,7 +36,7 @@ class TextColoringBookDialogState extends State<TextColoringBookDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('本书文字前景色'),
+    title: const Text('لون مقدمة النص في هذا الكتاب'),
     content: SizedBox(
       width: 440,
       child: Column(
@@ -47,15 +47,15 @@ class TextColoringBookDialogState extends State<TextColoringBookDialog> {
             segments: const [
               ButtonSegment(
                 value: _TextColoringBookMode.followGlobal,
-                label: Text('跟随全局'),
+                label: Text('متابعة على المستوى العالمي'),
               ),
               ButtonSegment(
                 value: _TextColoringBookMode.enabled,
-                label: Text('开启'),
+                label: Text('تشغيل'),
               ),
               ButtonSegment(
                 value: _TextColoringBookMode.disabled,
-                label: Text('关闭'),
+                label: Text('مغلق'),
               ),
             ],
             selected: {_mode},
@@ -64,8 +64,8 @@ class TextColoringBookDialogState extends State<TextColoringBookDialog> {
           const SizedBox(height: 16),
           Text(
             widget.settings.enabled
-                ? '全局文字前景色当前已开启；本书设置可覆盖全局开关。'
-                : '全局文字前景色当前已关闭；可仅为本书开启。',
+                ? 'لون مقدمة النص العالمي قيد التشغيل حاليًا ؛ تتجاوز إعدادات الكتاب التبديل العالمي.'
+                : 'تم إيقاف تشغيل لون مقدمة النص العام حاليًا ؛ لا يمكن تشغيله إلا لهذا الكتاب.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
@@ -74,12 +74,12 @@ class TextColoringBookDialogState extends State<TextColoringBookDialog> {
               context: context,
               builder: (context) => TextColorTermsManagerDialog(
                 settings: widget.settings,
-                title: '本书文字词条',
+                title: 'إدخالات في نص هذا الكتاب',
                 bookId: widget.bookId,
               ),
             ),
             icon: const Icon(Icons.format_color_text_outlined),
-            label: const Text('管理本书词条'),
+            label: const Text('إدارة إدخالات الكتب'),
           ),
         ],
       ),
@@ -87,7 +87,7 @@ class TextColoringBookDialogState extends State<TextColoringBookDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
+        child: const Text('إلغاء'),
       ),
       FilledButton(
         onPressed: () => Navigator.pop(
@@ -98,7 +98,7 @@ class TextColoringBookDialogState extends State<TextColoringBookDialog> {
             _TextColoringBookMode.disabled => false,
           }),
         ),
-        child: const Text('保存'),
+        child: const Text('حفظ'),
       ),
     ],
   );

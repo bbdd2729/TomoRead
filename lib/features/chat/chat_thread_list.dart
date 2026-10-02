@@ -37,17 +37,17 @@ class ChatThreadList extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'AI 对话',
+                    'محادثة الذكاء الاصطناعي',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
                 PopupMenuButton<String>(
-                  tooltip: '新建对话',
+                  tooltip: 'محادثة جديدة',
                   onSelected: (value) =>
                       value == 'general' ? onCreateGeneral() : onCreateBook(),
                   itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'general', child: Text('通用对话')),
-                    PopupMenuItem(value: 'book', child: Text('书籍对话')),
+                    PopupMenuItem(value: 'general', child: Text('المحادثات العامة')),
+                    PopupMenuItem(value: 'book', child: Text('محادثات الكتاب')),
                   ],
                   icon: const Icon(Icons.add),
                 ),
@@ -61,7 +61,7 @@ class ChatThreadList extends StatelessWidget {
                     child: Padding(
                       padding: EdgeInsets.all(24),
                       child: Text(
-                        '还没有对话。新建对话，或在阅读器中选择文字后询问 AI。',
+                        'لا توجد محادثات حتى الآن. أنشئ محادثة جديدة، أو اسأل الذكاء الاصطناعي بعد تحديد النص في القارئ.',
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -82,14 +82,14 @@ class ChatThreadList extends StatelessWidget {
                               : Icons.forum_outlined,
                         ),
                         title: Text(
-                          thread.title.isEmpty ? '新对话' : thread.title,
+                          thread.title.isEmpty ? 'محادثة جديدة' : thread.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
                           thread.scope == ChatScope.general
-                              ? '通用对话'
-                              : book?.title ?? '书籍已移除',
+                              ? 'المحادثات العامة'
+                              : book?.title ?? 'تمت إزالة الحجز',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -105,18 +105,18 @@ class ChatThreadList extends StatelessWidget {
                                 ),
                               ),
                             PopupMenuButton<String>(
-                              tooltip: '会话操作',
+                              tooltip: 'إجراءات الجلسة',
                               onSelected: (value) => value == 'rename'
                                   ? onRename(thread)
                                   : onDelete(thread),
                               itemBuilder: (context) => const [
                                 PopupMenuItem(
                                   value: 'rename',
-                                  child: Text('重命名'),
+                                  child: Text('أعد التسمية'),
                                 ),
                                 PopupMenuItem(
                                   value: 'delete',
-                                  child: Text('删除'),
+                                  child: Text('حذف'),
                                 ),
                               ],
                             ),

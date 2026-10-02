@@ -93,7 +93,7 @@ class TtsControlPanel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('系统朗读', style: Theme.of(context).textTheme.titleLarge),
+                    Text('النظام يتحدث', style: Theme.of(context).textTheme.titleLarge),
                     Text(
                       _statusLabel(state.status),
                       style: Theme.of(context).textTheme.bodySmall,
@@ -118,7 +118,7 @@ class TtsControlPanel extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Text(
                 segment?.text ??
-                    (busy ? '正在准备当前章节的朗读队列…' : '当前章节暂无可朗读正文。'),
+                    (busy ? 'جارٍ إعداد قائمة انتظار القراءة للفصل الحالي...' : 'لا توجد حاليًا فصول للقراءة بصوت عالٍ.'),
                 key: const Key('tts-current-sentence'),
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
@@ -138,7 +138,7 @@ class TtsControlPanel extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton.filledTonal(
-                tooltip: '上一句',
+                tooltip: 'الجملة السابقة',
                 onPressed: state.canPlay && state.currentIndex > 0
                     ? () => unawaited(controller.previous())
                     : null,
@@ -147,7 +147,7 @@ class TtsControlPanel extends StatelessWidget {
               const SizedBox(width: 12),
               IconButton.filled(
                 key: const Key('tts-play-pause'),
-                tooltip: playing ? '暂停' : '播放',
+                tooltip: playing ? 'تعليق الجلسة' : 'Play',
                 iconSize: 32,
                 onPressed: state.canPlay && !busy
                     ? () => unawaited(controller.playPause())
@@ -156,7 +156,7 @@ class TtsControlPanel extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               IconButton.filledTonal(
-                tooltip: '下一句',
+                tooltip: 'الجملة التالية',
                 onPressed: state.canPlay &&
                         state.currentIndex + 1 < state.segments.length
                     ? () => unawaited(controller.next())
@@ -166,7 +166,7 @@ class TtsControlPanel extends StatelessWidget {
               const SizedBox(width: 12),
               IconButton(
                 key: const Key('tts-stop'),
-                tooltip: '停止',
+                tooltip: 'بلدان حافظت على مستوى تبرعاتها',
                 onPressed: state.status == TtsPlaybackStatus.idle || busy
                     ? null
                     : () => unawaited(controller.stop()),
@@ -181,7 +181,7 @@ class TtsControlPanel extends StatelessWidget {
             min: .1,
             max: 1,
             divisions: 18,
-            title: '语速',
+            title: 'سرعة الكلام',
             valueLabel: (value) => '${(value * 2).toStringAsFixed(1)}×',
             enabled: state.availability.available,
             onCommitted: (value) => unawaited(
@@ -194,7 +194,7 @@ class TtsControlPanel extends StatelessWidget {
             min: 0,
             max: 1,
             divisions: 20,
-            title: '音量',
+            title: 'مستوى الصوت',
             valueLabel: (value) => '${(value * 100).round()}%',
             enabled: state.availability.available,
             onCommitted: (value) => unawaited(
@@ -209,7 +209,7 @@ class TtsControlPanel extends StatelessWidget {
             initialValue: state.settings.language,
             isExpanded: true,
             decoration: const InputDecoration(
-              labelText: '语言',
+              labelText: 'اللغه',
               border: OutlineInputBorder(),
             ),
             items: [
@@ -238,13 +238,13 @@ class TtsControlPanel extends StatelessWidget {
             initialValue: selectedVoiceId,
             isExpanded: true,
             decoration: const InputDecoration(
-              labelText: '系统声音',
+              labelText: 'صوت النظام',
               border: OutlineInputBorder(),
             ),
             items: [
               const DropdownMenuItem<String?>(
                 value: null,
-                child: Text('系统默认'),
+                child: Text('افتراضي النظام'),
               ),
               for (final voice in matchingVoices)
                 DropdownMenuItem<String?>(
@@ -265,8 +265,8 @@ class TtsControlPanel extends StatelessWidget {
           SwitchListTile(
             key: const Key('tts-keep-awake'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('朗读时保持屏幕唤醒'),
-            subtitle: const Text('暂停、停止、完成或发生错误时会立即释放。'),
+            title: const Text('أبق الشاشة مستيقظة عند التحدث'),
+            subtitle: const Text('يتوقف مؤقتًا أو يتوقف أو يكمل أو يصدر على الفور في حالة حدوث خطأ.'),
             value: state.settings.keepAwake,
             onChanged: (value) => unawaited(
               controller.updateSettings(
@@ -348,17 +348,17 @@ IconData _toolbarIcon(TtsPlaybackStatus status) => switch (status) {
 };
 
 String _toolbarTooltip(TtsPlaybackState state) => switch (state.status) {
-  TtsPlaybackStatus.playing => '系统朗读：正在播放',
-  TtsPlaybackStatus.paused => '系统朗读：已暂停',
-  TtsPlaybackStatus.loading => '系统朗读：正在准备',
-  _ => '系统朗读',
+  TtsPlaybackStatus.playing => 'مكبرات صوت النظام: قيد التشغيل الآن',
+  TtsPlaybackStatus.paused => 'مكبرات صوت النظام: متوقفة مؤقتًا',
+  TtsPlaybackStatus.loading => 'مكبرات صوت النظام: التحضير',
+  _ => 'النظام يتحدث',
 };
 
 String _statusLabel(TtsPlaybackStatus status) => switch (status) {
-  TtsPlaybackStatus.idle => '已停止',
-  TtsPlaybackStatus.loading => '正在准备正文与系统声音',
-  TtsPlaybackStatus.playing => '正在朗读当前章节',
-  TtsPlaybackStatus.paused => '已暂停',
-  TtsPlaybackStatus.completed => '当前章节朗读完成',
-  TtsPlaybackStatus.failed => '系统朗读不可用',
+  TtsPlaybackStatus.idle => 'أوقف',
+  TtsPlaybackStatus.loading => 'إعداد أصوات الجسم والنظام',
+  TtsPlaybackStatus.playing => 'قراءة الفصل الحالي',
+  TtsPlaybackStatus.paused => 'متوقف مؤقتًا',
+  TtsPlaybackStatus.completed => 'اكتملت قراءة الفصل الحالي',
+  TtsPlaybackStatus.failed => 'كلام النظام غير متاح',
 };

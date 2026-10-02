@@ -59,7 +59,7 @@ class NotesPage extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('原书籍已移除，无法打开原文。')));
+          ).showSnackBar(const SnackBar(content: Text('تمت إزالة الكتاب الأصلي ولا يمكن فتحه.')));
         }
         return;
       }
@@ -98,7 +98,7 @@ class NotesPage extends HookConsumerWidget {
                 pdfLocator.pageNumber > book.chapterCount)) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('这条笔记没有有效的 PDF 页内定位。')),
+              const SnackBar(content: Text('لا تحتوي هذه الملاحظة على موضع PDF صالح في الصفحة.')),
             );
           }
           return;
@@ -132,7 +132,7 @@ class NotesPage extends HookConsumerWidget {
             : await service.buildMarkdown(query);
         final mobile = Platform.isAndroid || Platform.isIOS;
         final path = await FilePicker.saveFile(
-          dialogTitle: '导出阅读笔记',
+          dialogTitle: 'تصدير ملاحظات القراءة',
           fileName: json ? 'tomoread-notes.json' : 'tomoread-notes.md',
           type: FileType.custom,
           allowedExtensions: [json ? 'json' : 'md'],
@@ -143,19 +143,19 @@ class NotesPage extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('已导出到 $path')));
+          ).showSnackBar(SnackBar(content: Text('تم التصدير إلى $path')));
         }
       } catch (error) {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('导出失败：$error')));
+          ).showSnackBar(SnackBar(content: Text('فشل التصدير: $error')));
         }
       }
     }
 
     Widget buildFilterButton() => IconButton(
-      tooltip: '筛选笔记',
+      tooltip: 'ملاحظات التصفية',
       onPressed: () => showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
@@ -214,10 +214,10 @@ class NotesPage extends HookConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               PageHeader(
-                title: '笔记',
+                title: 'ملاحظة',
                 subtitle: facetsState.value == null
-                    ? '整理高亮、注释与阅读思考'
-                    : '${facetsState.value!.totalCount} 条高亮 · ${facetsState.value!.noteCount} 条笔记',
+                    ? 'تنظيم تسليط الضوء والتعليقات التوضيحية وقراءة الأفكار'
+                    : '${facetsState.value!.totalCount}تسليط الضوء على الشريط ·${facetsState.value!.noteCount}ملاحظات',
               ),
               const SizedBox(height: 18),
               Row(
@@ -227,7 +227,7 @@ class NotesPage extends HookConsumerWidget {
                       key: const Key('notes-search'),
                       controller: searchController,
                       decoration: const InputDecoration(
-                        hintText: '搜索摘录、笔记、书名或作者',
+                        hintText: 'البحث عن مقتطفات أو ملاحظات أو عناوين أو مؤلفين',
                         prefixIcon: Icon(Icons.search),
                       ),
                       onChanged: (value) {
@@ -242,11 +242,11 @@ class NotesPage extends HookConsumerWidget {
                   if (!wide) ...[const SizedBox(width: 8), buildFilterButton()],
                   const SizedBox(width: 4),
                   PopupMenuButton<bool>(
-                    tooltip: '导出',
+                    tooltip: 'التصدير',
                     onSelected: exportNotes,
                     itemBuilder: (context) => const [
-                      PopupMenuItem(value: false, child: Text('导出 Markdown')),
-                      PopupMenuItem(value: true, child: Text('导出 JSON')),
+                      PopupMenuItem(value: false, child: Text('تخفيض التصدير')),
+                      PopupMenuItem(value: true, child: Text('تصدير JSON')),
                     ],
                     icon: const Icon(Icons.download_outlined),
                   ),
@@ -328,20 +328,20 @@ class _AnnotationFilterPanel extends StatelessWidget {
       Row(
         children: [
           Expanded(
-            child: Text('筛选', style: Theme.of(context).textTheme.titleMedium),
+            child: Text('الفحص', style: Theme.of(context).textTheme.titleMedium),
           ),
           TextButton(
             onPressed: () => onChanged(const AnnotationQuery()),
-            child: const Text('重置'),
+            child: const Text('إعادة تعيين'),
           ),
         ],
       ),
       const SizedBox(height: 16),
       DropdownButtonFormField<String?>(
         initialValue: query.bookId,
-        decoration: const InputDecoration(labelText: '书籍'),
+        decoration: const InputDecoration(labelText: 'الكتب'),
         items: [
-          const DropdownMenuItem<String?>(value: null, child: Text('全部书籍')),
+          const DropdownMenuItem<String?>(value: null, child: Text('جميع الكتب')),
           ...books.map(
             (book) => DropdownMenuItem<String?>(
               value: book.id,
@@ -356,13 +356,13 @@ class _AnnotationFilterPanel extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 20),
-      Text('类型', style: Theme.of(context).textTheme.labelLarge),
+      Text('النوع', style: Theme.of(context).textTheme.labelLarge),
       const SizedBox(height: 8),
       SegmentedButton<bool?>(
         segments: const [
-          ButtonSegment(value: null, label: Text('全部')),
-          ButtonSegment(value: true, label: Text('有笔记')),
-          ButtonSegment(value: false, label: Text('无笔记')),
+          ButtonSegment(value: null, label: Text('جميع')),
+          ButtonSegment(value: true, label: Text('لديه ملاحظات')),
+          ButtonSegment(value: false, label: Text('لا توجد ملاحظات')),
         ],
         selected: {query.hasNote},
         onSelectionChanged: (value) => onChanged(
@@ -372,7 +372,7 @@ class _AnnotationFilterPanel extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 20),
-      Text('颜色', style: Theme.of(context).textTheme.labelLarge),
+      Text('لون', style: Theme.of(context).textTheme.labelLarge),
       const SizedBox(height: 8),
       Wrap(
         spacing: 8,
@@ -395,7 +395,7 @@ class _AnnotationFilterPanel extends StatelessWidget {
       ),
       if (tags.isNotEmpty) ...[
         const SizedBox(height: 20),
-        Text('标签', style: Theme.of(context).textTheme.labelLarge),
+        Text('ملصق', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 8),
         Wrap(
           spacing: 6,
@@ -417,14 +417,14 @@ class _AnnotationFilterPanel extends StatelessWidget {
       const SizedBox(height: 20),
       DropdownButtonFormField<AnnotationSort>(
         initialValue: query.sort,
-        decoration: const InputDecoration(labelText: '排序'),
+        decoration: const InputDecoration(labelText: 'فرز'),
         items: const [
-          DropdownMenuItem(value: AnnotationSort.newest, child: Text('最新创建')),
+          DropdownMenuItem(value: AnnotationSort.newest, child: Text('تم إنشاؤه حديثًا')),
           DropdownMenuItem(
             value: AnnotationSort.recentlyEdited,
-            child: Text('最近编辑'),
+            child: Text('تم تحريره مؤخرًا'),
           ),
-          DropdownMenuItem(value: AnnotationSort.oldest, child: Text('最早创建')),
+          DropdownMenuItem(value: AnnotationSort.oldest, child: Text('الأقدم تم الإنشاء')),
         ],
         onChanged: (value) {
           if (value != null) onChanged(query.copyWith(sort: value));
@@ -448,7 +448,7 @@ class _AnnotationResultList extends StatelessWidget {
   @override
   Widget build(BuildContext context) => itemsState.when(
     loading: () => const Center(child: CircularProgressIndicator()),
-    error: (error, _) => Center(child: Text('无法加载笔记：$error')),
+    error: (error, _) => Center(child: Text('تعذر تحميل الملاحظات: $error')),
     data: (items) {
       if (items.isEmpty) {
         return const Center(
@@ -459,9 +459,9 @@ class _AnnotationResultList extends StatelessWidget {
               children: [
                 Icon(Icons.auto_stories_outlined, size: 44),
                 SizedBox(height: 12),
-                Text('还没有符合条件的笔记'),
+                Text('لا توجد ملاحظات مؤهلة حتى الآن'),
                 SizedBox(height: 4),
-                Text('在阅读器中选择文字即可创建高亮或注释。'),
+                Text('حدد النص في القارئ لإنشاء تمييز أو تعليق.'),
               ],
             ),
           ),
@@ -492,7 +492,7 @@ class _AnnotationResultList extends StatelessWidget {
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                '${item.book?.title ?? '已移除的书籍'} · ${annotation.chapterTitle ?? '未知章节'}',
+                '${item.book?.title ?? 'تمت إزالة الحجز'} · ${annotation.chapterTitle ?? 'مقطع غير معروف'}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -552,16 +552,16 @@ class _AnnotationDetailPane extends HookConsumerWidget {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('删除这条标注？'),
-          content: const Text('高亮、笔记和标签都会从本地书库中移除。'),
+          title: const Text('هل تريد حذف وسيلة الشرح هذه ؟'),
+          content: const Text('تتم إزالة النقاط البارزة والملاحظات والتسميات من مكتبتك المحلية.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
+              child: const Text('إلغاء'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('删除'),
+              child: const Text('حذف'),
             ),
           ],
         ),
@@ -594,24 +594,24 @@ class _AnnotationDetailPane extends HookConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    item.book?.title ?? '已移除的书籍',
+                    item.book?.title ?? 'تمت إزالة الحجز',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    annotation.chapterTitle ?? '未知章节',
+                    annotation.chapterTitle ?? 'مقطع غير معروف',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
             ),
             IconButton(
-              tooltip: '打开原文',
+              tooltip: 'فتح النص الأصلي',
               onPressed: onOpenOriginal,
               icon: const Icon(Icons.open_in_new),
             ),
             IconButton(
-              tooltip: '删除',
+              tooltip: 'حذف',
               onPressed: remove,
               icon: const Icon(Icons.delete_outline),
             ),
@@ -657,7 +657,7 @@ class _AnnotationDetailPane extends HookConsumerWidget {
           children: [
             Expanded(
               child: Text(
-                '我的笔记',
+                'ملاحظاتي',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
@@ -675,12 +675,12 @@ class _AnnotationDetailPane extends HookConsumerWidget {
                 ButtonSegment(
                   value: false,
                   icon: Icon(Icons.edit_outlined),
-                  label: Text('编辑'),
+                  label: Text('تحرير'),
                 ),
                 ButtonSegment(
                   value: true,
                   icon: Icon(Icons.visibility_outlined),
-                  label: Text('预览'),
+                  label: Text('المعاينات'),
                 ),
               ],
               selected: {preview.value},
@@ -693,7 +693,7 @@ class _AnnotationDetailPane extends HookConsumerWidget {
           noteController.text.trim().isEmpty
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 28),
-                  child: Text('还没有笔记内容。'),
+                  child: Text('لا توجد ملاحظات حتى الآن.'),
                 )
               : SelectionArea(child: MarkdownBody(data: noteController.text))
         else
@@ -702,7 +702,7 @@ class _AnnotationDetailPane extends HookConsumerWidget {
             minLines: 7,
             maxLines: 18,
             decoration: const InputDecoration(
-              hintText: '记录想法，支持 Markdown',
+              hintText: 'توثيق الأفكار لدعم تخفيض السعر',
               alignLabelWithHint: true,
             ),
             onChanged: (_) {
@@ -715,7 +715,7 @@ class _AnnotationDetailPane extends HookConsumerWidget {
             onSubmitted: (_) => saveNote(),
           ),
         const SizedBox(height: 24),
-        Text('标签', style: Theme.of(context).textTheme.titleMedium),
+        Text('ملصق', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 10),
         Wrap(
           spacing: 8,
@@ -737,10 +737,10 @@ class _AnnotationDetailPane extends HookConsumerWidget {
               child: TextField(
                 controller: tagController,
                 decoration: InputDecoration(
-                  hintText: '添加标签',
+                  hintText: 'أضف وسمًا',
                   isDense: true,
                   suffixIcon: IconButton(
-                    tooltip: '添加标签',
+                    tooltip: 'أضف وسمًا',
                     onPressed: addTag,
                     icon: const Icon(Icons.add),
                   ),
@@ -765,7 +765,7 @@ class _NoAnnotationSelected extends StatelessWidget {
       children: [
         Icon(Icons.notes_outlined, size: 42),
         SizedBox(height: 10),
-        Text('选择一条标注查看详情'),
+        Text('اختر وسيلة شرح لعرض التفاصيل'),
       ],
     ),
   );

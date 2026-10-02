@@ -40,12 +40,12 @@ class MobileReaderSideDrawer extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '书签与笔记',
+                  'الإشارات المرجعية والملاحظات',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
               IconButton(
-                tooltip: '关闭面板',
+                tooltip: 'إغلاق اللوحة',
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close),
               ),
@@ -144,12 +144,12 @@ class ReaderSidePanel extends StatelessWidget {
               ButtonSegment(
                 value: false,
                 icon: const Icon(Icons.sticky_note_2_outlined),
-                label: Text('笔记 ${annotations.length}'),
+                label: Text('ملاحظة${annotations.length}'),
               ),
               ButtonSegment(
                 value: true,
                 icon: const Icon(Icons.bookmark_border),
-                label: Text('书签 ${bookmarks.length}'),
+                label: Text('Bookmark${bookmarks.length}'),
               ),
             ],
             selected: {showBookmarks},
@@ -157,10 +157,10 @@ class ReaderSidePanel extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           if (showBookmarks) ...[
-            Text('书签', style: Theme.of(context).textTheme.titleLarge),
+            Text('Bookmark', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             if (bookmarks.isEmpty)
-              const Expanded(child: Center(child: Text('当前书籍还没有书签。')))
+              const Expanded(child: Center(child: Text('لا توجد حاليًا إشارات مرجعية.')))
             else
               Expanded(
                 child: ListView.builder(
@@ -172,19 +172,19 @@ class ReaderSidePanel extends StatelessWidget {
                       leading: const Icon(Icons.bookmark),
                       title: Text(bookmark.label ?? bookmark.chapterTitle),
                       subtitle: Text(
-                        '保存于 ${bookmark.createdAt.hour.toString().padLeft(2, '0')}:${bookmark.createdAt.minute.toString().padLeft(2, '0')}',
+                        'تم الحفظ في${bookmark.createdAt.hour.toString().padLeft(2, '0')}:${bookmark.createdAt.minute.toString().padLeft(2, '0')}',
                       ),
                       onTap: () => onSelectBookmark(bookmark),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip: '编辑书签',
+                            tooltip: 'تعديل الإشارة المرجعية',
                             icon: const Icon(Icons.edit_outlined),
                             onPressed: () => onEditBookmark(bookmark),
                           ),
                           IconButton(
-                            tooltip: '删除书签',
+                            tooltip: 'احذف العلامة',
                             icon: const Icon(Icons.delete_outline),
                             onPressed: () => onRemoveBookmark(bookmark),
                           ),
@@ -195,10 +195,10 @@ class ReaderSidePanel extends StatelessWidget {
                 ),
               ),
           ] else ...[
-            Text('笔记与标注', style: Theme.of(context).textTheme.titleLarge),
+            Text('الملاحظات والشروح', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
             if (annotations.isEmpty)
-              const Expanded(child: Center(child: Text('选中文本后可创建高亮和笔记。')))
+              const Expanded(child: Center(child: Text('حدد النص لإنشاء النقاط البارزة والملاحظات.')))
             else
               Expanded(
                 child: ListView.separated(
@@ -218,19 +218,19 @@ class ReaderSidePanel extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       subtitle: annotation.note == null
-                          ? const Text('高亮')
+                          ? const Text('Ø¥Ø¨Ø±Ø§Ø²')
                           : Text(annotation.note!, maxLines: 3),
                       onTap: () => onSelectAnnotation(annotation),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip: '编辑笔记',
+                            tooltip: 'تعديل الملاحظات',
                             icon: const Icon(Icons.edit_outlined),
                             onPressed: () => onEditAnnotation(annotation),
                           ),
                           IconButton(
-                            tooltip: '删除标注',
+                            tooltip: 'حذف وسيلة الشرح',
                             icon: const Icon(Icons.delete_outline),
                             onPressed: () => onRemoveAnnotation(annotation),
                           ),

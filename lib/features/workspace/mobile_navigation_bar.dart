@@ -23,27 +23,27 @@ class MobileNavigationBar extends StatelessWidget {
         NavigationDestination(
           icon: Icon(Icons.local_library_outlined),
           selectedIcon: Icon(Icons.local_library),
-          label: '书库',
+          label: 'المكتبة',
         ),
         NavigationDestination(
           icon: Icon(Icons.forum_outlined),
           selectedIcon: Icon(Icons.forum),
-          label: 'AI 对话',
+          label: 'محادثة الذكاء الاصطناعي',
         ),
         NavigationDestination(
           icon: Icon(Icons.sticky_note_2_outlined),
           selectedIcon: Icon(Icons.sticky_note_2),
-          label: '笔记',
+          label: 'ملاحظة',
         ),
         NavigationDestination(
           icon: Icon(Icons.bar_chart_outlined),
           selectedIcon: Icon(Icons.bar_chart),
-          label: '统计',
+          label: 'الاحصاءات',
         ),
         NavigationDestination(
           icon: Icon(Icons.settings_outlined),
           selectedIcon: Icon(Icons.settings),
-          label: '设置',
+          label: 'الإعدادات',
         ),
       ],
     );

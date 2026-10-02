@@ -15,27 +15,27 @@ class EmbeddingSettingsPage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Embedding 与语义检索', style: Theme.of(context).textTheme.titleLarge),
+        Text('التضمين والاسترجاع الدلالي', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         const Text(
-          '向量模型与聊天模型完全独立。没有可用向量模型时，关键词搜索和原文回跳仍然可用。',
+          'نموذج المتجه مستقل تمامًا عن نموذج الدردشة. لا تزال عمليات البحث عن الكلمات الرئيسية والنسخ الاحتياطية متاحة عندما لا يكون هناك نموذج متجه متاح.',
         ),
         const SizedBox(height: 8),
         const Text(
-          '本地模式连接你已启动的 Ollama 或 LM Studio；TomoRead 不会伪装内置推理，也不会静默下载模型。',
+          'يتصل الوضع المحلي بـ Ollama أو LM Studio الذي تم إطلاقه ؛ لا تتنكر TomoRead على أنها استدلال مدمج، ولا تقوم بتنزيل النماذج بصمت.',
         ),
         const SizedBox(height: 20),
         profiles.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Text('无法读取向量配置：$error'),
+          error: (error, _) => Text('تعذر قراءة تكوين المتجه: $error'),
           data: (items) => Column(
             children: [
               if (items.isEmpty)
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.manage_search_outlined),
-                    title: Text('尚未配置向量模型'),
-                    subtitle: Text('书内搜索当前使用关键词模式。'),
+                    title: Text('لم يتم تكوين طراز المتجه'),
+                    subtitle: Text('وضع الكلمات الرئيسية المستخدم حاليًا لعمليات البحث داخل الكتاب.'),
                   ),
                 ),
               for (final profile in items)
@@ -47,7 +47,7 @@ class EmbeddingSettingsPage extends ConsumerWidget {
         FilledButton.icon(
           onPressed: () => _showProfileDialog(context, ref),
           icon: const Icon(Icons.add),
-          label: const Text('添加向量配置'),
+          label: const Text('إضافة تكوين متجه'),
         ),
       ],
     );
@@ -84,7 +84,7 @@ class _EmbeddingProfileCard extends ConsumerWidget {
               if (profile.isActive)
                 const Chip(
                   avatar: Icon(Icons.check_circle_outline, size: 18),
-                  label: Text('当前'),
+                  label: Text('الوضع الراهن'),
                 ),
             ],
           ),
@@ -104,8 +104,8 @@ class _EmbeddingProfileCard extends ConsumerWidget {
             onChanged: (value) => ref
                 .read(embeddingSettingsControllerProvider.notifier)
                 .setEnabled(profile.id, value),
-            title: const Text('启用此向量配置'),
-            subtitle: const Text('关闭后立即回退到关键词搜索，不删除已生成向量。'),
+            title: const Text('تمكين تكوين المتجه هذا'),
+            subtitle: const Text('الرجوع إلى البحث عن الكلمات الرئيسية مباشرة بعد الإغلاق دون حذف المتجه الذي تم إنشاؤه.'),
           ),
           Wrap(
             spacing: 8,
@@ -115,13 +115,13 @@ class _EmbeddingProfileCard extends ConsumerWidget {
               Chip(label: Text(_capabilityLabel(profile))),
               Chip(label: Text(profile.distanceMetric.name)),
               if (profile.dimensions != null)
-                Chip(label: Text('${profile.dimensions} 维')),
+                Chip(label: Text('${profile.dimensions}الأبعاد')),
               if (profile.mode == EmbeddingProviderMode.remote)
                 Chip(
                   label: Text(
                     profile.remoteContentConsent
-                        ? '已允许发送正文'
-                        : '未允许发送正文',
+                        ? 'يسمح بإرسال الجثة'
+                        : 'لا يُسمح بإرسال الجثة',
                   ),
                 ),
             ],
@@ -133,7 +133,7 @@ class _EmbeddingProfileCard extends ConsumerWidget {
               TextButton.icon(
                 onPressed: () => _probe(context, ref),
                 icon: const Icon(Icons.network_check),
-                label: const Text('测试 Embedding'),
+                label: const Text('اختبار التضمين'),
               ),
               TextButton.icon(
                 onPressed: () => _showProfileDialog(
@@ -142,7 +142,7 @@ class _EmbeddingProfileCard extends ConsumerWidget {
                   profile: profile,
                 ),
                 icon: const Icon(Icons.edit_outlined),
-                label: const Text('编辑'),
+                label: const Text('تحرير'),
               ),
               if (!profile.isActive)
                 TextButton(
@@ -151,12 +151,12 @@ class _EmbeddingProfileCard extends ConsumerWidget {
                             .read(embeddingSettingsControllerProvider.notifier)
                             .activate(profile.id)
                       : null,
-                  child: const Text('设为当前'),
+                  child: const Text('تعيين كتيار'),
                 ),
               TextButton.icon(
                 onPressed: () => _delete(context, ref),
                 icon: const Icon(Icons.delete_outline),
-                label: const Text('移除'),
+                label: const Text('أزِل'),
               ),
             ],
           ),
@@ -172,16 +172,16 @@ class _EmbeddingProfileCard extends ConsumerWidget {
           .probe(profile.id);
       if (!context.mounted) return;
       final message = result.succeeded
-          ? 'Embedding 可用：${result.dimensions} 维，${result.latencyMillis} ms'
-                '${result.models.isEmpty ? '' : '，发现 ${result.models.length} 个模型'}'
-          : 'Embedding 不可用：${result.errorCode ?? 'unknown'}';
+          ? 'التضمين متاح:${result.dimensions}البُعد،${result.latencyMillis} ms'
+                '${result.models.isEmpty ? '' : '، تم العثور على ${result.models.length} نموذج'}'
+          : 'التضمين غير متاح:${result.errorCode ?? 'unknown'}';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
     } on Object catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('测试失败：$error')),
+          SnackBar(content: Text('فشل الاختبار: $error')),
         );
       }
     }
@@ -191,16 +191,16 @@ class _EmbeddingProfileCard extends ConsumerWidget {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('移除向量配置？'),
-        content: const Text('该配置生成的向量索引将一并删除；关键词索引不受影响。'),
+        title: const Text('هل تريد إزالة تكوين المتجه ؟'),
+        content: const Text('سيتم أيضًا حذف فهارس المتجهات التي تم إنشاؤها بواسطة هذا التكوين ؛ لن تتأثر فهارس الكلمات الرئيسية.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: const Text('إلغاء'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('移除'),
+            child: const Text('أزِل'),
           ),
         ],
       ),
@@ -249,7 +249,7 @@ Future<void> _showProfileDialog(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setState) => AlertDialog(
-        title: Text(profile == null ? '添加向量配置' : '编辑向量配置'),
+        title: Text(profile == null ? 'إضافة تكوين متجه' : 'تحرير تكوين المتجه'),
         content: SizedBox(
           width: (MediaQuery.sizeOf(dialogContext).width - 48)
               .clamp(280, 620)
@@ -260,7 +260,7 @@ Future<void> _showProfileDialog(
               children: [
                 DropdownButtonFormField<String>(
                   initialValue: presetId,
-                  decoration: const InputDecoration(labelText: '服务商预设'),
+                  decoration: const InputDecoration(labelText: 'الإعدادات المسبقة لمقدم الخدمة'),
                   items: EmbeddingProviderCatalog.presets
                       .map(
                         (item) => DropdownMenuItem(
@@ -294,7 +294,7 @@ Future<void> _showProfileDialog(
                 const SizedBox(height: 12),
                 TextField(
                   controller: name,
-                  decoration: const InputDecoration(labelText: '配置名称'),
+                  decoration: const InputDecoration(labelText: 'اسم التشكيل الجانبي'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -304,7 +304,7 @@ Future<void> _showProfileDialog(
                 const SizedBox(height: 12),
                 TextField(
                   controller: model,
-                  decoration: const InputDecoration(labelText: 'Embedding 模型 ID'),
+                  decoration: const InputDecoration(labelText: 'معرّف نموذج التضمين'),
                 ),
                 if (preset.recommendedModels.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -334,8 +334,8 @@ Future<void> _showProfileDialog(
                 TextField(
                   controller: version,
                   decoration: const InputDecoration(
-                    labelText: '模型/部署版本',
-                    helperText: '服务端更新模型后请修改此值，以使旧向量立即失效。',
+                    labelText: 'إصدار النموذج/النشر',
+                    helperText: 'قم بتعديل هذه القيمة بعد أن يقوم الخادم بتحديث النموذج لجعل المتجه القديم غير صالح على الفور.',
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -344,16 +344,16 @@ Future<void> _showProfileDialog(
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: authType == EmbeddingProviderAuthType.none
-                        ? 'API Key（本地服务通常不需要）'
+                        ? 'مفتاح واجهة برمجة التطبيقات (عادةً غير مطلوب للخدمات المحلية)'
                         : profile == null
                         ? 'API Key'
-                        : 'API Key（留空保持不变）',
+                        : 'مفتاح واجهة برمجة التطبيقات (اتركه فارغًا لتركه دون تغيير)',
                   ),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<EmbeddingDistanceMetric>(
                   initialValue: distanceMetric,
-                  decoration: const InputDecoration(labelText: '距离度量'),
+                  decoration: const InputDecoration(labelText: 'مقياس المسافة'),
                   items: EmbeddingDistanceMetric.values
                       .map(
                         (value) => DropdownMenuItem(
@@ -374,7 +374,7 @@ Future<void> _showProfileDialog(
                         controller: maxInput,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          labelText: '单段最大字符数',
+                          labelText: 'الحد الأقصى لعدد الأحرف لكل مقطع',
                         ),
                       ),
                     ),
@@ -383,7 +383,7 @@ Future<void> _showProfileDialog(
                       child: TextField(
                         controller: batchSize,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: '批大小'),
+                        decoration: const InputDecoration(labelText: 'حجم الدفعة'),
                       ),
                     ),
                   ],
@@ -395,16 +395,16 @@ Future<void> _showProfileDialog(
                     value: remoteConsent,
                     onChanged: (value) =>
                         setState(() => remoteConsent = value),
-                    title: const Text('允许向该服务商发送书籍正文片段'),
+                    title: const Text('السماح بإرسال قصاصات نص الكتاب إلى هذا المزود'),
                     subtitle: const Text(
-                      '只有明确开启后才能建立远端向量索引。API Key 仍只保存在系统安全存储中。',
+                      'لا يمكن إنشاء فهرسة المتجهات عن بُعد إلا إذا تم تشغيلها بشكل صريح. لا يزال مفتاح واجهة برمجة التطبيقات مخزنًا فقط في المتجر الآمن للنظام.',
                     ),
                   ),
                 ] else ...[
                   const SizedBox(height: 12),
                   const Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('本地服务必须使用 localhost/127.0.0.1，正文不会发送到远端。'),
+                    child: Text('يجب أن تستخدم الخدمة المحلية المضيف المحلي/127.0.0.1 ولن يتم إرسال الجسم إلى الطرف البعيد.'),
                   ),
                 ],
               ],
@@ -414,11 +414,11 @@ Future<void> _showProfileDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
+            child: const Text('إلغاء'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('保存'),
+            child: const Text('حفظ'),
           ),
         ],
       ),
@@ -455,7 +455,7 @@ Future<void> _showProfileDialog(
   } on Object catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：$error')),
+        SnackBar(content: Text('فشل عملية الحفظ: $error')),
       );
     }
   } finally {
@@ -471,10 +471,10 @@ Future<void> _showProfileDialog(
 
 String _capabilityLabel(EmbeddingProviderProfile profile) =>
     switch (profile.capabilityStatus) {
-      EmbeddingCapabilityStatus.untested => '尚未测试',
-      EmbeddingCapabilityStatus.ready => 'Embedding 可用',
+      EmbeddingCapabilityStatus.untested => 'لم يتم اختباره بعد',
+      EmbeddingCapabilityStatus.ready => 'التضمين متاح',
       EmbeddingCapabilityStatus.unavailable =>
-        '不可用：${profile.capabilityErrorCode ?? 'unknown'}',
+        'Not available${profile.capabilityErrorCode ?? 'unknown'}',
       EmbeddingCapabilityStatus.incompatible =>
-        '不兼容：${profile.capabilityErrorCode ?? 'unknown'}',
+        'غير متوافق:${profile.capabilityErrorCode ?? 'unknown'}',
     };

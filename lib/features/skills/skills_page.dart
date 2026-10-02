@@ -26,9 +26,9 @@ class SkillsPage extends ConsumerWidget {
           ),
           children: [
             PageHeader(
-              title: '技能',
-              subtitle: '管理 Agent 在阅读对话中可以调用的分析方法。',
-              actionLabel: '新建技能',
+              title: '- المهارات',
+              subtitle: 'إدارة الأساليب التحليلية التي يمكن للوكيل اللجوء إليها في محادثة القراءة.',
+              actionLabel: 'مهارة جديدة',
               actionIcon: Icons.add,
               onAction: () => _editSkill(context, ref),
             ),
@@ -39,7 +39,7 @@ class SkillsPage extends ConsumerWidget {
                 child: FilledButton.icon(
                   onPressed: () => ref.invalidate(skillsControllerProvider),
                   icon: const Icon(Icons.refresh),
-                  label: Text('重新加载：$error'),
+                  label: Text('إعادة التحميل: $error'),
                 ),
               ),
               data: (items) => GridView.builder(
@@ -78,7 +78,7 @@ class SkillsPage extends ConsumerWidget {
         .set(
           PendingChatDraft(
             skillId: skill.id,
-            prompt: '请使用“${skill.name}”技能处理下面的问题：',
+            prompt: 'يرجى استخدام "${skill.name}"مهارات التعامل مع الأسئلة التالية:',
           ),
         );
     onOpenChat?.call();
@@ -134,16 +134,16 @@ class _SkillCard extends StatelessWidget {
                 const Spacer(),
                 Switch(value: skill.enabled, onChanged: onEnabledChanged),
                 PopupMenuButton<String>(
-                  tooltip: '技能操作',
+                  tooltip: 'إجراءات المهارة',
                   onSelected: (value) => switch (value) {
                     'edit' => onEdit(),
                     'delete' => onDelete?.call(),
                     _ => null,
                   },
                   itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'edit', child: Text('编辑')),
+                    const PopupMenuItem(value: 'edit', child: Text('تحرير')),
                     if (onDelete != null)
-                      const PopupMenuItem(value: 'delete', child: Text('删除')),
+                      const PopupMenuItem(value: 'delete', child: Text('حذف')),
                   ],
                 ),
               ],
@@ -164,7 +164,7 @@ class _SkillCard extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: skill.enabled ? onRun : null,
                 icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('在对话中运行'),
+                label: const Text('تشغيل في المحادثة'),
               ),
             ),
           ],
@@ -185,7 +185,7 @@ Future<void> _editSkill(
   final saved = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text(skill == null ? '新建技能' : '编辑技能'),
+      title: Text(skill == null ? 'مهارة جديدة' : 'تعديل المهارة'),
       content: SizedBox(
         width: 560,
         child: SingleChildScrollView(
@@ -194,20 +194,20 @@ Future<void> _editSkill(
             children: [
               TextField(
                 controller: name,
-                decoration: const InputDecoration(labelText: '名称'),
+                decoration: const InputDecoration(labelText: 'الاسم'),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: description,
                 maxLines: 2,
-                decoration: const InputDecoration(labelText: '说明'),
+                decoration: const InputDecoration(labelText: 'تعليمات'),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: prompt,
                 minLines: 6,
                 maxLines: 12,
-                decoration: const InputDecoration(labelText: '技能提示词'),
+                decoration: const InputDecoration(labelText: 'موجه المهارة'),
               ),
             ],
           ),
@@ -216,11 +216,11 @@ Future<void> _editSkill(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('保存'),
+          child: const Text('حفظ'),
         ),
       ],
     ),
@@ -239,7 +239,7 @@ Future<void> _editSkill(
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('无法保存技能：$error')));
+        ).showSnackBar(SnackBar(content: Text('تعذر حفظ المهارة: $error')));
       }
     }
   }
@@ -256,16 +256,16 @@ Future<void> _deleteSkill(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('删除自定义技能？'),
-      content: Text('“${skill.name}”将不再提供给 Agent。'),
+      title: const Text('هل تريد حذف المهارة المخصصة ؟'),
+      content: Text('لن تكون "${skill.name}" متاحة للوكلاء بعد الآن.'),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('删除'),
+          child: const Text('حذف'),
         ),
       ],
     ),

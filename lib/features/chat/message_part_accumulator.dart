@@ -213,7 +213,7 @@ class MessagePartAccumulator {
             status: ChatPartStatus.completed,
             createdAt: now,
             updatedAt: now,
-            reason: '已停止生成',
+            reason: 'تم إيقاف الإنشاء',
           ),
         );
       default:

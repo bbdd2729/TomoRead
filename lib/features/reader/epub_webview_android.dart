@@ -405,7 +405,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     if (readerSession.hasError || epubManifest.hasError) {
       final providerError = readerSession.error ?? epubManifest.error;
       return _AndroidEpubLoadFailure(
-        message: '无法准备 EPUB 阅读资源：$providerError',
+        message: 'تعذر إعداد مورد قراءة EPUB: $providerError',
         onRetry: () {
           ref.invalidate(epubReaderSessionProvider(bookId));
           ref.invalidate(readerManifestProvider(bookId));
@@ -420,7 +420,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
     }
     if (runtimeDocument.hasError) {
       return _AndroidEpubLoadFailure(
-        message: '无法准备 EPUB 渲染器：${runtimeDocument.error}',
+        message: 'تعذر إعداد عارض EPUB:${runtimeDocument.error}',
         onRetry: () => retryRevision.value += 1,
       );
     }
@@ -544,7 +544,7 @@ class AndroidEpubWebView extends HookConsumerWidget {
           const _AndroidEpubLoading(),
         if (loadPhase.value == _AndroidEpubLoadPhase.failed)
           _AndroidEpubLoadFailure(
-            message: '无法启动 EPUB 渲染器：${error.value}',
+            message: 'تعذر بدء عرض EPUB:${error.value}',
             onRetry: () => retryRevision.value += 1,
           ),
       ],
@@ -1113,7 +1113,7 @@ class _AndroidEpubLoading extends StatelessWidget {
         children: [
           CircularProgressIndicator(),
           SizedBox(height: 16),
-          Text('正在加载 EPUB…'),
+          Text('جارٍ تحميل EPUB...'),
         ],
       ),
     ),
@@ -1142,7 +1142,7 @@ class _AndroidEpubLoadFailure extends StatelessWidget {
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('重新加载'),
+              label: const Text('إعادة التحميل'),
             ),
           ],
         ),

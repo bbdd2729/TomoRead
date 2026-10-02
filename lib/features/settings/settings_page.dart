@@ -60,19 +60,19 @@ class SettingsPage extends HookConsumerWidget {
           final accepted = await showDialog<bool>(
             context: context,
             builder: (dialogContext) => AlertDialog(
-              title: const Text('导入阅读字体'),
+              title: const Text('استيراد خطوط القراءة'),
               content: const Text(
-                '字体文件会复制到应用数据目录。请确认你有权使用该字体；'
-                'TomoRead 不会替你取得或验证字体许可证。',
+                'يتم نسخ ملف الخط إلى دليل بيانات التطبيق. يرجى تأكيد أن لديك إذنًا باستخدام هذا الخط ؛'
+                'لا تحصل TomoRead على تراخيص الخطوط أو تتحقق منها نيابة عنك.',
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogContext, false),
-                  child: const Text('取消'),
+                  child: const Text('إلغاء'),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.pop(dialogContext, true),
-                  child: const Text('选择文件'),
+                  child: const Text('اختر ملفا…'),
                 ),
               ],
             ),
@@ -91,7 +91,7 @@ class SettingsPage extends HookConsumerWidget {
             if (context.mounted) {
               ScaffoldMessenger.of(
                 context,
-              ).showSnackBar(SnackBar(content: Text('字体导入失败：$error')));
+              ).showSnackBar(SnackBar(content: Text('فشل استيراد الخط: $error')));
             }
           }
         },
@@ -101,16 +101,16 @@ class SettingsPage extends HookConsumerWidget {
                 final accepted = await showDialog<bool>(
                   context: context,
                   builder: (dialogContext) => AlertDialog(
-                    title: const Text('删除已导入字体？'),
-                    content: const Text('所有引用该字体的全局及单本书设置会先替换为系统默认字体。'),
+                    title: const Text('هل تريد حذف الخطوط المستوردة ؟'),
+                    content: const Text('سيتم أولاً استبدال جميع إعدادات الكتب العامة والمفردة التي تشير إلى هذا الخط بالخط الافتراضي للنظام.'),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(dialogContext, false),
-                        child: const Text('取消'),
+                        child: const Text('إلغاء'),
                       ),
                       FilledButton(
                         onPressed: () => Navigator.pop(dialogContext, true),
-                        child: const Text('替换并删除'),
+                        child: const Text('استبدال وحذف'),
                       ),
                     ],
                   ),
@@ -130,7 +130,7 @@ class SettingsPage extends HookConsumerWidget {
                   if (context.mounted) {
                     ScaffoldMessenger.of(
                       context,
-                    ).showSnackBar(SnackBar(content: Text('字体删除失败：$error')));
+                    ).showSnackBar(SnackBar(content: Text('فشل حذف الخط: $error')));
                   }
                 }
               },
@@ -150,14 +150,14 @@ class SettingsPage extends HookConsumerWidget {
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 28, 20, 40),
             children: [
-              const PageHeader(title: '设置', subtitle: '调整应用外观和默认阅读偏好。'),
+              const PageHeader(title: 'الإعدادات', subtitle: 'اضبط مظهر التطبيق وتفضيلات القراءة الافتراضية.'),
               const SizedBox(height: 24),
               DropdownButtonFormField<_SettingsSection>(
                 key: const Key('settings-section-selector'),
                 initialValue: section.value,
                 isExpanded: true,
                 decoration: const InputDecoration(
-                  labelText: '设置分类',
+                  labelText: 'تعيين الفئات',
                   border: OutlineInputBorder(),
                 ),
                 items: [
@@ -237,29 +237,29 @@ class _SettingsNavigation extends StatelessWidget {
     children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Text('设置', style: Theme.of(context).textTheme.titleLarge),
+        child: Text('الإعدادات', style: Theme.of(context).textTheme.titleLarge),
       ),
       _NavigationItem(
         icon: Icons.palette_outlined,
-        label: '应用外观',
+        label: 'المظهر',
         selected: selected == _SettingsSection.appearance,
         onTap: () => onSelected(_SettingsSection.appearance),
       ),
       _NavigationItem(
         icon: Icons.menu_book_outlined,
-        label: '默认阅读',
+        label: 'القراءة الافتراضية',
         selected: selected == _SettingsSection.reading,
         onTap: () => onSelected(_SettingsSection.reading),
       ),
       _NavigationItem(
         icon: Icons.hub_outlined,
-        label: 'AI 与向量模型',
+        label: 'نماذج الذكاء الاصطناعي والمتجهات',
         selected: selected == _SettingsSection.aiVector,
         onTap: () => onSelected(_SettingsSection.aiVector),
       ),
       _NavigationItem(
         icon: Icons.shield_outlined,
-        label: '数据与隐私',
+        label: 'البيانات والخصوصية',
         selected: selected == _SettingsSection.dataPrivacy,
         onTap: () => onSelected(_SettingsSection.dataPrivacy),
       ),
@@ -330,7 +330,7 @@ class _AppearanceSettings extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const _SettingsHeading('应用字体'),
+      const _SettingsHeading('تطبيق الخط'),
       DropdownButtonFormField<FontChoice>(
         initialValue: appearance.uiFont,
         decoration: const InputDecoration(border: OutlineInputBorder()),
@@ -343,23 +343,23 @@ class _AppearanceSettings extends StatelessWidget {
         },
       ),
       const SizedBox(height: 32),
-      const _SettingsHeading('显示模式'),
+      const _SettingsHeading('وضع العرض'),
       SegmentedButton<ThemeMode>(
         segments: const [
           ButtonSegment(
             value: ThemeMode.system,
             icon: Icon(Icons.brightness_auto),
-            label: Text('跟随系统'),
+            label: Text('اتبع النظام'),
           ),
           ButtonSegment(
             value: ThemeMode.light,
             icon: Icon(Icons.light_mode_outlined),
-            label: Text('浅色'),
+            label: Text('الضوء'),
           ),
           ButtonSegment(
             value: ThemeMode.dark,
             icon: Icon(Icons.dark_mode_outlined),
-            label: Text('深色'),
+            label: Text('داكن'),
           ),
         ],
         selected: {appearance.mode},
@@ -367,9 +367,9 @@ class _AppearanceSettings extends StatelessWidget {
             onChanged(appearance.copyWith(mode: selection.first)),
       ),
       const SizedBox(height: 32),
-      const _SettingsHeading('界面配色'),
+      const _SettingsHeading('نظام ألوان الواجهة'),
       Text(
-        '配色会同步应用界面、EPUB 与 TXT 阅读背景；PDF 保留原始页面颜色，仅调整阅读区底色。',
+        'يقوم نظام الألوان بمزامنة خلفيات قراءة واجهة التطبيق و EPUB و TXT ؛ يحتفظ PDF بلون الصفحة الأصلي ويضبط فقط لون خلفية منطقة القراءة.',
         style: Theme.of(context).textTheme.bodyMedium,
       ),
       const SizedBox(height: 12),
@@ -387,7 +387,7 @@ class _AppearanceSettings extends StatelessWidget {
         ],
       ),
       const SizedBox(height: 32),
-      const _SettingsHeading('主题色'),
+      const _SettingsHeading('لون القالب'),
       Wrap(
         spacing: 12,
         runSpacing: 12,
@@ -411,7 +411,7 @@ class _AppearanceSettings extends StatelessWidget {
         ],
       ),
       const SizedBox(height: 32),
-      const _SettingsHeading('界面文字缩放'),
+      const _SettingsHeading('تحجيم نص الواجهة'),
       Row(
         children: [
           const Text('A', style: TextStyle(fontSize: 14)),
@@ -450,7 +450,7 @@ class _ThemeStyleCard extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${style.label}配色，${style.description}',
+      label: '${style.label}موائمة الألوان${style.description}',
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
@@ -576,7 +576,7 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SettingsHeading('默认书本字体'),
+        const _SettingsHeading('خط الكتاب الافتراضي'),
         DropdownButtonFormField<ReadingFontRef>(
           initialValue: settings.font,
           decoration: const InputDecoration(border: OutlineInputBorder()),
@@ -589,9 +589,9 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
           },
         ),
         const SizedBox(height: 32),
-        const _SettingsHeading('默认阅读主题'),
+        const _SettingsHeading('موضوع القراءة الافتراضي'),
         Text(
-          '阅读主题独立于应用界面，可在单本书的阅读设置中覆盖。',
+          'موضوع القراءة مستقل عن واجهة التطبيق ويمكن تجاوزه في إعدادات القراءة لكتاب واحد.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 12),
@@ -615,12 +615,12 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Text(
-              '无法读取自定义主题：${customThemes.error}',
+              'غير قادر على قراءة القالب المخصص:${customThemes.error}',
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),
         const SizedBox(height: 32),
-        _SettingsHeading('默认书本字号 ${settings.fontSize.round()}'),
+        _SettingsHeading('حجم الكتاب الافتراضي${settings.fontSize.round()}'),
         Slider(
           value: settings.fontSize,
           min: 14,
@@ -630,7 +630,7 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
           onChanged: (value) => onChanged(settings.copyWith(fontSize: value)),
         ),
         const SizedBox(height: 24),
-        _SettingsHeading('默认书本行高 ${settings.lineHeight.toStringAsFixed(1)}'),
+        _SettingsHeading('ارتفاع سطر الكتاب الافتراضي${settings.lineHeight.toStringAsFixed(1)}'),
         Slider(
           value: settings.lineHeight,
           min: 1.4,
@@ -640,7 +640,7 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
           onChanged: (value) => onChanged(settings.copyWith(lineHeight: value)),
         ),
         const SizedBox(height: 32),
-        const _SettingsHeading('阅读布局'),
+        const _SettingsHeading('تخطيط القراءة'),
         SegmentedButton<ReaderLayoutMode>(
           segments: [
             for (final mode in ReaderLayoutMode.values)
@@ -659,7 +659,7 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
               onChanged(settings.copyWith(layoutMode: selection.first)),
         ),
         const SizedBox(height: 24),
-        const _SettingsHeading('分页动画'),
+        const _SettingsHeading('حركة ترقيم الصفحات'),
         SegmentedButton<ReaderPageTransition>(
           segments: [
             for (final transition in ReaderPageTransition.values)
@@ -685,8 +685,8 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
           value: settings.doubleColumn,
           onChanged: (value) =>
               onChanged(settings.copyWith(doubleColumn: value)),
-          title: const Text('宽屏双栏'),
-          subtitle: const Text('分页阅读在宽屏显示双栏，窄屏自动使用单栏。'),
+          title: const Text('شاشة عريضة ذات عمود مزدوج'),
+          subtitle: const Text('تعرض قراءة ترقيم الصفحات عمودين على الشاشة العريضة ويتم استخدام عمود واحد تلقائيًا على الشاشة الضيقة.'),
         ),
         const SizedBox(height: 8),
         SwitchListTile(
@@ -694,8 +694,8 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
           value: settings.tapToTurnPages,
           onChanged: (value) =>
               onChanged(settings.copyWith(tapToTurnPages: value)),
-          title: const Text('点击区域翻页（实验性）'),
-          subtitle: const Text('点击正文左右区域时按一个视口前进或后退。'),
+          title: const Text('انقر فوق المنطقة لقلب الصفحة (تجريبي)'),
+          subtitle: const Text('اضغط على منفذ عرض للأمام أو للخلف عند النقر على المناطق اليسرى واليمنى من الجسم.'),
         ),
         VolumeKeyPageTurningSetting(
           settings: settings,
@@ -707,13 +707,13 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
             TextButton.icon(
               onPressed: fontsLoading ? null : onImportFont,
               icon: const Icon(Icons.font_download_outlined),
-              label: const Text('导入字体'),
+              label: const Text('استيراد الخطوط'),
             ),
             if (onDeleteFont != null)
               TextButton.icon(
                 onPressed: onDeleteFont,
                 icon: const Icon(Icons.delete_outline),
-                label: const Text('删除当前字体'),
+                label: const Text('حذف الخط الحالي'),
               ),
             if (fontsLoading) ...[
               const SizedBox(width: 12),
@@ -728,7 +728,7 @@ class _ReadingDefaultsSettings extends ConsumerWidget {
         const SizedBox(height: 32),
         const Divider(),
         const SizedBox(height: 24),
-        const _SettingsHeading('文本前景色'),
+        const _SettingsHeading('لون مقدمة النص'),
         TextColoringSettingsPanel(
           settings: textColoring,
           loading: textColoringLoading,
@@ -772,10 +772,10 @@ class _DataPrivacySettings extends StatelessWidget {
 }
 
 String _sectionTitle(_SettingsSection section) => switch (section) {
-  _SettingsSection.appearance => '应用外观',
-  _SettingsSection.reading => '默认阅读',
-  _SettingsSection.aiVector => 'AI 与向量模型',
-  _SettingsSection.dataPrivacy => '数据与隐私',
+  _SettingsSection.appearance => 'المظهر',
+  _SettingsSection.reading => 'القراءة الافتراضية',
+  _SettingsSection.aiVector => 'نماذج الذكاء الاصطناعي والمتجهات',
+  _SettingsSection.dataPrivacy => 'البيانات والخصوصية',
 };
 
 IconData _settingsSectionIcon(_SettingsSection section) => switch (section) {
@@ -804,8 +804,8 @@ List<ReadingFontRef> _availableReadingFonts(
 }
 
 String _sectionSubtitle(_SettingsSection section) => switch (section) {
-  _SettingsSection.appearance => '调整主题、颜色、字体和界面缩放。',
-  _SettingsSection.reading => '为新打开的 EPUB 书籍设置默认排版。',
-  _SettingsSection.aiVector => '独立配置 Embedding 服务、远端正文授权与语义索引。',
-  _SettingsSection.dataPrivacy => '创建可验证备份，安全恢复并清理可重建缓存。',
+  _SettingsSection.appearance => 'اضبط السمة واللون والخط وقياس الواجهة.',
+  _SettingsSection.reading => 'قم بتعيين الطباعة الافتراضية لكتب EPUB المفتوحة حديثًا.',
+  _SettingsSection.aiVector => 'تكوين خدمة التضمين، وتفويض الجسم عن بعد، والفهرسة الدلالية بشكل مستقل.',
+  _SettingsSection.dataPrivacy => 'إنشاء نسخ احتياطية يمكن التحقق منها، واستردادها بشكل آمن وتنظيفها لإعادة بناء ذاكرة التخزين المؤقت.',
 };

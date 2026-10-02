@@ -31,13 +31,13 @@ class LibrarySelectionToolbar extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            tooltip: '退出多选',
+            tooltip: 'الخروج من التحديد المتعدد',
             onPressed: isWorking ? null : onCancel,
             icon: const Icon(Icons.close),
           ),
-          Expanded(child: Text('已选择 $selectedCount 本书')),
+          Expanded(child: Text('$selectedCount كتب محددة')),
           IconButton(
-            tooltip: allSelectedAreFavorite ? '取消收藏' : '收藏书籍',
+            tooltip: allSelectedAreFavorite ? 'إلغاء المفضلة' : 'الكتب المفضلة',
             onPressed: isWorking || selectedCount == 0
                 ? null
                 : onToggleFavorite,
@@ -46,14 +46,14 @@ class LibrarySelectionToolbar extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: '设置分类',
+            tooltip: 'تعيين الفئات',
             onPressed: isWorking || selectedCount == 0
                 ? null
                 : onChangeCategory,
             icon: const Icon(Icons.folder_outlined),
           ),
           IconButton(
-            tooltip: '删除书籍',
+            tooltip: 'حذف الكتاب',
             onPressed: isWorking || selectedCount == 0 ? null : onDelete,
             icon: const Icon(Icons.delete_outline),
           ),
@@ -78,7 +78,7 @@ class CategoryDialog extends HookWidget {
   Widget build(BuildContext context) {
     final controller = useTextEditingController();
     return AlertDialog(
-      title: const Text('设置分类'),
+      title: const Text('تعيين الفئات'),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -89,7 +89,7 @@ class CategoryDialog extends HookWidget {
               controller: controller,
               autofocus: true,
               decoration: const InputDecoration(
-                labelText: '分类名称',
+                labelText: 'اسم الفئة',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -113,11 +113,11 @@ class CategoryDialog extends HookWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, const CategoryUpdate(null)),
-          child: const Text('清除分类'),
+          child: const Text('مسح الفئة'),
         ),
         FilledButton(
           onPressed: () {
@@ -125,7 +125,7 @@ class CategoryDialog extends HookWidget {
             if (category.isEmpty) return;
             Navigator.pop(context, CategoryUpdate(category));
           },
-          child: const Text('保存'),
+          child: const Text('حفظ'),
         ),
       ],
     );

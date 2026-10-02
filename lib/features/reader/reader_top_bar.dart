@@ -75,46 +75,46 @@ class ReaderTopBar extends StatelessWidget {
       unawaited(
         showReaderMoreSheet(
           context,
-          title: '更多阅读操作',
+          title: 'قراءة المزيد من الإجراءات',
           groups: [
             ReaderChromeActionGroup(
-              title: '查阅',
+              title: 'يبحث...',
               actions: [
                 ReaderChromeAction(
                   id: 'notes',
                   key: const Key('reader-side-panel'),
-                  label: '书签与笔记',
+                  label: 'الإشارات المرجعية والملاحظات',
                   icon: Icons.sticky_note_2_outlined,
                   onPressed: onToggleSidePanel,
                 ),
                 ReaderChromeAction(
                   id: 'bookmark',
                   key: const Key('reader-bookmark'),
-                  label: bookmarked ? '移除书签' : '添加书签',
+                  label: bookmarked ? 'إزالة الإشارة المرجعية' : 'أضف علامة',
                   icon: bookmarked ? Icons.bookmark : Icons.bookmark_border,
                   onPressed: onToggleBookmark,
                 ),
                 ReaderChromeAction(
                   id: 'search',
-                  label: '搜索书内内容',
+                  label: 'البحث في محتويات الكتاب',
                   icon: Icons.search,
                   onPressed: onOpenSearch,
                 ),
                 ReaderChromeAction(
                   id: 'annotation',
-                  label: '高亮或添加笔记',
+                  label: 'تمييز أو إضافة ملاحظات',
                   icon: Icons.highlight_alt_outlined,
                   onPressed: canCreateAnnotation ? onCreateAnnotation : null,
-                  disabledDescription: '请先选择文本',
+                  disabledDescription: 'يرجى تحديد النص أولاً',
                 ),
               ],
             ),
             ReaderChromeActionGroup(
-              title: '阅读',
+              title: 'القراءة',
               actions: [
                 ReaderChromeAction(
                   id: 'tts',
-                  label: '系统朗读',
+                  label: 'النظام يتحدث',
                   icon: Icons.headphones_outlined,
                   onPressed: () {
                     if (autoScrollActive) onToggleAutoScroll();
@@ -123,17 +123,17 @@ class ReaderTopBar extends StatelessWidget {
                 ),
                 ReaderChromeAction(
                   id: 'auto-scroll',
-                  label: autoScrollActive ? '停止自动滚动' : '开始自动滚动',
+                  label: autoScrollActive ? 'إيقاف التمرير التلقائي' : 'ابدأ التمرير التلقائي',
                   icon: autoScrollActive
                       ? Icons.pause_circle_outline
                       : Icons.slow_motion_video_outlined,
                   onPressed: canAutoScroll ? onToggleAutoScroll : null,
-                  disabledDescription: '自动滚动仅支持滚动布局',
+                  disabledDescription: 'يدعم التمرير التلقائي تخطيط التمرير فقط',
                   selected: autoScrollActive,
                 ),
                 ReaderChromeAction(
                   id: 'pomodoro',
-                  label: '阅读专注计时',
+                  label: 'قراءة توقيت التركيز',
                   icon: Icons.timer_outlined,
                   onPressed: () {
                     if (autoScrollActive) onToggleAutoScroll();
@@ -147,36 +147,36 @@ class ReaderTopBar extends StatelessWidget {
                 ),
                 ReaderChromeAction(
                   id: 'focus',
-                  label: '隐藏阅读控制',
+                  label: 'إخفاء عناصر التحكم في القراءة',
                   icon: Icons.center_focus_strong_outlined,
                   onPressed: onHideControls,
                 ),
               ],
             ),
             ReaderChromeActionGroup(
-              title: '智能工具',
+              title: 'الأدوات الذكية',
               actions: [
                 ReaderChromeAction(
                   id: 'assistant',
-                  label: '阅读助手',
+                  label: 'مساعد قراءة',
                   icon: Icons.auto_awesome_outlined,
                   onPressed: onOpenAssistant,
                 ),
                 ReaderChromeAction(
                   id: 'visualization',
-                  label: '词云与思维导图',
+                  label: 'سحابة الكلمات والخرائط الذهنية',
                   icon: Icons.account_tree_outlined,
                   onPressed: onOpenVisualization,
                 ),
               ],
             ),
             ReaderChromeActionGroup(
-              title: '设置',
+              title: 'الإعدادات',
               actions: [
                 ReaderChromeAction(
                   id: 'book-settings',
                   key: const Key('reader-book-settings'),
-                  label: '本书阅读设置',
+                  label: 'إعدادات قراءة الكتاب',
                   icon: Icons.format_size,
                   onPressed: onOpenBookSettings,
                 ),
@@ -207,7 +207,7 @@ class ReaderTopBar extends StatelessWidget {
             children: [
               ReaderChromeIconButton(
                 key: const Key('reader-back'),
-                tooltip: '返回书库',
+                tooltip: 'العودة إلى المكتبة',
                 icon: Icons.arrow_back,
                 onPressed: onExitReader,
               ),
@@ -226,20 +226,20 @@ class ReaderTopBar extends StatelessWidget {
               const SizedBox(width: ReaderChromeLayout.actionGap),
               ReaderChromeIconButton(
                 key: const Key('reader-bookmark'),
-                tooltip: bookmarked ? '移除书签' : '添加书签',
+                tooltip: bookmarked ? 'إزالة الإشارة المرجعية' : 'أضف علامة',
                 icon: bookmarked ? Icons.bookmark : Icons.bookmark_border,
                 onPressed: onToggleBookmark,
               ),
               const SizedBox(width: ReaderChromeLayout.actionGap),
               ReaderChromeIconButton(
-                tooltip: '搜索书内内容',
+                tooltip: 'البحث في محتويات الكتاب',
                 icon: Icons.search,
                 onPressed: onOpenSearch,
               ),
               const SizedBox(width: ReaderChromeLayout.actionGap),
               ReaderChromeIconButton(
                 key: const Key('reader-mobile-more'),
-                tooltip: '更多阅读操作',
+                tooltip: 'قراءة المزيد من الإجراءات',
                 icon: Icons.more_vert,
                 onPressed: openMoreSheet,
               ),
@@ -256,16 +256,16 @@ class ReaderTopBar extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
-              tooltip: '返回书库',
+              tooltip: 'العودة إلى المكتبة',
               onPressed: onExitReader,
               icon: const Icon(Icons.arrow_back),
             ),
             IconButton(
               tooltip: mobileReaderControls
-                  ? '打开目录'
+                  ? 'فتح الدليل'
                   : tocVisible
-                  ? '隐藏目录'
-                  : '显示目录',
+                  ? 'إخفاء الكتالوج'
+                  : 'عرض جدول المحتويات',
               onPressed: onToggleToc,
               key: const Key('reader-toc'),
               icon: Icon(
@@ -278,24 +278,24 @@ class ReaderTopBar extends StatelessWidget {
             ),
             IconButton(
               tooltip: mobileReaderControls
-                  ? '打开书签和笔记'
+                  ? 'فتح الإشارات المرجعية والملاحظات'
                   : sidePanelVisible
-                  ? '隐藏笔记面板'
-                  : '显示笔记面板',
+                  ? 'إخفاء لوحة الملاحظات'
+                  : 'عرض لوحة الملاحظات',
               onPressed: onToggleSidePanel,
               key: const Key('reader-side-panel'),
               icon: const Icon(Icons.sticky_note_2_outlined),
             ),
             if (!mobileReaderControls) const VerticalDivider(width: 20),
             IconButton(
-              tooltip: bookmarked ? '移除书签' : '添加书签',
+              tooltip: bookmarked ? 'إزالة الإشارة المرجعية' : 'أضف علامة',
               onPressed: onToggleBookmark,
               key: const Key('reader-bookmark'),
               icon: Icon(bookmarked ? Icons.bookmark : Icons.bookmark_border),
             ),
             if (!mobileReaderControls)
               IconButton(
-                tooltip: canCreateAnnotation ? '高亮或添加笔记' : '请先选择文本',
+                tooltip: canCreateAnnotation ? 'تمييز أو إضافة ملاحظات' : 'يرجى تحديد النص أولاً',
                 onPressed: canCreateAnnotation ? onCreateAnnotation : null,
                 icon: const Icon(Icons.highlight_alt_outlined),
               ),
@@ -309,9 +309,9 @@ class ReaderTopBar extends StatelessWidget {
               key: const Key('reader-auto-scroll'),
               tooltip: canAutoScroll
                   ? autoScrollActive
-                        ? '停止自动滚动'
-                        : '开始自动滚动'
-                  : '自动滚动仅支持滚动布局',
+                        ? 'إيقاف التمرير التلقائي'
+                        : 'ابدأ التمرير التلقائي'
+                  : 'يدعم التمرير التلقائي تخطيط التمرير فقط',
               onPressed: canAutoScroll ? onToggleAutoScroll : null,
               isSelected: autoScrollActive,
               icon: Icon(
@@ -327,33 +327,33 @@ class ReaderTopBar extends StatelessWidget {
               ),
             if (!mobileReaderControls)
               IconButton(
-                tooltip: '搜索书内内容',
+                tooltip: 'البحث في محتويات الكتاب',
                 onPressed: onOpenSearch,
                 icon: const Icon(Icons.search),
               ),
             if (!mobileReaderControls)
               IconButton(
-                tooltip: '阅读助手',
+                tooltip: 'مساعد قراءة',
                 onPressed: onOpenAssistant,
                 icon: const Icon(Icons.auto_awesome_outlined),
               ),
             if (!mobileReaderControls)
               IconButton(
-                tooltip: '词云与思维导图',
+                tooltip: 'سحابة الكلمات والخرائط الذهنية',
                 onPressed: onOpenVisualization,
                 icon: const Icon(Icons.account_tree_outlined),
               ),
             if (!mobileReaderControls) const VerticalDivider(width: 20),
             if (!mobileReaderControls)
               IconButton(
-                tooltip: '本书阅读设置',
+                tooltip: 'إعدادات قراءة الكتاب',
                 onPressed: onOpenBookSettings,
                 key: const Key('reader-book-settings'),
                 icon: const Icon(Icons.format_size),
               ),
             if (!mobileReaderControls)
               IconButton(
-                tooltip: '隐藏阅读控制',
+                tooltip: 'إخفاء عناصر التحكم في القراءة',
                 key: const Key('reader-focus-mode'),
                 onPressed: onHideControls,
                 icon: const Icon(Icons.center_focus_strong_outlined),
@@ -361,7 +361,7 @@ class ReaderTopBar extends StatelessWidget {
             if (mobileReaderControls)
               PopupMenuButton<_MobileReaderToolbarAction>(
                 key: const Key('reader-mobile-more'),
-                tooltip: '更多阅读控制',
+                tooltip: 'المزيد من عناصر التحكم في القراءة',
                 onSelected: (action) {
                   switch (action) {
                     case _MobileReaderToolbarAction.search:
@@ -389,42 +389,42 @@ class ReaderTopBar extends StatelessWidget {
                     value: _MobileReaderToolbarAction.search,
                     child: ListTile(
                       leading: Icon(Icons.search),
-                      title: Text('搜索书内内容'),
+                      title: Text('البحث في محتويات الكتاب'),
                     ),
                   ),
                   const PopupMenuItem(
                     value: _MobileReaderToolbarAction.assistant,
                     child: ListTile(
                       leading: Icon(Icons.auto_awesome_outlined),
-                      title: Text('阅读助手'),
+                      title: Text('مساعد قراءة'),
                     ),
                   ),
                   const PopupMenuItem(
                     value: _MobileReaderToolbarAction.visualization,
                     child: ListTile(
                       leading: Icon(Icons.account_tree_outlined),
-                      title: Text('词云与思维导图'),
+                      title: Text('سحابة الكلمات والخرائط الذهنية'),
                     ),
                   ),
                   const PopupMenuItem(
                     value: _MobileReaderToolbarAction.settings,
                     child: ListTile(
                       leading: Icon(Icons.format_size),
-                      title: Text('本书阅读设置'),
+                      title: Text('إعدادات قراءة الكتاب'),
                     ),
                   ),
                   const PopupMenuItem(
                     value: _MobileReaderToolbarAction.pomodoro,
                     child: ListTile(
                       leading: Icon(Icons.timer_outlined),
-                      title: Text('阅读专注计时'),
+                      title: Text('قراءة توقيت التركيز'),
                     ),
                   ),
                   PopupMenuItem(
                     value: _MobileReaderToolbarAction.focus,
                     child: ListTile(
                       leading: Icon(Icons.center_focus_strong_outlined),
-                      title: Text('隐藏阅读控制'),
+                      title: Text('إخفاء عناصر التحكم في القراءة'),
                     ),
                   ),
                 ],

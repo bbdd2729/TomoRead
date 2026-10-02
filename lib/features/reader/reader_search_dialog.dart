@@ -48,7 +48,7 @@ class ReaderSearchDialog extends HookConsumerWidget {
     }
 
     return AlertDialog(
-      title: const Text('搜索书内内容'),
+      title: const Text('البحث في محتويات الكتاب'),
       content: SizedBox(
         width: 680,
         height: 520,
@@ -59,10 +59,10 @@ class ReaderSearchDialog extends HookConsumerWidget {
               autofocus: true,
               onSubmitted: (_) => search(),
               decoration: InputDecoration(
-                hintText: '输入关键词',
+                hintText: 'أدخل الكلمات الرئيسية',
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
-                  tooltip: '搜索',
+                  tooltip: 'بحث',
                   onPressed: search,
                   icon: const Icon(Icons.search),
                 ),
@@ -73,9 +73,9 @@ class ReaderSearchDialog extends HookConsumerWidget {
               child: searching.value
                   ? const Center(child: CircularProgressIndicator())
                   : error.value != null
-                  ? Center(child: Text('搜索失败：${error.value}'))
+                  ? Center(child: Text('فشل البحث:${error.value}'))
                   : results.value.isEmpty
-                  ? const Center(child: Text('输入关键词后开始搜索。'))
+                  ? const Center(child: Text('ابدأ بحثك بإدخال الكلمات الرئيسية.'))
                   : ListView.separated(
                       itemCount: results.value.length,
                       separatorBuilder: (context, index) => const Divider(),
@@ -102,7 +102,7 @@ class ReaderSearchDialog extends HookConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: const Text('مغلق'),
         ),
       ],
     );

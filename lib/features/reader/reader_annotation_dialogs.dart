@@ -15,7 +15,7 @@ class BookmarkLabelDialog extends HookWidget {
   Widget build(BuildContext context) {
     final controller = useTextEditingController(text: bookmark.label ?? '');
     return AlertDialog(
-      title: const Text('编辑书签'),
+      title: const Text('تعديل الإشارة المرجعية'),
       content: SizedBox(
         width: 360,
         child: TextField(
@@ -23,7 +23,7 @@ class BookmarkLabelDialog extends HookWidget {
           autofocus: true,
           maxLength: 80,
           decoration: InputDecoration(
-            labelText: '书签名称',
+            labelText: 'اسم الإشارة المرجعية',
             hintText: bookmark.chapterTitle,
             border: const OutlineInputBorder(),
           ),
@@ -32,11 +32,11 @@ class BookmarkLabelDialog extends HookWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, controller.text),
-          child: const Text('保存'),
+          child: const Text('حفظ'),
         ),
       ],
     );
@@ -54,7 +54,7 @@ class AnnotationNoteDialog extends HookWidget {
       text: annotation.note ?? '',
     );
     return AlertDialog(
-      title: const Text('编辑笔记'),
+      title: const Text('تعديل الملاحظات'),
       scrollable: true,
       content: SizedBox(
         width: 440,
@@ -74,7 +74,7 @@ class AnnotationNoteDialog extends HookWidget {
               maxLines: 4,
               autofocus: true,
               decoration: const InputDecoration(
-                labelText: '笔记（留空以移除）',
+                labelText: 'ملاحظات (اتركه فارغًا للإزالة)',
                 alignLabelWithHint: true,
                 border: OutlineInputBorder(),
               ),
@@ -85,12 +85,12 @@ class AnnotationNoteDialog extends HookWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: () =>
               Navigator.pop(context, AnnotationNoteDraft(noteController.text)),
-          child: const Text('保存'),
+          child: const Text('حفظ'),
         ),
       ],
     );
@@ -107,7 +107,7 @@ class AnnotationDialog extends HookWidget {
     final color = useState(AnnotationColor.yellow);
     final noteController = useTextEditingController();
     return AlertDialog(
-      title: const Text('添加高亮与笔记'),
+      title: const Text('إضافة تمييز وملاحظات'),
       scrollable: true,
       content: SizedBox(
         width: 440,
@@ -146,7 +146,7 @@ class AnnotationDialog extends HookWidget {
               controller: noteController,
               maxLines: 4,
               decoration: const InputDecoration(
-                labelText: '笔记（可选）',
+                labelText: 'ملاحظات (اختيارية)',
                 alignLabelWithHint: true,
                 border: OutlineInputBorder(),
               ),
@@ -157,14 +157,14 @@ class AnnotationDialog extends HookWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(
             context,
             AnnotationDraft(color: color.value, note: noteController.text),
           ),
-          child: const Text('保存'),
+          child: const Text('حفظ'),
         ),
       ],
     );

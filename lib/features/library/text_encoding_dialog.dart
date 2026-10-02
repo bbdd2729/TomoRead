@@ -44,18 +44,18 @@ class _TextEncodingDialogState extends ConsumerState<TextEncodingDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('确认文本编码'),
+    title: const Text('تأكيد ترميز النص'),
     content: SizedBox(
       width: 560,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('自动识别结果置信度不足，请预览并选择正确编码。'),
+          const Text('نتائج التعرف التلقائي ليس لديها ثقة كافية، يرجى معاينة وتحديد الترميز الصحيح.'),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: encoding,
-            decoration: const InputDecoration(labelText: '编码'),
+            decoration: const InputDecoration(labelText: 'الترميز'),
             items: supportedTextEncodings
                 .map(
                   (value) => DropdownMenuItem(
@@ -80,23 +80,23 @@ class _TextEncodingDialogState extends ConsumerState<TextEncodingDialog> {
               child: loadingPreview
                   ? const Center(child: CircularProgressIndicator())
                   : previewError != null
-                  ? Text('无法使用该编码预览：$previewError')
+                  ? Text('لا يمكن استخدام هذا الترميز للمعاينة: $previewError')
                   : SelectableText(preview),
             ),
           ),
           const SizedBox(height: 8),
-          const Text('选择后会重新解码并重建章节；原始文件不会被改写。'),
+          const Text('بمجرد تحديده، سيتم إعادة ترميز الفصل وإعادة بنائه ؛ لن يتم استبدال الملف الأصلي.'),
         ],
       ),
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
+        child: const Text('إلغاء'),
       ),
       FilledButton(
         onPressed: () => Navigator.pop(context, encoding),
-        child: const Text('使用此编码导入'),
+        child: const Text('استيراد باستخدام هذا الترميز'),
       ),
     ],
   );

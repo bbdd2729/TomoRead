@@ -52,7 +52,7 @@ class ChatConversationPane extends StatelessWidget {
               children: [
                 if (onShowThreads != null)
                   IconButton(
-                    tooltip: '对话列表',
+                    tooltip: 'قائمة المحادثات',
                     onPressed: onShowThreads,
                     icon: const Icon(Icons.history),
                   ),
@@ -63,12 +63,12 @@ class ChatConversationPane extends StatelessWidget {
                       Text(
                         chat.activeThread?.title.isNotEmpty == true
                             ? chat.activeThread!.title
-                            : '新对话',
+                            : 'محادثة جديدة',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       Text(
                         chat.profile == null
-                            ? '尚未配置模型'
+                            ? 'لم يتم تكوين الطراز'
                             : '${chat.profile!.name} · ${chat.profile!.modelId}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
@@ -76,7 +76,7 @@ class ChatConversationPane extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: '模型设置',
+                  tooltip: 'إعدادات الطراز',
                   onPressed: onConfigure,
                   icon: const Icon(Icons.tune),
                 ),
@@ -86,9 +86,9 @@ class ChatConversationPane extends StatelessWidget {
         ),
         if (chat.profile == null)
           MaterialBanner(
-            content: const Text('配置一个 OpenAI 兼容模型后即可开始对话。API Key 只保存在系统安全存储中。'),
+            content: const Text('تكوين نموذج متوافق مع OpenAI لبدء المحادثة. يتم تخزين مفتاح واجهة برمجة التطبيقات (API) فقط في المتجر الآمن للنظام.'),
             actions: [
-              TextButton(onPressed: onConfigure, child: const Text('配置模型')),
+              TextButton(onPressed: onConfigure, child: const Text('نموذج التهيئة')),
             ],
           ),
         Expanded(
@@ -116,7 +116,7 @@ class ChatConversationPane extends StatelessWidget {
                   right: 20,
                   bottom: 14,
                   child: IconButton.filledTonal(
-                    tooltip: '回到底部',
+                    tooltip: 'العودة إلى الأسفل',
                     onPressed: onScrollToBottom,
                     icon: const Icon(Icons.arrow_downward),
                   ),
@@ -170,7 +170,7 @@ class ChatConversationPane extends StatelessWidget {
                           maxLines: 6,
                           enabled: !chat.isStreaming,
                           decoration: const InputDecoration(
-                            hintText: '询问书中内容、概念或想法',
+                            hintText: 'اسأل عن المحتوى أو المفاهيم أو الأفكار في الكتاب',
                           ),
                           onSubmitted: (_) {
                             if (!chat.isStreaming) onSend();
@@ -179,7 +179,7 @@ class ChatConversationPane extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       IconButton.filled(
-                        tooltip: chat.isStreaming ? '停止生成' : '发送',
+                        tooltip: chat.isStreaming ? 'إيقاف التوليد' : 'ارسال',
                         onPressed: chat.isStreaming ? onStop : onSend,
                         icon: Icon(
                           chat.isStreaming ? Icons.stop : Icons.arrow_upward,
@@ -215,13 +215,13 @@ class _AttachedQuote extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '${attachment.bookTitle} · ${attachment.chapterTitle ?? '当前章节'}\n${attachment.quote.replaceAll(RegExp(r'\s+'), ' ')}',
+              '${attachment.bookTitle} · ${attachment.chapterTitle ?? 'القسم الحالي'}\n${attachment.quote.replaceAll(RegExp(r'\s+'), ' ')}',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),
           IconButton(
-            tooltip: '移除引用',
+            tooltip: 'إزالة المرجع',
             onPressed: onRemove,
             icon: const Icon(Icons.close, size: 18),
           ),
@@ -247,9 +247,9 @@ class _AttachedSkill extends StatelessWidget {
         children: [
           const Icon(Icons.auto_awesome_outlined, size: 18),
           const SizedBox(width: 8),
-          Expanded(child: Text('已选择技能：${_skillDisplayName(skillId)}')),
+          Expanded(child: Text('المهارات المختارة:${_skillDisplayName(skillId)}')),
           IconButton(
-            tooltip: '移除技能',
+            tooltip: 'إزالة المهارة',
             onPressed: onRemove,
             icon: const Icon(Icons.close, size: 18),
           ),
@@ -260,9 +260,9 @@ class _AttachedSkill extends StatelessWidget {
 }
 
 String _skillDisplayName(String id) => switch (id) {
-  'chapter-summary' => '章节总结',
-  'concept-explainer' => '概念解释',
-  'structure-analysis' => '结构梳理',
+  'chapter-summary' => 'ملخص الفصل',
+  'concept-explainer' => 'تفسير المفهوم',
+  'structure-analysis' => 'التزيين الهيكلي',
   _ => id,
 };
 
@@ -278,9 +278,9 @@ class _EmptyConversation extends StatelessWidget {
         children: [
           const Icon(Icons.auto_awesome_outlined, size: 48),
           const SizedBox(height: 14),
-          Text('从一个具体问题开始', style: Theme.of(context).textTheme.titleMedium),
+          Text('ابدأ بسؤال محدد', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
-          const Text('在阅读器中选择原文后提问，可以得到带出处的回答。', textAlign: TextAlign.center),
+          const Text('بعد تحديد النص الأصلي في القارئ، يمكنك طرح الأسئلة والحصول على إجابات من المصدر.', textAlign: TextAlign.center),
         ],
       ),
     ),

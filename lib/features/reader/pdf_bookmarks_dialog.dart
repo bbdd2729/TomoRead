@@ -10,12 +10,12 @@ class PdfBookmarksDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('PDF 书签'),
+      title: const Text('إشارات مرجعية PDF'),
       content: SizedBox(
         width: 440,
         height: 420,
         child: bookmarks.isEmpty
-            ? const Center(child: Text('当前 PDF 还没有书签。'))
+            ? const Center(child: Text('لا توجد إشارات مرجعية لملف PDF الحالي.'))
             : ListView.separated(
                 itemCount: bookmarks.length,
                 separatorBuilder: (context, index) => const Divider(),
@@ -26,7 +26,7 @@ class PdfBookmarksDialog extends StatelessWidget {
                     leading: const Icon(Icons.bookmark),
                     title: Text(bookmark.label ?? bookmark.chapterTitle),
                     subtitle: Text(
-                      '保存于 ${bookmark.createdAt.hour.toString().padLeft(2, '0')}:${bookmark.createdAt.minute.toString().padLeft(2, '0')}',
+                      'تم الحفظ في${bookmark.createdAt.hour.toString().padLeft(2, '0')}:${bookmark.createdAt.minute.toString().padLeft(2, '0')}',
                     ),
                     onTap: () => Navigator.pop(context, bookmark),
                   );
@@ -36,7 +36,7 @@ class PdfBookmarksDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: const Text('مغلق'),
         ),
       ],
     );

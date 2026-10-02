@@ -32,7 +32,7 @@ Future<void> configureAiProvider(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
-        title: const Text('AI 服务商与模型'),
+        title: const Text('مقدمو ونماذج خدمات الذكاء الاصطناعي'),
         content: SizedBox(
           width: 560,
           child: SingleChildScrollView(
@@ -41,17 +41,17 @@ Future<void> configureAiProvider(
               children: [
                 DropdownButtonFormField<String?>(
                   initialValue: selectedProfileId,
-                  decoration: const InputDecoration(labelText: '配置方案'),
+                  decoration: const InputDecoration(labelText: 'تكوين السيناريوهات'),
                   items: [
                     const DropdownMenuItem<String?>(
                       value: null,
-                      child: Text('新建配置'),
+                      child: Text('تكوين جديد'),
                     ),
                     ...profiles.map(
                       (item) => DropdownMenuItem<String?>(
                         value: item.id,
                         child: Text(
-                          '${item.name}${item.isActive ? '（当前）' : ''}',
+                          '${item.name}${item.isActive ? 'الوضع الراهن' : ''}',
                         ),
                       ),
                     ),
@@ -82,7 +82,7 @@ Future<void> configureAiProvider(
                 DropdownButtonFormField<String>(
                   key: ValueKey('provider-preset-$selectedPresetId'),
                   initialValue: selectedPresetId,
-                  decoration: const InputDecoration(labelText: '服务商预设'),
+                  decoration: const InputDecoration(labelText: 'الإعدادات المسبقة لمقدم الخدمة'),
                   items: AiProviderCatalog.presets
                       .where((item) => !item.deprecated)
                       .map(
@@ -118,7 +118,7 @@ Future<void> configureAiProvider(
                 const SizedBox(height: 12),
                 TextField(
                   controller: name,
-                  decoration: const InputDecoration(labelText: '名称'),
+                  decoration: const InputDecoration(labelText: 'الاسم'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -129,8 +129,8 @@ Future<void> configureAiProvider(
                 TextField(
                   controller: model,
                   decoration: const InputDecoration(
-                    labelText: '模型',
-                    hintText: '可手动输入，或从服务拉取',
+                    labelText: 'النموذج',
+                    hintText: 'يمكن إدخالها يدويًا أو سحبها من الخدمة',
                   ),
                 ),
                 if (fetchedModels.isNotEmpty) ...[
@@ -158,24 +158,24 @@ Future<void> configureAiProvider(
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: preset.authType == AiProviderAuthType.none
-                        ? 'API Key（本地服务通常不需要）'
+                        ? 'مفتاح واجهة برمجة التطبيقات (عادةً غير مطلوب للخدمات المحلية)'
                         : editing == null
                         ? 'API Key'
-                        : 'API Key（留空保持不变）',
+                        : 'مفتاح واجهة برمجة التطبيقات (اتركه فارغًا لتركه دون تغيير)',
                   ),
                 ),
                 const SizedBox(height: 8),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Agent 工具'),
-                  subtitle: const Text('允许模型读取目录、标注和书中原文'),
+                  title: const Text('أدوات الوكيل'),
+                  subtitle: const Text('يسمح للنموذج بقراءة الكتالوجات والتعليقات التوضيحية والنص الأصلي في الكتب'),
                   value: toolsEnabled,
                   onChanged: (value) => setState(() => toolsEnabled = value),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('思考摘要'),
-                  subtitle: const Text('显示服务返回的可见 reasoning 内容'),
+                  title: const Text('ملخص التفكير'),
+                  subtitle: const Text('عرض محتوى الاستدلال المرئي الذي أرجعته الخدمة'),
                   value: reasoningEnabled,
                   onChanged: (value) =>
                       setState(() => reasoningEnabled = value),
@@ -196,7 +196,7 @@ Future<void> configureAiProvider(
           if (editing != null)
             TextButton.icon(
               onPressed: () async {
-                setState(() => probeStatus = '正在测试连接…');
+                setState(() => probeStatus = 'جارٍ اختبار الاتصال...');
                 try {
                   final result = await ref
                       .read(chatControllerProvider.notifier)
@@ -205,17 +205,17 @@ Future<void> configureAiProvider(
                   setState(() {
                     fetchedModels = result.models;
                     probeStatus = result.succeeded
-                        ? '连接成功 · HTTP ${result.statusCode} · ${result.latencyMillis} ms${result.models.isEmpty ? '' : ' · ${result.models.length} 个模型'}'
-                        : '连接失败：${result.errorCode} · HTTP ${result.statusCode ?? '-'}';
+                        ? 'تم الاتصال بنجاح · HTTP${result.statusCode} · ${result.latencyMillis} ms${result.models.isEmpty ? '' : ' · ${result.models.length} نماذج'}'
+                        : 'فشل اتصال!${result.errorCode} · HTTP ${result.statusCode ?? '-'}';
                   });
                 } on Object catch (error) {
                   if (context.mounted) {
-                    setState(() => probeStatus = '连接失败：$error');
+                    setState(() => probeStatus = 'فشل الاتصال: $error');
                   }
                 }
               },
               icon: const Icon(Icons.network_check),
-              label: const Text('测试并拉取模型'),
+              label: const Text('اختبار النموذج وسحبه'),
             ),
           if (editing != null && !editing!.isActive)
             TextButton(
@@ -225,7 +225,7 @@ Future<void> configureAiProvider(
                     .activateProvider(editing!.id);
                 if (context.mounted) Navigator.pop(context, false);
               },
-              child: const Text('设为当前'),
+              child: const Text('تعيين كتيار'),
             ),
           if (editing != null)
             TextButton(
@@ -235,15 +235,15 @@ Future<void> configureAiProvider(
                     .setProviderEnabled(editing!.id, !editing!.isEnabled);
                 if (context.mounted) Navigator.pop(context, false);
               },
-              child: Text(editing!.isEnabled ? '停用' : '启用'),
+              child: Text(editing!.isEnabled ? 'تعطيل' : 'تمكين '),
             ),
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: const Text('إلغاء'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('保存'),
+            child: const Text('حفظ'),
           ),
         ],
       ),
@@ -279,7 +279,7 @@ Future<void> configureAiProvider(
     if (context.mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('保存模型配置失败：$error')));
+      ).showSnackBar(SnackBar(content: Text('فشل حفظ تكوين النموذج: $error')));
     }
   } finally {
     name.dispose();

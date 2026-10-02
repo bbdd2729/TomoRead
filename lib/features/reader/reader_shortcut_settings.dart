@@ -19,7 +19,7 @@ class ReaderShortcutSettingsPanel extends ConsumerWidget {
     final state = ref.watch(readerCommandSettingsProvider);
     return state.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Text('无法加载阅读快捷键：$error'),
+      error: (error, _) => Text('تعذر تحميل اختصار القراءة: $error'),
       data: (settings) => _ReaderShortcutSettingsContent(
         platform: platform,
         settings: settings,
@@ -69,35 +69,35 @@ class _ReaderShortcutSettingsContent extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                '桌面阅读快捷键',
+                'اختصارات قراءة سطح المكتب',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
             TextButton.icon(
               onPressed: onRestoreDefaults,
               icon: const Icon(Icons.restore),
-              label: const Text('恢复默认'),
+              label: const Text('استعد الإفتراضيات'),
             ),
           ],
         ),
         Text(
           platform == ReaderShortcutPlatform.windows
-              ? '当前编辑 Windows 快捷键。冲突组合和系统保留组合不会保存。'
-              : '当前编辑 Linux 快捷键。冲突组合和系统保留组合不会保存。',
+              ? 'يتم حاليًا تحرير اختصارات Windows. لن يتم حفظ مجموعات التعارض ومجموعات النظام المحجوزة.'
+              : 'أقوم حاليًا بتحرير اختصارات Linux. لن يتم حفظ مجموعات التعارض ومجموعات النظام المحجوزة.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 12),
         ExpansionTile(
           key: const Key('reader-shortcut-bindings'),
           tilePadding: EdgeInsets.zero,
-          title: const Text('命令绑定'),
-          subtitle: Text('${bindings.where((binding) => binding.enabled).length} 项已启用'),
+          title: const Text('أمر ملزم'),
+          subtitle: Text('${bindings.where((binding) => binding.enabled).length}تم تمكين العنصر'),
           children: [
             for (final binding in bindings)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(binding.command.label),
-                subtitle: Text(binding.chord?.label ?? '未设置'),
+                subtitle: Text(binding.chord?.label ?? 'لم يتم التحديد'),
                 leading: Switch(
                   value: binding.enabled,
                   onChanged: binding.chord == null
@@ -109,7 +109,7 @@ class _ReaderShortcutSettingsContent extends StatelessWidget {
                         ),
                 ),
                 trailing: IconButton(
-                  tooltip: '修改快捷键',
+                  tooltip: 'تعديل الاختصارات',
                   onPressed: !binding.userModifiable
                       ? null
                       : () async {
@@ -133,7 +133,7 @@ class _ReaderShortcutSettingsContent extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 24),
-        Text('自动滚动速度', style: Theme.of(context).textTheme.titleMedium),
+        Text('سرعة التمرير التلقائي', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),
         SegmentedButton<AutoScrollUnit>(
           segments: [
@@ -181,8 +181,8 @@ class _ReaderShortcutSettingsContent extends StatelessWidget {
               width: 96,
               child: Text(
                 autoScroll.unit == AutoScrollUnit.linesPerMinute
-                    ? '${autoScroll.speed.round()} 行/分'
-                    : '${autoScroll.speed.toStringAsFixed(1)} 屏/分',
+                    ? '${autoScroll.speed.round()}صفوف/دقيقة'
+                    : '${autoScroll.speed.toStringAsFixed(1)}الشاشة/دقيقة',
                 textAlign: TextAlign.end,
               ),
             ),
@@ -221,7 +221,7 @@ class _ShortcutChordDialogState extends State<_ShortcutChordDialog> {
           DropdownButtonFormField<String>(
             initialValue: _key,
             decoration: const InputDecoration(
-              labelText: '按键',
+              labelText: 'زر',
               border: OutlineInputBorder(),
             ),
             items: [
@@ -267,7 +267,7 @@ class _ShortcutChordDialogState extends State<_ShortcutChordDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
+        child: const Text('إلغاء'),
       ),
       FilledButton(
         onPressed: () => Navigator.pop(
@@ -280,7 +280,7 @@ class _ShortcutChordDialogState extends State<_ShortcutChordDialog> {
             meta: _meta,
           ),
         ),
-        child: const Text('保存'),
+        child: const Text('حفظ'),
       ),
     ],
   );

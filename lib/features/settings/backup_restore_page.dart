@@ -13,11 +13,11 @@ class BackupRestorePage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('备份与恢复', style: Theme.of(context).textTheme.titleLarge),
+        Text('النسخ الاحتياطي والاستعادة', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         Text(
-          '备份包含数据库一致性快照、托管原书、封面和已导入字体，'
-          '不会包含 API Key、WebDAV 密码或系统字体文件。',
+          'تتضمن النسخ الاحتياطية لقطات متسقة مع قاعدة البيانات والنسخ الأصلية المستضافة والأغلفة والخطوط المستوردة.'
+          'لن يتم تضمين مفتاح واجهة برمجة التطبيقات أو كلمة مرور WebDAV أو ملف خط النظام.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 20),
@@ -29,7 +29,7 @@ class BackupRestorePage extends ConsumerWidget {
               key: const Key('create-library-backup'),
               onPressed: state.running ? null : controller.createWithPicker,
               icon: const Icon(Icons.archive_outlined),
-              label: const Text('创建备份'),
+              label: const Text('إنشاء نسخة احتياطية'),
             ),
             OutlinedButton.icon(
               key: const Key('restore-library-backup'),
@@ -37,13 +37,13 @@ class BackupRestorePage extends ConsumerWidget {
                   ? null
                   : () => _confirmRestore(context, controller),
               icon: const Icon(Icons.settings_backup_restore),
-              label: const Text('从备份恢复'),
+              label: const Text('الاستعادة من النسخ الاحتياطي'),
             ),
             if (state.running)
               TextButton.icon(
                 onPressed: controller.cancel,
                 icon: const Icon(Icons.close),
-                label: const Text('取消'),
+                label: const Text('إلغاء'),
               ),
           ],
         ),
@@ -64,19 +64,19 @@ class BackupRestorePage extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('恢复书库？'),
+        title: const Text('استعادة المكتبة ؟'),
         content: const Text(
-          '恢复前会自动创建当前书库的回滚备份。只有在清单、哈希和数据库'
-          '完整性全部验证通过后才会切换数据；恢复期间请不要关闭应用。',
+          'يتم إنشاء نسخة احتياطية للمكتبة الحالية تلقائيًا قبل الاستعادة. فقط في البيانات والتجزئة وقواعد البيانات'
+          'لن يتم تبديل البيانات حتى يتم اجتياز جميع عمليات التحقق من السلامة ؛ لا تغلق التطبيق أثناء الاسترداد.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
+            child: const Text('إلغاء'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('选择备份'),
+            child: const Text('تحديد النسخ الاحتياطي'),
           ),
         ],
       ),
@@ -111,18 +111,18 @@ class _OperationStatus extends StatelessWidget {
             Text(state.error ?? state.message ?? ''),
             if (state.outputPath != null) ...[
               const SizedBox(height: 6),
-              const Text('备份已保存到你选择的位置。'),
+              const Text('تم حفظ النسخة الاحتياطية في الموقع الذي حددته.'),
             ],
             if (state.rollbackBackupPath != null) ...[
               const SizedBox(height: 6),
-              const Text('恢复前的回滚备份已保留在应用备份目录。'),
+              const Text('النسخ الاحتياطي قبل الاحتفاظ بالاستعادة في دليل النسخ الاحتياطي للتطبيق.'),
             ],
             if (failed) ...[
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('重试'),
+                label: const Text('أعد المحاولة'),
               ),
             ],
           ],

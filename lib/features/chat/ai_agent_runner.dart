@@ -80,7 +80,7 @@ class AiAgentRunner {
                 AiProviderMessage(
                   role: 'system',
                   content:
-                      '用户已显式选择“${declaration.displayName}”技能。本轮回答必须遵循以下技能结果，不必再次调用该技能：\n${result.output}',
+                      'حدد المستخدم صراحة "${declaration.displayName}. يجب اتباع نتائج المهارة التالية لهذه الجولة من الردود دون الحاجة إلى استدعاء المهارة مرة أخرى:\n${result.output}',
                 ),
               );
             } on Object catch (error) {
@@ -198,12 +198,12 @@ class AiAgentRunner {
                   AiCitationEvent(ordinal: ordinal, source: source),
                 );
                 sourceLines.add(
-                  '[$ordinal] ${source.chapterTitle ?? '书中原文'}：${source.quote}',
+                  '[$ordinal] ${source.chapterTitle ?? 'النص الأصلي في الكتاب'}：${source.quote}',
                 );
               }
               output = sourceLines.isEmpty
                   ? result.output
-                  : '${result.output}\n\n可引用来源：\n${sourceLines.join('\n')}';
+                  : '${result.output}\n\nالمصدر (المصادر) التي يجب الاستشهاد بها:\n${sourceLines.join('\n')}';
               stopwatch.stop();
               controller.add(
                 AiToolExecutionCompletedEvent(
@@ -214,7 +214,7 @@ class AiAgentRunner {
               );
             } on Object catch (error) {
               stopwatch.stop();
-              output = '工具执行失败：$error';
+              output = 'فشل تنفيذ الأداة: $error';
               controller.add(
                 AiToolExecutionFailedEvent(
                   callId: call.id,
@@ -237,7 +237,7 @@ class AiAgentRunner {
         } else {
           throw const AiGatewayException(
             'agent_iteration_limit',
-            '工具调用次数过多，已停止本次运行。',
+            'عدد كبير جدًا من مكالمات الأدوات، تم إيقاف هذا التشغيل.',
           );
         }
       } on Object catch (error, stackTrace) {
@@ -306,9 +306,9 @@ class AiAgentRunner {
         buffer
           ..writeln()
           ..writeln()
-          ..writeln('[引用 ${index + 1}]')
-          ..writeln('书籍：${quote.bookTitle}')
-          ..writeln('章节：${quote.chapterTitle ?? '未知章节'}')
+          ..writeln('المراجع${index + 1}]')
+          ..writeln('الكتب:${quote.bookTitle}')
+          ..writeln('الفصل${quote.chapterTitle ?? 'مقطع غير معروف'}')
           ..write(quote.quote);
       }
       return [AiProviderMessage(role: 'user', content: buffer.toString())];
@@ -369,7 +369,7 @@ class AiAgentRunner {
   }
 
   String _limitToolOutput(String value) =>
-      value.length <= 32768 ? value : '${value.substring(0, 32768)}\n[结果已截断]';
+      value.length <= 32768 ? value : '${value.substring(0, 32768)}\n[تم اقتطاع النتائج]';
 
   void _appendContinuation(
     List<AiProviderMessage> conversation, {

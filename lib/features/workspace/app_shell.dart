@@ -41,7 +41,7 @@ class AppShell extends HookConsumerWidget {
     final tabs = useState(<WorkspaceTab>[
       const WorkspaceTab(
         id: 'library',
-        title: '书库',
+        title: 'المكتبة',
         destination: AppDestination.library,
       ),
     ]);
@@ -176,7 +176,7 @@ class AppShell extends HookConsumerWidget {
         if (!context.mounted) return;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('无法搜索书库：$error')));
+        ).showSnackBar(SnackBar(content: Text('تعذر البحث في المكتبة: $error')));
       }
     }
 
@@ -262,7 +262,7 @@ class AppShell extends HookConsumerWidget {
                         title: const Text('TomoRead'),
                         actions: [
                           IconButton(
-                            tooltip: '搜索',
+                            tooltip: 'بحث',
                             key: const Key('global-search'),
                             onPressed: openLibrarySearch,
                             icon: const Icon(Icons.search),

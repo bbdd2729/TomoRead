@@ -7,14 +7,14 @@ class ImportSourceDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SimpleDialog(
-    title: const Text('选择导入来源'),
+    title: const Text('تحديد مصدر الاستيراد'),
     children: [
       SimpleDialogOption(
         onPressed: () => Navigator.of(context).pop(ImportSourceChoice.files),
         child: const ListTile(
           leading: Icon(Icons.file_open_outlined),
-          title: Text('选择文件'),
-          subtitle: Text('一次选择多个 EPUB、PDF、TXT 或 Markdown 文件'),
+          title: Text('اختر ملفا…'),
+          subtitle: Text('حدد عدة ملفات EPUB أو PDF أو TXT أو Markdown في وقت واحد'),
         ),
       ),
       SimpleDialogOption(
@@ -22,8 +22,8 @@ class ImportSourceDialog extends StatelessWidget {
             Navigator.of(context).pop(ImportSourceChoice.directory),
         child: const ListTile(
           leading: Icon(Icons.folder_open_outlined),
-          title: Text('扫描文件夹'),
-          subtitle: Text('递归预览支持的文件，确认后再导入'),
+          title: Text('افحص المجلّد'),
+          subtitle: Text('معاينة الملفات المدعومة بشكل متكرر وتأكيدها واستيرادها'),
         ),
       ),
     ],

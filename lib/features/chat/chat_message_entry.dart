@@ -37,7 +37,7 @@ class ChatMessageEntry extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (parts.isEmpty && message.status == ChatMessageStatus.streaming)
-          const _StreamingIndicator(label: '正在组织回答')
+          const _StreamingIndicator(label: 'تنظيم الاستجابات')
         else
           ...parts.map(
             (part) => Padding(
@@ -101,7 +101,7 @@ class _MessageMeta extends StatelessWidget {
     return Row(
       children: [
         if (message.status == ChatMessageStatus.streaming)
-          const _StreamingIndicator(label: '正在生成')
+          const _StreamingIndicator(label: 'جارٍ التوليد')
         else ...[
           if (message.modelId != null)
             Flexible(
@@ -121,7 +121,7 @@ class _MessageMeta extends StatelessWidget {
           const Spacer(),
           if (message.content.isNotEmpty)
             IconButton(
-              tooltip: '复制回答',
+              tooltip: 'إجابة مكررة',
               visualDensity: VisualDensity.compact,
               onPressed: () =>
                   Clipboard.setData(ClipboardData(text: message.content)),
@@ -129,7 +129,7 @@ class _MessageMeta extends StatelessWidget {
             ),
           if (failed)
             IconButton(
-              tooltip: '重试',
+              tooltip: 'أعد المحاولة',
               visualDensity: VisualDensity.compact,
               onPressed: () => onRetry(message),
               icon: const Icon(Icons.refresh, size: 18),

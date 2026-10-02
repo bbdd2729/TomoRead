@@ -71,7 +71,7 @@ class _ArtifactPartView extends StatelessWidget {
       return ListTile(
         leading: const Icon(Icons.data_object),
         title: Text(part.title),
-        subtitle: Text('暂不支持的 Artifact 类型：${part.artifactType}'),
+        subtitle: Text('أنواع الأدوات غير المدعومة مؤقتًا:${part.artifactType}'),
       );
     }
     final artifact = VisualArtifact(
@@ -97,8 +97,8 @@ class _ArtifactPartView extends StatelessWidget {
         title: Text(part.title),
         subtitle: Text(
           kind == VisualArtifactKind.wordCloud
-              ? '词云 Artifact'
-              : '思维导图 Artifact',
+              ? 'أداة سحابة Word'
+              : 'أداة الخريطة الذهنية',
         ),
         children: [
           SizedBox(
@@ -153,7 +153,7 @@ class _ReasoningPartView extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : const Icon(Icons.psychology_outlined, size: 20),
-        title: Text(running ? '思考中' : '思考摘要'),
+        title: Text(running ? 'التفكير' : 'ملخص التفكير'),
         children: [
           Align(
             alignment: Alignment.centerLeft,
@@ -185,7 +185,7 @@ class _QuotePartView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${part.bookTitle} · ${part.chapterTitle ?? '当前章节'}',
+              '${part.bookTitle} · ${part.chapterTitle ?? 'القسم الحالي'}',
               style: Theme.of(context).textTheme.labelMedium,
             ),
             const SizedBox(height: 4),
@@ -248,19 +248,19 @@ class _ToolPartView extends StatelessWidget {
             : Icon(failed ? Icons.error_outline : icon, size: 20),
         title: Text(title, style: Theme.of(context).textTheme.titleSmall),
         subtitle: Text(switch (status) {
-          ChatPartStatus.pending => '等待执行',
-          ChatPartStatus.running => '正在执行',
+          ChatPartStatus.pending => 'في انتظار التنفيذ',
+          ChatPartStatus.running => 'قيد التنفيذ',
           ChatPartStatus.completed =>
-            durationMillis == null ? '已完成' : '已完成 · ${durationMillis}ms',
-          ChatPartStatus.error => '执行失败',
+            durationMillis == null ? 'تم الإنتهاء' : 'تم الإنتهاء${durationMillis}ms',
+          ChatPartStatus.error => 'فشل التنفيذ',
         }),
         children: [
           if (argumentsJson.trim().isNotEmpty) ...[
-            _TechnicalDetail(label: '参数', value: argumentsJson),
+            _TechnicalDetail(label: 'البارامترات', value: argumentsJson),
             if (detail != null) const SizedBox(height: 8),
           ],
           if (detail != null)
-            _TechnicalDetail(label: failed ? '错误' : '结果', value: detail),
+            _TechnicalDetail(label: failed ? 'عُطل' : 'النتائج', value: detail),
         ],
       ),
     );
@@ -307,7 +307,7 @@ class _CitationPartView extends StatelessWidget {
     dense: true,
     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
     leading: CircleAvatar(radius: 12, child: Text('${citation.ordinal}')),
-    title: Text(citation.chapterTitle ?? '引用原文'),
+    title: Text(citation.chapterTitle ?? 'اقتباس النص الأصلي'),
     subtitle: Text(
       citation.quote,
       maxLines: 2,

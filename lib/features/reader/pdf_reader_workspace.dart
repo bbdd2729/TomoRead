@@ -216,9 +216,9 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
 
     return bookState.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(child: Text('无法加载 PDF：$error')),
+      error: (error, _) => Center(child: Text('تعذر تحميل ملف PDF: $error')),
       data: (book) {
-        if (book == null) return const Center(child: Text('找不到 PDF 书籍。'));
+        if (book == null) return const Center(child: Text('لم يتم العثور على كتب PDF.'));
         final pageCount = book.chapterCount;
         final savedPage = PdfDocumentLocator.tryParse(book.locator)?.pageNumber;
         final initialPage = pageCount == 0
@@ -236,8 +236,8 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
           MediaQuery.sizeOf(context).width,
         );
         final pageLabel = pageCount > 0
-            ? '第 $displayedPage 页 / $pageCount 页'
-            : '正在读取页数';
+            ? 'صفحة $displayedPage من $pageCount'
+            : 'قراءة الصفحات';
         final bookmarkItems = bookmarks.value ?? const <Bookmark>[];
         final currentLocator = PdfDocumentLocator(
           pageNumber: displayedPage,
@@ -290,7 +290,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
             await repository.add(
               bookId: bookId,
               locator: currentLocator,
-              chapterTitle: '第 $displayedPage 页',
+              chapterTitle: 'الصفحة $displayedPage',
             );
           }
           ref.invalidate(bookmarksForBookProvider(bookId));
@@ -405,7 +405,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
               : null;
           if (!verified || target == null || !viewerController.isReady) {
             if (showFailure) {
-              showReaderMessage('无法验证这条 PDF 标注的位置，已保留当前阅读位置。');
+              showReaderMessage('تعذر التحقق من موقع وسيلة شرح PDF هذه، وتم الحفاظ على موقع القراءة الحالي.');
             }
             return false;
           }
@@ -433,7 +433,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
           } on PdfSelectionException catch (error) {
             showReaderMessage(error.message);
           } on Object catch (error) {
-            showReaderMessage('无法读取 PDF 选区：$error');
+            showReaderMessage('تعذر قراءة تحديد PDF: $error');
           }
           return null;
         }
@@ -456,7 +456,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                 renderStyle: renderStyle,
                 note: note,
                 chapterIndex: selection.locator.pageNumber - 1,
-                chapterTitle: '第 ${selection.locator.pageNumber} 页',
+                chapterTitle: 'الفقرتان 102${selection.locator.pageNumber}الصفحة',
               );
           await delegate.clearTextSelection();
         }
@@ -476,7 +476,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                     href: 'pdf:page:${selection.locator.pageNumber}',
                     locator: selection.locator.serialize(),
                     chapterIndex: selection.locator.pageNumber - 1,
-                    chapterTitle: '第 ${selection.locator.pageNumber} 页',
+                    chapterTitle: 'الفقرتان 102${selection.locator.pageNumber}الصفحة',
                     quote: selection.text,
                   ),
                   prompt: prompt,
@@ -498,7 +498,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                 final highlightColor = await showDialog<AnnotationColor>(
                   context: context,
                   builder: (context) =>
-                      const PdfAnnotationColorDialog(title: '选择高亮颜色'),
+                      const PdfAnnotationColorDialog(title: 'تحديد لون التمييز'),
                 );
                 if (highlightColor != null && context.mounted) {
                   await saveSelection(delegate, selection, highlightColor);
@@ -507,7 +507,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                 final underlineColor = await showDialog<AnnotationColor>(
                   context: context,
                   builder: (context) =>
-                      const PdfAnnotationColorDialog(title: '选择划线颜色'),
+                      const PdfAnnotationColorDialog(title: 'تحديد لون لوحة القيادة'),
                 );
                 if (underlineColor != null && context.mounted) {
                   await saveSelection(
@@ -535,23 +535,23 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                 await openAiWithSelection(
                   delegate,
                   selection,
-                  '关于这段 PDF 文字，我想问：',
+                  'فيما يتعلق بنص PDF هذا، أود أن أسأل:',
                 );
               case _PdfSelectionAction.explainAi:
                 await openAiWithSelection(
                   delegate,
                   selection,
-                  '请解释这段 PDF 文字的含义和关键概念。',
+                  'يرجى توضيح المعنى والمفاهيم الأساسية لنص PDF هذا.',
                 );
               case _PdfSelectionAction.summarizeAi:
                 await openAiWithSelection(
                   delegate,
                   selection,
-                  '请简洁总结这段 PDF 文字的核心观点。',
+                  'يرجى تلخيص النقاط الأساسية لنص PDF هذا بإيجاز.',
                 );
             }
           } on Object catch (error) {
-            showReaderMessage('PDF 标注操作失败：$error');
+            showReaderMessage('فشلت عملية شرح PDF: $error');
           }
         }
 
@@ -580,12 +580,12 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
             );
           }
 
-          addAction('高亮', _PdfSelectionAction.highlight);
-          addAction('划线', _PdfSelectionAction.underline);
-          addAction('笔记', _PdfSelectionAction.note);
-          addAction('询问 AI', _PdfSelectionAction.askAi);
-          addAction('解释', _PdfSelectionAction.explainAi);
-          addAction('总结', _PdfSelectionAction.summarizeAi);
+          addAction('Ø¥Ø¨Ø±Ø§Ø²', _PdfSelectionAction.highlight);
+          addAction('DASH', _PdfSelectionAction.underline);
+          addAction('ملاحظة', _PdfSelectionAction.note);
+          addAction('اسأل الذكاء الاصطناعي', _PdfSelectionAction.askAi);
+          addAction('التفسير', _PdfSelectionAction.explainAi);
+          addAction('الموجز', _PdfSelectionAction.summarizeAi);
         }
 
         Future<void> explainTextSelection() async {
@@ -598,8 +598,8 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
           if (!context.mounted) return;
           showReaderMessage(
             supported
-                ? '长按或拖动选择本页文字，然后可高亮、划线、添加笔记或询问 AI。'
-                : '当前页没有可用文本层，扫描版或受保护 PDF 不支持文本标注。',
+                ? 'اضغط لفترة طويلة أو اسحب لتحديد النص في هذه الصفحة، ثم قم بتمييز أو تسطير أو إضافة ملاحظات أو طلب الذكاء الاصطناعي.'
+                : 'لا توجد طبقات نصية متاحة للصفحة الحالية، ولا تدعم ملفات PDF الممسوحة ضوئيًا أو المحمية التعليقات التوضيحية النصية.',
           );
         }
 
@@ -616,7 +616,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
           if (selected == null || document == null || !context.mounted) return;
           final locator = PdfDocumentLocator.tryParse(selected.locator);
           if (locator == null) {
-            showReaderMessage('这条标注没有有效的 PDF 定位信息。');
+            showReaderMessage('لا تحتوي وسيلة الشرح هذه على معلومات موقع PDF صالحة.');
             return;
           }
           await navigateToLocator(document, locator);
@@ -643,7 +643,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
           unawaited(
             showReaderProgressSheet(
               context,
-              title: 'PDF 阅读进度',
+              title: 'تقدم قراءة PDF',
               positionLabel: pageLabel,
               progress: displayedProgress,
               onChangeEnd: (value) => unawaited(seekToProgress(value)),
@@ -655,23 +655,23 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
           unawaited(
             showReaderMoreSheet(
               context,
-              title: 'PDF 工具',
+              title: 'أدوات PDF',
               groups: [
                 ReaderChromeActionGroup(
-                  title: '查阅',
+                  title: 'يبحث...',
                   actions: [
                     ReaderChromeAction(
                       id: 'pdf-bookmarks',
-                      label: '查看书签',
+                      label: 'عرض الإشارات المرجعية',
                       icon: Icons.bookmarks_outlined,
                       onPressed: bookmarks.isLoading
                           ? null
                           : () => unawaited(openBookmarks()),
-                      disabledDescription: '正在读取书签',
+                      disabledDescription: 'قراءة الإشارات المرجعية',
                     ),
                     ReaderChromeAction(
                       id: 'pdf-bookmark',
-                      label: isBookmarked ? '移除书签' : '添加书签',
+                      label: isBookmarked ? 'إزالة الإشارة المرجعية' : 'أضف علامة',
                       icon: isBookmarked
                           ? Icons.bookmark
                           : Icons.bookmark_border,
@@ -679,61 +679,61 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                     ),
                     ReaderChromeAction(
                       id: 'pdf-navigation',
-                      label: '目录和页面导航',
+                      label: 'جدول المحتويات والتنقل في الصفحة',
                       icon: Icons.menu_book_outlined,
                       onPressed: pdfDocument.value == null
                           ? null
                           : () => unawaited(openNavigation()),
-                      disabledDescription: '正在读取 PDF 目录',
+                      disabledDescription: 'قراءة كتالوج PDF',
                     ),
                     ReaderChromeAction(
                       id: 'pdf-search',
-                      label: '搜索 PDF',
+                      label: 'البحث في ملف PDF',
                       icon: Icons.search,
                       onPressed: textSearcher.value == null
                           ? null
                           : () => unawaited(openSearch()),
-                      disabledDescription: '正在准备搜索索引',
+                      disabledDescription: 'إعداد فهرس البحث',
                     ),
                   ],
                 ),
                 ReaderChromeActionGroup(
-                  title: '阅读',
+                  title: 'القراءة',
                   actions: [
                     const ReaderChromeAction(
                       id: 'pdf-tts',
-                      label: 'PDF 系统朗读',
+                      label: 'قراءات نظام PDF',
                       icon: Icons.headphones_outlined,
-                      disabledDescription: 'PDF 全文朗读队列尚未可验证',
+                      disabledDescription: 'لا يمكن التحقق من قائمة انتظار قراءة النص الكامل لملف PDF بعد',
                     ),
                     ReaderChromeAction(
                       id: 'pdf-focus',
-                      label: '隐藏阅读控制',
+                      label: 'إخفاء عناصر التحكم في القراءة',
                       icon: Icons.center_focus_strong_outlined,
                       onPressed: toggleControls,
                     ),
                   ],
                 ),
                 ReaderChromeActionGroup(
-                  title: 'PDF 工具',
+                  title: 'أدوات PDF',
                   actions: [
                     ReaderChromeAction(
                       id: 'pdf-selection-help',
-                      label: 'PDF 文本标注',
+                      label: 'وسيلة شرح نص PDF',
                       icon: Icons.highlight_alt_outlined,
                       onPressed: pdfDocument.value == null
                           ? null
                           : () => unawaited(explainTextSelection()),
-                      disabledDescription: '正在读取 PDF 文本层',
+                      disabledDescription: 'قراءة طبقات نص PDF',
                     ),
                     ReaderChromeAction(
                       id: 'pdf-annotations',
-                      label: '查看 PDF 标注',
+                      label: 'عرض وسيلة شرح PDF',
                       icon: Icons.format_quote_outlined,
                       onPressed: annotations.isLoading
                           ? null
                           : () => unawaited(openAnnotations()),
-                      disabledDescription: '正在读取 PDF 标注',
+                      disabledDescription: 'قراءة التعليقات التوضيحية بصيغة PDF',
                     ),
                   ],
                 ),
@@ -825,7 +825,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                               children: [
                                 ReaderChromeIconButton(
                                   key: const Key('pdf-reader-back'),
-                                  tooltip: '返回书库',
+                                  tooltip: 'العودة إلى المكتبة',
                                   icon: Icons.arrow_back,
                                   onPressed: onExitReader,
                                 ),
@@ -845,7 +845,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                 ),
                                 if (usesOverflowActions) ...[
                                   ReaderChromeIconButton(
-                                    tooltip: isBookmarked ? '移除书签' : '添加书签',
+                                    tooltip: isBookmarked ? 'إزالة الإشارة المرجعية' : 'أضف علامة',
                                     icon: isBookmarked
                                         ? Icons.bookmark
                                         : Icons.bookmark_border,
@@ -854,7 +854,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                   ),
                                   const SizedBox(width: 8),
                                   ReaderChromeIconButton(
-                                    tooltip: '搜索 PDF',
+                                    tooltip: 'البحث في ملف PDF',
                                     icon: Icons.search,
                                     onPressed: textSearcher.value == null
                                         ? null
@@ -863,13 +863,13 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                   const SizedBox(width: 8),
                                   ReaderChromeIconButton(
                                     key: const Key('pdf-reader-more-actions'),
-                                    tooltip: '更多阅读操作',
+                                    tooltip: 'قراءة المزيد من الإجراءات',
                                     icon: Icons.more_vert,
                                     onPressed: openPdfMoreSheet,
                                   ),
                                 ] else ...[
                                   ReaderChromeIconButton(
-                                    tooltip: isBookmarked ? '移除书签' : '添加书签',
+                                    tooltip: isBookmarked ? 'إزالة الإشارة المرجعية' : 'أضف علامة',
                                     icon: isBookmarked
                                         ? Icons.bookmark
                                         : Icons.bookmark_border,
@@ -878,7 +878,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                   ),
                                   const SizedBox(width: 8),
                                   ReaderChromeIconButton(
-                                    tooltip: '查看书签',
+                                    tooltip: 'عرض الإشارات المرجعية',
                                     icon: Icons.bookmarks_outlined,
                                     onPressed: bookmarks.isLoading
                                         ? null
@@ -886,7 +886,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                   ),
                                   const SizedBox(width: 8),
                                   ReaderChromeIconButton(
-                                    tooltip: '目录和页面导航',
+                                    tooltip: 'جدول المحتويات والتنقل في الصفحة',
                                     icon: Icons.menu_book_outlined,
                                     onPressed: pdfDocument.value == null
                                         ? null
@@ -894,7 +894,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                   ),
                                   const SizedBox(width: 8),
                                   ReaderChromeIconButton(
-                                    tooltip: '搜索 PDF',
+                                    tooltip: 'البحث في ملف PDF',
                                     icon: Icons.search,
                                     onPressed: textSearcher.value == null
                                         ? null
@@ -903,7 +903,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                   const SizedBox(width: 8),
                                   ReaderChromeIconButton(
                                     key: const Key('pdf-reader-selection-help'),
-                                    tooltip: 'PDF 文本标注',
+                                    tooltip: 'وسيلة شرح نص PDF',
                                     icon: Icons.highlight_alt_outlined,
                                     onPressed: pdfDocument.value == null
                                         ? null
@@ -913,7 +913,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                   const SizedBox(width: 8),
                                   ReaderChromeIconButton(
                                     key: const Key('pdf-reader-annotations'),
-                                    tooltip: '查看 PDF 标注',
+                                    tooltip: 'عرض وسيلة شرح PDF',
                                     icon: Icons.format_quote_outlined,
                                     onPressed: annotations.isLoading
                                         ? null
@@ -922,7 +922,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                   const SizedBox(width: 8),
                                   ReaderChromeIconButton(
                                     key: const Key('pdf-reader-focus-mode'),
-                                    tooltip: '隐藏阅读控制',
+                                    tooltip: 'إخفاء عناصر التحكم في القراءة',
                                     icon: Icons.center_focus_strong_outlined,
                                     onPressed: toggleControls,
                                   ),
@@ -956,7 +956,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                               children: [
                                 ReaderChromeIconButton(
                                   key: const Key('pdf-reader-toc'),
-                                  tooltip: '目录和页面导航',
+                                  tooltip: 'جدول المحتويات والتنقل في الصفحة',
                                   icon: Icons.menu_book_outlined,
                                   onPressed: pdfDocument.value == null
                                       ? null
@@ -965,7 +965,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                 const SizedBox(width: 8),
                                 ReaderChromeIconButton(
                                   key: const Key('pdf-reader-previous-page'),
-                                  tooltip: '上一页',
+                                  tooltip: 'الصفحة السابقة',
                                   icon: Icons.chevron_left,
                                   onPressed: displayedPage > 1
                                       ? () => unawaited(
@@ -976,7 +976,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                 const SizedBox(width: 12),
                                 Semantics(
                                   key: const Key('pdf-reader-position-label'),
-                                  label: '$pageLabel，打开阅读进度',
+                                  label: '$pageLabel، تقدم القراءة المفتوحة',
                                   button: true,
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(12),
@@ -999,7 +999,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                 const SizedBox(width: 12),
                                 ReaderChromeIconButton(
                                   key: const Key('pdf-reader-next-page'),
-                                  tooltip: '下一页',
+                                  tooltip: 'الصفحة التالية',
                                   icon: Icons.chevron_right,
                                   onPressed:
                                       pageCount > 0 && displayedPage < pageCount
@@ -1011,7 +1011,7 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                                 const SizedBox(width: 8),
                                 ReaderChromeIconButton(
                                   key: const Key('pdf-reader-tools'),
-                                  tooltip: 'PDF 工具',
+                                  tooltip: 'أدوات PDF',
                                   icon: Icons.tune_outlined,
                                   onPressed: openPdfMoreSheet,
                                 ),
@@ -1039,8 +1039,8 @@ class _PdfReaderWorkspaceContent extends HookConsumerWidget {
                             : null,
                         onOpenProgress: openPdfProgressSheet,
                         onOpenStyle: openPdfMoreSheet,
-                        tocTooltip: '目录和页面导航',
-                        styleTooltip: 'PDF 工具',
+                        tocTooltip: 'جدول المحتويات والتنقل في الصفحة',
+                        styleTooltip: 'أدوات PDF',
                       ),
               ),
             ),
